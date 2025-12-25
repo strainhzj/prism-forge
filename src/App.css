@@ -1,0 +1,141 @@
+.container {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  padding: 20px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.input-group label {
+  font-weight: bold;
+  font-size: 0.9em;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+}
+
+input, textarea {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  flex-grow: 1;
+}
+
+button {
+  padding: 8px 16px;
+  background: #eee;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.primary-btn {
+  background: #007bff;
+  color: white;
+  border: none;
+  font-weight: bold;
+  padding: 12px;
+}
+
+.primary-btn:disabled {
+  background: #ccc;
+}
+
+.main-content {
+  display: flex;
+  gap: 20px;
+  flex-grow: 1;
+  overflow: hidden; /* 防止撑开页面 */
+}
+
+.result-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.result-box {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+  flex-grow: 1;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  background-color: #f9fdfc;
+}
+
+.debug-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #eee;
+  padding-left: 20px;
+}
+
+.debug-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.events-list {
+  flex-grow: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 5px;
+}
+
+.event-card {
+  border: 1px solid #eee;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 0.85em;
+  background: white;
+}
+
+.event-card.tool_result {
+  background: #f8f9fa;
+  border-left: 3px solid #6c757d;
+}
+
+.event-card.message {
+  border-left: 3px solid #007bff;
+}
+
+.event-meta {
+  display: flex;
+  justify-content: space-between;
+  color: #666;
+  font-size: 0.8em;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.placeholder {
+  color: #999;
+  text-align: center;
+  margin-top: 20px;
+}
