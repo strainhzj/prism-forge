@@ -1,270 +1,107 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::fs::File;
-use std::io::{BufRead, BufReader};
+// 数据库模块
+mod database;
+// LLM 客户端模块
+mod llm;
+// 命令模块
+mod commands;
+// Optimizer 模块
+mod optimizer;
+
 use std::path::PathBuf;
 use std::time::SystemTime;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
-// --- 数据结构 ---
+// 导入 commands
+use commands::*;
+use optimizer::find_latest_session_file;
+use optimizer::OptimizeRequest;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct ParsedEvent {
-    time: String,
-    role: String,   // user, assistant, system (tool_output)
-    content: String,
-    event_type: String, // message, tool_result
-}
+// ==================== Tauri Commands ====================
 
-#[derive(Debug, Serialize, Deserialize)]
-struct GeminiResponse {
-    candidates: Option<Vec<GeminiCandidate>>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct GeminiCandidate {
-    content: GeminiContent,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct GeminiContent {
-    parts: Vec<GeminiPart>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct GeminiPart {
-    text: String,
-}
-
-// --- 核心逻辑函数 ---
-
-/// 查找最近的 Session 文件
-fn find_latest_session_file_internal() -> Option<PathBuf> {
-    let home_dir = dirs::home_dir()?;
-    let base_pattern = home_dir.join(".claude/projects/**/*.jsonl");
-    let pattern_str = base_pattern.to_str()?;
-
-    let mut latest_file: Option<PathBuf> = None;
-    let mut latest_time = SystemTime::UNIX_EPOCH;
-
-    if let Ok(paths) = glob::glob(pattern_str) {
-        for entry in paths.filter_map(Result::ok) {
-            if let Ok(metadata) = std::fs::metadata(&entry) {
-                if let Ok(modified) = metadata.modified() {
-                    if modified > latest_time {
-                        latest_time = modified;
-                        latest_file = Some(entry);
-                    }
-                }
-            }
-        }
-    }
-    latest_file
-}
-
-/// 解析 JSONL 文件 (复刻 Python 逻辑)
-fn parse_jsonl_internal(file_path: &str) -> Result<Vec<ParsedEvent>, String> {
-    let file = File::open(file_path).map_err(|e| e.to_string())?;
-    let reader = BufReader::new(file);
-    let mut events = Vec::new();
-
-    for line in reader.lines() {
-        let line_content = line.map_err(|e| e.to_string())?;
-        if line_content.trim().is_empty() { continue; }
-
-        let json: Value = serde_json::from_str(&line_content).unwrap_or(Value::Null);
-        if json.is_null() { continue; }
-
-        let timestamp = json["timestamp"].as_str().unwrap_or("").to_string();
-
-        // 1. 提取 Message (User / Assistant)
-        if let Some(msg) = json.get("message") {
-            let role = msg["role"].as_str().unwrap_or("unknown").to_string();
-            let mut final_text = String::new();
-
-            // 处理 content 是列表的情况 (新版格式)
-            if let Some(content_arr) = msg["content"].as_array() {
-                for part in content_arr {
-                    let p_type = part["type"].as_str().unwrap_or("");
-                    if p_type == "text" {
-                        final_text.push_str(part["text"].as_str().unwrap_or(""));
-                        final_text.push('\n');
-                    } else if p_type == "tool_use" {
-                        let name = part["name"].as_str().unwrap_or("unknown");
-                        final_text.push_str(&format!("[操作] 调用工具: {}\n", name));
-                        if let Some(input) = part.get("input") {
-                            if let Some(path) = input.get("path").and_then(|v| v.as_str()) {
-                                final_text.push_str(&format!("  - 路径: {}\n", path));
-                            }
-                        }
-                    }
-                }
-            } 
-            // 处理 content 是字符串的情况 (旧格式)
-            else if let Some(content_str) = msg["content"].as_str() {
-                final_text = content_str.to_string();
-            }
-
-            if !final_text.trim().is_empty() {
-                events.push(ParsedEvent {
-                    time: timestamp.clone(),
-                    role,
-                    content: final_text,
-                    event_type: "message".to_string(),
-                });
-            }
-        }
-
-        // 2. 提取 ToolResult (上下文关键)
-        if let Some(tool_res) = json.get("toolUseResult") {
-            let mut res_str = String::new();
-
-            if let Some(filenames) = tool_res.get("filenames").and_then(|v| v.as_array()) {
-                // ls / grep 结果
-                let preview: Vec<String> = filenames.iter()
-                    .take(3)
-                    .map(|v| v.as_str().unwrap_or("").to_string())
-                    .collect();
-                res_str = format!("[工具结果] 找到 {} 个文件: {:?}...", filenames.len(), preview);
-            } else if let Some(file_info) = tool_res.get("file") {
-                // read_file 结果
-                let path = file_info["filePath"].as_str().unwrap_or("unknown");
-                let content = file_info["content"].as_str().unwrap_or("");
-                // 截断
-                let snippet: String = content.chars().take(300).collect();
-                res_str = format!("[工具结果] 已读取文件 {}。\n文件片段: {}...", path, snippet.replace('\n', " "));
-            } else if let Some(result) = tool_res.get("result") {
-                // 命令行执行结果
-                let raw = result.as_str().unwrap_or("");
-                let limit = if raw.to_lowercase().contains("error") { 800 } else { 300 };
-                let snippet: String = raw.chars().take(limit).collect();
-                res_str = format!("[工具结果] 输出: {}...", snippet);
-            } else {
-                // 其他情况
-                res_str = format!("[工具结果] {}", tool_res.to_string().chars().take(200).collect::<String>());
-            }
-
-            if !res_str.is_empty() {
-                events.push(ParsedEvent {
-                    time: timestamp,
-                    role: "system".to_string(),
-                    content: res_str,
-                    event_type: "tool_result".to_string(),
-                });
-            }
-        }
-    }
-
-    // 按时间排序
-    events.sort_by(|a, b| a.time.cmp(&b.time));
-    Ok(events)
-}
-
-// --- Tauri Commands ---
-
+/// 获取最新的会话文件路径
 #[tauri::command]
 fn get_latest_session_path() -> Result<String, String> {
-    find_latest_session_file_internal()
+    find_latest_session_file()
         .map(|p| p.to_string_lossy().to_string())
         .ok_or_else(|| "未找到会话文件".to_string())
 }
 
+/// 优化提示词（使用 LLMClientManager）
+///
+/// # 流程
+/// 1. 从 LLMClientManager 获取当前活跃的客户端
+/// 2. 解析会话文件
+/// 3. 调用 LLM 分析
+/// 4. 返回优化结果
 #[tauri::command]
-fn parse_session_file(file_path: String) -> Result<Vec<ParsedEvent>, String> {
-    parse_jsonl_internal(&file_path)
+async fn optimize_prompt(
+    session_file: String,
+    goal: String,
+    llm_manager: tauri::State<'_, llm::LLMClientManager>,
+) -> Result<String, String> {
+    use optimizer::PromptOptimizer;
+
+    // State 可以自动解引用，通过 * 或 &* 获取内部值的引用
+    let manager_ref = &*llm_manager;
+    let optimizer = PromptOptimizer::new();
+    let request = OptimizeRequest {
+        session_file,
+        goal,
+    };
+
+    let result = optimizer.optimize_prompt(request, manager_ref)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 格式化返回结果
+    let output = format!(
+        "---\n【状态】: {}\n【分析】: {}\n【建议提示词】:\n{}\n---",
+        result.status,
+        result.analysis,
+        result.suggested_prompt
+    );
+
+    Ok(output)
 }
 
+/// 保留的旧命令（用于兼容）
+/// TODO: 在前端迁移完成后移除
 #[tauri::command]
-async fn analyze_session(file_path: String, goal: String, api_key: String) -> Result<String, String> {
-    // 1. 解析
-    let events = parse_jsonl_internal(&file_path)?;
-    
-    if events.is_empty() {
-        return Err("解析结果为空".to_string());
-    }
-
-    // 2. 格式化上下文 (取最后 20 条)
-    let start_idx = if events.len() > 20 { events.len() - 20 } else { 0 };
-    let recent_events = &events[start_idx..];
-    
-    let context_str = recent_events.iter().map(|e| {
-        format!("[{}] {}:\n{}", e.time, e.role.to_uppercase(), e.content)
-    }).collect::<Vec<String>>().join("\n--------------------\n");
-
-    // 3. 调用 Gemini API
-    let system_prompt = r#"
-你是一个 Claude Code 结对编程助手。请分析下方的会话日志（包含用户指令、Claude 的操作、以及工具返回的文件内容/报错）。
-
-任务：
-1. **判断焦点 (Focus Check)**：Claude 是否陷入了死循环？是否在反复读取无关文件？是否无视了报错？
-2. **生成提示词 (Prompt Generation)**：为用户写一段可以直接发送给 Claude 的**中文指令**。
-   - 如果 Claude 走偏了：写一段严厉的纠正指令。
-   - 如果 Claude 做得对：写一段推进下一步的指令，并引用刚才读取到的文件上下文（例如："基于刚才读取的 main.py..."）。
-   
-输出格式：
----
-【状态】: [正常 / 迷失 / 报错循环]
-【分析】: (简短分析当前情况)
-【建议提示词】:
-(你的 Prompt 内容)
----
-"#;
-
-    let full_text = format!("{}\n\n== 会话日志 ==\n{}\n\n== 用户当前目标 ==\n{}", system_prompt, context_str, goal);
-    let url = format!("https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.0-flash-lite:streamGenerateContent?key={}", api_key);
-
-    let client = reqwest::Client::new();
-    let payload = serde_json::json!({
-        "contents": [{
-            "role": "user",
-            "parts": [{ "text": full_text }]
-        }]
-    });
-
-    let resp = client.post(url)
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| format!("Network Error: {}", e))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("API Error: {}", resp.status()));
-    }
-
-    let json_res: Value = resp.json().await.map_err(|e| format!("Json Parse Error: {}", e))?;
-    
-    // 解析 Gemini 响应 (兼容 streamGenerateContent 返回数组的情况)
-    let mut final_text = String::new();
-    if let Some(arr) = json_res.as_array() {
-        for item in arr {
-            if let Some(candidates) = item.get("candidates") {
-                if let Some(content) = candidates[0].get("content") {
-                    if let Some(parts) = content["parts"].as_array() {
-                        if let Some(text) = parts[0]["text"].as_str() {
-                            final_text.push_str(text);
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        // 尝试解析单对象 (备用)
-         if let Some(candidates) = json_res.get("candidates") {
-             final_text = candidates[0]["content"]["parts"][0]["text"].as_str().unwrap_or("").to_string();
-         }
-    }
-
-    Ok(final_text)
+async fn analyze_session(
+    session_file: String,
+    goal: String,
+    llm_manager: tauri::State<'_, llm::LLMClientManager>,
+) -> Result<String, String> {
+    // 直接调用新的 optimize_prompt
+    optimize_prompt(session_file, goal, llm_manager).await
 }
 
 fn main() {
+    // 初始化数据库
+    database::migrations::get_db_path()
+        .and_then(|_| {
+            // 确保数据库目录存在
+            Ok(())
+        })
+        .expect("初始化数据库失败");
+
+    // 创建 LLM 客户端管理器
+    let llm_manager = llm::LLMClientManager::from_default_db()
+        .expect("创建 LLM 客户端管理器失败");
+
     tauri::Builder::default()
+        .manage(llm_manager)
         .invoke_handler(tauri::generate_handler![
             get_latest_session_path,
-            parse_session_file,
-            analyze_session
+            optimize_prompt,
+            analyze_session, // 保留旧命令以兼容
+            cmd_get_providers,
+            cmd_save_provider,
+            cmd_delete_provider,
+            cmd_set_active_provider,
+            cmd_test_provider_connection,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
