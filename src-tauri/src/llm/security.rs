@@ -226,6 +226,12 @@ impl ApiKeyValidator {
             crate::database::ApiProviderType::Ollama => {
                 // Ollama 不需要 API Key
             }
+            crate::database::ApiProviderType::XAI => {
+                // X AI Key 通常以 xai- 开头
+                if !key.starts_with("xai-") {
+                    // 某些情况可能不同，这里只做警告不报错
+                }
+            }
         }
 
         Ok(())
@@ -261,7 +267,7 @@ mod tests {
     #[test]
     fn test_save_and_get_api_key() {
         let provider_id = 999999i64; // 使用测试 ID 避免冲突
-        let test_key = SecretString::new("test-api-key-12345".to_string());
+        let test_key = SecretString::new("test-api-key-12345".to_string().into());
 
         // 保存
         ApiKeyStorage::save_api_key(provider_id, test_key.clone()).unwrap();
@@ -277,7 +283,7 @@ mod tests {
     #[test]
     fn test_delete_api_key() {
         let provider_id = 999998i64;
-        let test_key = SecretString::new("test-api-key-67890".to_string());
+        let test_key = SecretString::new("test-api-key-67890".to_string().into());
 
         // 保存
         ApiKeyStorage::save_api_key(provider_id, test_key).unwrap();
@@ -290,21 +296,21 @@ mod tests {
 
     #[test]
     fn test_mask_api_key() {
-        let key = SecretString::new("sk-1234567890abcdef".to_string());
+        let key = SecretString::new("sk-1234567890abcdef".to_string().into());
         let masked = ApiKeyValidator::mask_api_key(&key, 8);
         assert_eq!(masked, "sk-12345...cdef");
     }
 
     #[test]
     fn test_validate_openai_key() {
-        let valid_key = SecretString::new("sk-1234567890abcdef".to_string());
+        let valid_key = SecretString::new("sk-1234567890abcdef".to_string().into());
         assert!(ApiKeyValidator::validate_format(
             &valid_key,
             crate::database::ApiProviderType::OpenAI
         )
         .is_ok());
 
-        let empty_key = SecretString::new("".to_string());
+        let empty_key = SecretString::new("".to_string().into());
         assert!(ApiKeyValidator::validate_format(
             &empty_key,
             crate::database::ApiProviderType::OpenAI

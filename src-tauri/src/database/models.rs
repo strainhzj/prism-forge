@@ -15,6 +15,8 @@ pub enum ApiProviderType {
     Anthropic,
     /// Ollama 本地服务
     Ollama,
+    /// X AI (Grok)
+    XAI,
 }
 
 impl ApiProviderType {
@@ -24,6 +26,17 @@ impl ApiProviderType {
             ApiProviderType::OpenAI => "https://api.openai.com/v1",
             ApiProviderType::Anthropic => "https://api.anthropic.com",
             ApiProviderType::Ollama => "http://127.0.0.1:11434",
+            ApiProviderType::XAI => "https://api.x.ai/v1",
+        }
+    }
+
+    /// 获取提供商类型的默认模型
+    pub fn default_model(&self) -> &'static str {
+        match self {
+            ApiProviderType::OpenAI => "gpt-4o-mini",
+            ApiProviderType::Anthropic => "claude-3-5-sonnet-20241022",
+            ApiProviderType::Ollama => "llama3",
+            ApiProviderType::XAI => "grok-4-1-fast-reasoning",
         }
     }
 
@@ -64,6 +77,11 @@ pub struct ApiProvider {
     #[serde(rename = "api_key_ref")]
     pub api_key_ref: Option<String>,
 
+    /// 配置的模型名称
+    ///
+    /// 如果为 None 或空字符串，使用 provider_type.default_model()
+    pub model: Option<String>,
+
     /// 额外配置 JSON
     ///
     /// 用于存储提供商特定的配置，例如：
@@ -93,9 +111,21 @@ impl ApiProvider {
             name,
             base_url: base_url.unwrap_or_else(|| provider_type.default_base_url().to_string()),
             api_key_ref: None,
+            model: None,
             config_json: None,
             is_active: false,
         }
+    }
+
+    /// 获取有效的模型名称
+    ///
+    /// 如果未配置模型或模型为空字符串，返回提供商类型的默认模型
+    pub fn effective_model(&self) -> &str {
+        self.model
+            .as_ref()
+            .filter(|m| !m.trim().is_empty())
+            .map(|m| m.as_str())
+            .unwrap_or_else(|| self.provider_type.default_model())
     }
 
     /// 设置配置 JSON
@@ -145,6 +175,7 @@ mod tests {
         assert_eq!(ApiProviderType::OpenAI.default_base_url(), "https://api.openai.com/v1");
         assert_eq!(ApiProviderType::Anthropic.default_base_url(), "https://api.anthropic.com");
         assert_eq!(ApiProviderType::Ollama.default_base_url(), "http://127.0.0.1:11434");
+        assert_eq!(ApiProviderType::XAI.default_base_url(), "https://api.x.ai/v1");
     }
 
     #[test]
@@ -152,6 +183,7 @@ mod tests {
         assert!(ApiProviderType::OpenAI.requires_api_key());
         assert!(ApiProviderType::Anthropic.requires_api_key());
         assert!(!ApiProviderType::Ollama.requires_api_key());
+        assert!(ApiProviderType::XAI.requires_api_key());
     }
 
     #[test]
@@ -183,5 +215,77 @@ mod tests {
             Some("http://127.0.0.1:11434".to_string()),
         );
         assert!(provider.validate().is_ok());
+    }
+
+    #[test]
+    fn test_provider_type_default_model() {
+        // Feature: provider-model-config, Property 1: Default Model Consistency
+        // Validates: Requirements 1.1, 1.2, 1.3, 1.4, 1.5
+        assert_eq!(ApiProviderType::OpenAI.default_model(), "gpt-4o-mini");
+        assert_eq!(ApiProviderType::Anthropic.default_model(), "claude-3-5-sonnet-20241022");
+        assert_eq!(ApiProviderType::Ollama.default_model(), "llama3");
+        assert_eq!(ApiProviderType::XAI.default_model(), "grok-4-1-fast-reasoning");
+    }
+
+    #[test]
+    fn test_effective_model_with_configured_model() {
+        // Feature: provider-model-config, Property 2: Model Fallback Behavior
+        // Validates: Requirements 2.2
+        let mut provider = ApiProvider::new(
+            ApiProviderType::OpenAI,
+            "OpenAI".to_string(),
+            None,
+        );
+        provider.model = Some("gpt-4".to_string());
+        assert_eq!(provider.effective_model(), "gpt-4");
+    }
+
+    #[test]
+    fn test_effective_model_with_none() {
+        // Feature: provider-model-config, Property 2: Model Fallback Behavior
+        // Validates: Requirements 2.2
+        let provider = ApiProvider::new(
+            ApiProviderType::OpenAI,
+            "OpenAI".to_string(),
+            None,
+        );
+        assert_eq!(provider.effective_model(), "gpt-4o-mini");
+    }
+
+    #[test]
+    fn test_effective_model_with_empty_string() {
+        // Feature: provider-model-config, Property 2: Model Fallback Behavior
+        // Validates: Requirements 2.2
+        let mut provider = ApiProvider::new(
+            ApiProviderType::Anthropic,
+            "Anthropic".to_string(),
+            None,
+        );
+        provider.model = Some("".to_string());
+        assert_eq!(provider.effective_model(), "claude-3-5-sonnet-20241022");
+    }
+
+    #[test]
+    fn test_effective_model_with_whitespace_only() {
+        // Feature: provider-model-config, Property 2: Model Fallback Behavior
+        // Validates: Requirements 2.2
+        let mut provider = ApiProvider::new(
+            ApiProviderType::XAI,
+            "XAI".to_string(),
+            None,
+        );
+        provider.model = Some("   ".to_string());
+        assert_eq!(provider.effective_model(), "grok-4-1-fast-reasoning");
+    }
+
+    #[test]
+    fn test_new_provider_model_is_none() {
+        // Validates: Requirements 2.1
+        let provider = ApiProvider::new(
+            ApiProviderType::Ollama,
+            "Ollama".to_string(),
+            None,
+        );
+        assert!(provider.model.is_none());
     }
 }

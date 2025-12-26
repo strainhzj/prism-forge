@@ -384,7 +384,7 @@ mod tests {
     #[test]
     fn test_build_request() {
         let provider = AnthropicProvider::new(
-            SecretString::new("test-key".to_string()),
+            SecretString::new("test-key".to_string().into()),
             "https://api.anthropic.com".to_string(),
         );
 

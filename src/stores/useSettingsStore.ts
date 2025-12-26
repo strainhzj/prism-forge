@@ -60,6 +60,7 @@ export enum ApiProviderType {
   OPENAI = 'openai',
   ANTHROPIC = 'anthropic',
   OLLAMA = 'ollama',
+  XAI = 'xai',
 }
 
 /**
@@ -88,6 +89,7 @@ export interface ProviderResponse {
   isActive: boolean;
   hasApiKey: boolean;
   apiKeyMask?: string;
+  model?: string;
 }
 
 /**
@@ -101,6 +103,37 @@ export interface SaveProviderRequest {
   apiKey?: string;
   configJson?: string;
   isActive: boolean;
+  model?: string;
+}
+
+/**
+ * 每种提供商类型的默认模型
+ */
+export const DEFAULT_MODELS: Record<ApiProviderType, string> = {
+  [ApiProviderType.OPENAI]: 'gpt-4o-mini',
+  [ApiProviderType.ANTHROPIC]: 'claude-3-5-sonnet-20241022',
+  [ApiProviderType.OLLAMA]: 'llama3',
+  [ApiProviderType.XAI]: 'grok-4-1-fast-reasoning',
+};
+
+/**
+ * 连接错误类型
+ */
+export enum ConnectionErrorType {
+  AUTHENTICATION = 'authentication',
+  NETWORK = 'network',
+  SERVER = 'server',
+  REQUEST = 'request',
+  UNKNOWN = 'unknown',
+}
+
+/**
+ * 连接测试结果
+ */
+export interface TestConnectionResult {
+  success: boolean;
+  errorMessage?: string;
+  errorType?: ConnectionErrorType;
 }
 
 // ==================== Store State ====================
@@ -117,7 +150,7 @@ interface SettingsState {
   saveProvider: (request: SaveProviderRequest) => Promise<ApiProvider>;
   deleteProvider: (id: number) => Promise<void>;
   setActiveProvider: (id: number) => Promise<void>;
-  testProviderConnection: (id: number) => Promise<boolean>;
+  testProviderConnection: (id: number) => Promise<TestConnectionResult>;
   clearError: () => void;
 }
 
@@ -176,6 +209,7 @@ export const useSettingsStore = create<SettingsState>()(
             apiKey: request.apiKey,
             configJson: request.configJson,
             isActive: request.isActive,
+            model: request.model,
           },
         });
 
@@ -249,13 +283,17 @@ export const useSettingsStore = create<SettingsState>()(
     // 测试提供商连接
     testProviderConnection: async (id) => {
       try {
-        const success = await invoke<boolean>('cmd_test_provider_connection', { id });
-        return success;
+        const result = await invoke<TestConnectionResult>('cmd_test_provider_connection', { id });
+        return result;
       } catch (error) {
         set((state) => {
           state.error = `测试连接失败: ${parseError(error)}`;
         });
-        return false;
+        return {
+          success: false,
+          errorMessage: parseError(error),
+          errorType: ConnectionErrorType.UNKNOWN,
+        };
       }
     },
 

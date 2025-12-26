@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 1;
+const CURRENT_DB_VERSION: i32 = 2;
 
 /// 初始化数据库
 ///
@@ -70,6 +70,7 @@ fn run_migrations(conn: &mut Connection) -> Result<()> {
     for version in (current_version + 1)..=CURRENT_DB_VERSION {
         match version {
             1 => migrate_v1(conn)?,
+            2 => migrate_v2(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -85,7 +86,17 @@ fn run_migrations(conn: &mut Connection) -> Result<()> {
 }
 
 /// 迁移到版本 1: 创建 api_providers 表
+#[cfg(test)]
+pub fn migrate_v1(conn: &mut Connection) -> Result<()> {
+    migrate_v1_impl(conn)
+}
+
+#[cfg(not(test))]
 fn migrate_v1(conn: &mut Connection) -> Result<()> {
+    migrate_v1_impl(conn)
+}
+
+fn migrate_v1_impl(conn: &mut Connection) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS api_providers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -139,6 +150,25 @@ fn migrate_v1(conn: &mut Connection) -> Result<()> {
     Ok(())
 }
 
+/// 迁移到版本 2: 添加 model 列到 api_providers 表
+#[cfg(test)]
+pub fn migrate_v2(conn: &mut Connection) -> Result<()> {
+    migrate_v2_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v2(conn: &mut Connection) -> Result<()> {
+    migrate_v2_impl(conn)
+}
+
+fn migrate_v2_impl(conn: &mut Connection) -> Result<()> {
+    conn.execute(
+        "ALTER TABLE api_providers ADD COLUMN model TEXT;",
+        [],
+    )?;
+    Ok(())
+}
+
 /// 获取数据库连接（用于运行时）
 ///
 /// 注意: 每个线程应该有自己的连接
@@ -173,7 +203,7 @@ mod tests {
         conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
 
         // 执行迁移
-        migrate_v1(&mut conn).unwrap();
+        migrate_v1_impl(&mut conn).unwrap();
 
         // 验证表已创建
         let table_exists: i32 = conn.query_row(
@@ -183,5 +213,27 @@ mod tests {
         ).unwrap();
 
         assert_eq!(table_exists, 1);
+    }
+
+    #[test]
+    fn test_migrate_v2_adds_model_column() {
+        // 使用内存数据库进行测试
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
+
+        // 先执行 V1 迁移
+        migrate_v1_impl(&mut conn).unwrap();
+
+        // 执行 V2 迁移
+        migrate_v2_impl(&mut conn).unwrap();
+
+        // 验证 model 列已添加
+        let column_exists: i32 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('api_providers') WHERE name='model'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+
+        assert_eq!(column_exists, 1);
     }
 }

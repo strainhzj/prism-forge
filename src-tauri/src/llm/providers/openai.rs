@@ -274,7 +274,7 @@ mod tests {
     #[test]
     fn test_build_request() {
         let provider = OpenAIProvider::new(
-            SecretString::new("test-key".to_string()),
+            SecretString::new("test-key".to_string().into()),
             "https://api.openai.com/v1".to_string(),
         );
 

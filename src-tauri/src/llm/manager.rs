@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::database::{ApiProvider, ApiProviderType, ApiProviderRepository};
 use crate::llm::security::ApiKeyStorage;
-use crate::llm::interface::LLMService;
-use crate::llm::providers::{OpenAIProvider, AnthropicProvider, OllamaProvider};
+use crate::llm::interface::{LLMService, TestConnectionResult};
+use crate::llm::providers::{OpenAIProvider, AnthropicProvider, OllamaProvider, XAIProvider};
 
 /// LLM 客户端管理器
 pub struct LLMClientManager {
@@ -103,6 +103,24 @@ impl LLMClientManager {
                 let client = OllamaProvider::new(Some(provider.base_url.clone()));
                 Ok(Box::new(client))
             }
+            ApiProviderType::XAI => {
+                // 从 keyring 获取 API Key
+                let api_key_ref = provider
+                    .api_key_ref
+                    .as_ref()
+                    .context("X AI 提供商未配置 API Key")?;
+
+                let api_key = ApiKeyStorage::get_api_key(provider.id.unwrap_or(0))
+                    .with_context(|| format!("无法获取 X AI API Key (provider_id={})", provider.id.unwrap_or(0)))?;
+
+                let client = XAIProvider::with_ref(
+                    api_key,
+                    provider.base_url.clone(),
+                    api_key_ref.clone(),
+                );
+
+                Ok(Box::new(client))
+            }
         }
     }
 
@@ -123,14 +141,36 @@ impl LLMClientManager {
     }
 
     /// 测试提供商连接
-    pub async fn test_provider(&self, provider_id: i64) -> Result<bool> {
+    /// 
+    /// 使用提供商配置的模型（或默认模型）进行连接测试
+    pub async fn test_provider(&self, provider_id: i64) -> Result<TestConnectionResult> {
+        #[cfg(debug_assertions)]
+        eprintln!("[LLMClientManager] test_provider called for provider_id={}", provider_id);
+
         let provider = {
             let repo = self.repository.lock().unwrap();
             repo.get_provider_by_id(provider_id)?
         }.context("提供商不存在")?;
 
-        let client = self.create_client_from_provider(&provider)?;
-        client.test_connection().await
+        #[cfg(debug_assertions)]
+        eprintln!("[LLMClientManager] Found provider: {:?}", provider.name);
+
+        let client = self.create_client_from_provider(&provider)
+            .with_context(|| format!("创建客户端失败: provider_id={}", provider_id))?;
+
+        // 获取有效模型（配置的模型或默认模型）
+        let model = provider.effective_model();
+
+        #[cfg(debug_assertions)]
+        eprintln!("[LLMClientManager] Client created, testing connection with model '{}'...", model);
+
+        let result = client.test_connection_with_model(model).await
+            .with_context(|| format!("测试连接失败: provider={}", provider.name))?;
+
+        #[cfg(debug_assertions)]
+        eprintln!("[LLMClientManager] Connection test result: {:?}", result);
+
+        Ok(result)
     }
 }
 
@@ -141,11 +181,11 @@ mod tests {
     #[test]
     fn test_create_manager() {
         // 使用内存数据库测试
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
         conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
 
         // 执行迁移
-        crate::database::migrations::migrate_v1(&mut conn.clone()).unwrap();
+        crate::database::migrations::migrate_v1(&mut conn).unwrap();
 
         let repo = ApiProviderRepository::new(conn);
         let _manager = LLMClientManager::new(repo);

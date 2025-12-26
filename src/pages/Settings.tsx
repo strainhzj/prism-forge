@@ -7,7 +7,7 @@
 
 import { useEffect, useState, useCallback, Component, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useProviderActions, useProviders, useProvidersLoading, useProvidersError, type ProviderResponse, type SaveProviderRequest } from '../stores/useSettingsStore';
+import { useProviderActions, useProviders, useProvidersLoading, useProvidersError, type ProviderResponse, type SaveProviderRequest, type TestConnectionResult, ConnectionErrorType } from '../stores/useSettingsStore';
 import { ProviderForm } from '../components/settings/ProviderForm';
 import './Settings.css';
 
@@ -18,6 +18,29 @@ function debugLog(action: string, ...args: unknown[]) {
   if (DEBUG) {
     console.log(`[Settings] ${action}`, ...args);
   }
+}
+
+/**
+ * 格式化连接测试结果消息
+ */
+function formatTestResultMessage(result: TestConnectionResult): string {
+  if (result.success) {
+    return '连接成功！';
+  }
+  
+  // 根据错误类型返回更友好的消息
+  const errorTypeLabels: Record<ConnectionErrorType, string> = {
+    [ConnectionErrorType.AUTHENTICATION]: '认证错误',
+    [ConnectionErrorType.NETWORK]: '网络错误',
+    [ConnectionErrorType.SERVER]: '服务器错误',
+    [ConnectionErrorType.REQUEST]: '请求错误',
+    [ConnectionErrorType.UNKNOWN]: '未知错误',
+  };
+  
+  const typeLabel = result.errorType ? errorTypeLabels[result.errorType] : '';
+  const message = result.errorMessage || '连接失败，请检查配置';
+  
+  return typeLabel ? `[${typeLabel}] ${message}` : message;
 }
 
 // ==================== 错误边界 ====================
@@ -68,7 +91,7 @@ interface SettingsState {
   viewMode: ViewMode;
   selectedProviderId: number | null;
   testingProviderId: number | null;
-  testResult: { id: number; success: boolean; message: string } | null;
+  testResult: { id: number; result: TestConnectionResult } | null;
 }
 
 // ==================== Settings 页面 ====================
@@ -193,6 +216,8 @@ const SettingsContent: React.FC = () => {
   const handleTestConnection = useCallback(async (provider: ProviderResponse) => {
     if (!provider.id) return;
 
+    debugLog('handleTestConnection', 'testing provider', provider.id);
+
     setState((prev) => ({
       ...prev,
       testingProviderId: provider.id ?? null,
@@ -200,25 +225,41 @@ const SettingsContent: React.FC = () => {
     }));
 
     try {
-      const success = await testProviderConnection(provider.id);
+      const result = await testProviderConnection(provider.id);
+
+      debugLog('handleTestConnection', 'result', result);
 
       setState((prev) => ({
         ...prev,
         testingProviderId: null,
         testResult: {
           id: provider.id!,
-          success,
-          message: success ? '连接成功！' : '连接失败，请检查配置。',
+          result,
         },
       }));
     } catch (error) {
+      // 解析错误信息
+      let errorMessage = '未知错误';
+      if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = String((error as { message: unknown }).message);
+      }
+
+      debugLog('handleTestConnection', 'error', errorMessage);
+
       setState((prev) => ({
         ...prev,
         testingProviderId: null,
         testResult: {
           id: provider.id!,
-          success: false,
-          message: `测试失败: ${error}`,
+          result: {
+            success: false,
+            errorMessage: `测试失败: ${errorMessage}`,
+            errorType: ConnectionErrorType.UNKNOWN,
+          },
         },
       }));
     }
@@ -319,8 +360,8 @@ const SettingsContent: React.FC = () => {
 
                     {/* 测试结果 */}
                     {currentTestResult && (
-                      <div className={`test-result ${currentTestResult.success ? 'success' : 'error'}`}>
-                        {currentTestResult.message}
+                      <div className={`test-result ${currentTestResult.result.success ? 'success' : 'error'}`}>
+                        {formatTestResultMessage(currentTestResult.result)}
                       </div>
                     )}
                   </li>
@@ -363,8 +404,8 @@ const SettingsContent: React.FC = () => {
 
               {/* 表单外测试结果展示 */}
               {selectedProvider && testResult && testResult.id === selectedProvider.id && (
-                <div className={`test-result-banner ${testResult.success ? 'success' : 'error'}`}>
-                  {testResult.message}
+                <div className={`test-result-banner ${testResult.result.success ? 'success' : 'error'}`}>
+                  {formatTestResultMessage(testResult.result)}
                 </div>
               )}
             </div>
