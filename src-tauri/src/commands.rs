@@ -200,6 +200,9 @@ pub async fn cmd_save_provider(
         if !api_key_str.is_empty() {
             let provider_id = provider.id.ok_or_else(|| anyhow::anyhow!("提供商 ID 无效"))?;
 
+            #[cfg(debug_assertions)]
+            eprintln!("[cmd_save_provider] Saving API Key for provider_id={}", provider_id);
+
             // 验证 API Key 格式
             let api_key = SecretString::new(api_key_str.into());
             crate::llm::security::ApiKeyValidator::validate_format(
@@ -209,6 +212,9 @@ pub async fn cmd_save_provider(
 
             // 保存到 keyring
             ApiKeyStorage::save_api_key(provider_id, api_key)?;
+
+            #[cfg(debug_assertions)]
+            eprintln!("[cmd_save_provider] API Key saved successfully");
 
             // 更新 api_key_ref
             if provider.api_key_ref.is_none() {

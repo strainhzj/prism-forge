@@ -142,9 +142,18 @@ fn migrate_v1(conn: &mut Connection) -> Result<()> {
 /// 获取数据库连接（用于运行时）
 ///
 /// 注意: 每个线程应该有自己的连接
+/// 此函数会自动确保数据库表已创建
 pub fn get_connection() -> Result<Connection> {
     let db_path = get_db_path()?;
-    Connection::open(&db_path).map_err(Into::into)
+    let mut conn = Connection::open(&db_path)?;
+    
+    // 启用外键约束
+    conn.execute("PRAGMA foreign_keys = ON;", [])?;
+    
+    // 确保迁移已执行
+    run_migrations(&mut conn)?;
+    
+    Ok(conn)
 }
 
 #[cfg(test)]
