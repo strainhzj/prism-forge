@@ -48,10 +48,16 @@ impl ApiKeyStorage {
     /// - **Linux**: 存储到 Secret Service，依赖正在运行的密钥服务
     pub fn save_api_key(provider_id: i64, api_key: SecretString) -> Result<()> {
         let entry = Self::get_entry(provider_id);
+        
+        #[cfg(debug_assertions)]
+        eprintln!("[ApiKeyStorage] Saving API Key for provider_id={}", provider_id);
 
         entry
             .set_password(api_key.expose_secret())
             .with_context(|| format!("保存 API Key 失败 (provider_id={})", provider_id))?;
+
+        #[cfg(debug_assertions)]
+        eprintln!("[ApiKeyStorage] API Key saved successfully for provider_id={}", provider_id);
 
         Ok(())
     }
@@ -80,9 +86,15 @@ impl ApiKeyStorage {
     pub fn get_api_key(provider_id: i64) -> Result<SecretString> {
         let entry = Self::get_entry(provider_id);
 
+        #[cfg(debug_assertions)]
+        eprintln!("[ApiKeyStorage] Getting API Key for provider_id={}", provider_id);
+
         let password = entry
             .get_password()
             .with_context(|| format!("获取 API Key 失败 (provider_id={})", provider_id))?;
+
+        #[cfg(debug_assertions)]
+        eprintln!("[ApiKeyStorage] API Key retrieved successfully for provider_id={}", provider_id);
 
         Ok(SecretString::new(password.into()))
     }

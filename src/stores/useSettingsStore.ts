@@ -21,15 +21,45 @@ function debugLog(action: string, ...args: unknown[]) {
   }
 }
 
+/**
+ * 解析 Tauri 命令错误
+ * Tauri 返回的错误可能是：
+ * - 字符串
+ * - { message: string } 对象
+ * - Error 对象
+ */
+function parseError(error: unknown): string {
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (error && typeof error === 'object') {
+    // Tauri CommandError 格式: { message: string }
+    if ('message' in error && typeof (error as { message: unknown }).message === 'string') {
+      return (error as { message: string }).message;
+    }
+    // 尝试 JSON 序列化
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
+
 // ==================== 类型定义 ====================
 
 /**
  * API 提供商类型
+ * 注意：值必须与 Rust 端 ApiProviderType 的 serde 序列化一致（lowercase）
  */
 export enum ApiProviderType {
-  OPENAI = 'OpenAI',
-  ANTHROPIC = 'Anthropic',
-  OLLAMA = 'Ollama',
+  OPENAI = 'openai',
+  ANTHROPIC = 'anthropic',
+  OLLAMA = 'ollama',
 }
 
 /**
@@ -122,7 +152,7 @@ export const useSettingsStore = create<SettingsState>()(
       } catch (error) {
         debugLog('fetchProviders', 'error', error);
         set((state) => {
-          state.error = `获取提供商列表失败: ${error}`;
+          state.error = `获取提供商列表失败: ${parseError(error)}`;
           state.loading = false;
         });
         throw error;
@@ -159,7 +189,7 @@ export const useSettingsStore = create<SettingsState>()(
         return provider;
       } catch (error) {
         set((state) => {
-          state.error = `保存提供商失败: ${error}`;
+          state.error = `保存提供商失败: ${parseError(error)}`;
           state.loading = false;
         });
         throw error;
@@ -184,7 +214,7 @@ export const useSettingsStore = create<SettingsState>()(
         });
       } catch (error) {
         set((state) => {
-          state.error = `删除提供商失败: ${error}`;
+          state.error = `删除提供商失败: ${parseError(error)}`;
           state.loading = false;
         });
         throw error;
@@ -209,7 +239,7 @@ export const useSettingsStore = create<SettingsState>()(
         });
       } catch (error) {
         set((state) => {
-          state.error = `设置活跃提供商失败: ${error}`;
+          state.error = `设置活跃提供商失败: ${parseError(error)}`;
           state.loading = false;
         });
         throw error;
@@ -223,7 +253,7 @@ export const useSettingsStore = create<SettingsState>()(
         return success;
       } catch (error) {
         set((state) => {
-          state.error = `测试连接失败: ${error}`;
+          state.error = `测试连接失败: ${parseError(error)}`;
         });
         return false;
       }
