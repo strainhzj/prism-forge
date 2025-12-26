@@ -12,8 +12,15 @@ tauri-build = { version = "2.0.0", features = [] }
 tauri = { version = "2.0.0", features = [] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-reqwest = { version = "0.12", features = ["json", "blocking"] } # 简化起见使用 blocking，生产环境建议 async
+reqwest = { version = "0.12", features = ["json", "blocking", "stream"] }
+async-openai = "0.25"
+keyring = "3.0"
+secrecy = "0.10"
+thiserror = "2.0"
+anyhow = "1.0"
 glob = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
-dirs = "5.0" # 用于查找跨平台 Home 目录
-anyhow = "1.0"
+dirs = "5.0"
+rusqlite = { version = "0.32", features = ["bundled"] }
+async-trait = "0.1"
+futures = "0.3"

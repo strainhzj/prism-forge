@@ -1,6 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useNavigate } from "react-router-dom";
 import "./App.css";
+
+// ==================== 调试模式 ====================
+const DEBUG = import.meta.env.DEV;
+
+function debugLog(action: string, ...args: unknown[]) {
+  if (DEBUG) {
+    console.log(`[App] ${action}`, ...args);
+  }
+}
 
 // 类型定义
 interface ParsedEvent {
@@ -11,25 +21,39 @@ interface ParsedEvent {
 }
 
 function App() {
+  const navigate = useNavigate();
+
   // 状态管理
   const [filePath, setFilePath] = useState("");
-  const [apiKey, setApiKey] = useState(localStorage.getItem("gemini_key") || "");
   const [goal, setGoal] = useState("");
-  
+
   const [parsedEvents, setParsedEvents] = useState<ParsedEvent[]>([]);
   const [analysisResult, setAnalysisResult] = useState("");
-  const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
+
+  // F6 快捷键导航到设置页面
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'F6') {
+      e.preventDefault();
+      debugLog('keydown', 'F6 pressed, navigating to settings');
+      navigate('/settings');
+    }
+  }, [navigate]);
+
+  // 注册全局快捷键
+  useEffect(() => {
+    debugLog('useEffect', 'registering F6 shortcut');
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      debugLog('useEffect', 'unregistering F6 shortcut');
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleKeyDown]);
 
   // 初始化：自动查找最近的文件
   useEffect(() => {
     autoDetectFile();
   }, []);
-
-  // 保存 Key 到本地
-  useEffect(() => {
-    localStorage.setItem("gemini_key", apiKey);
-  }, [apiKey]);
 
   const autoDetectFile = async () => {
     try {
@@ -55,23 +79,22 @@ function App() {
   };
 
   const handleAnalyze = async () => {
-    if (!filePath || !apiKey || !goal) {
-      alert("请填写完整信息 (文件路径、API Key、目标)");
+    if (!filePath || !goal) {
+      alert("请填写完整信息 (文件路径、目标)");
       return;
     }
 
     setAnalyzing(true);
     setAnalysisResult("");
-    
+
     try {
       // 1. 先刷新一下解析列表，确保是最新的
       await loadParsedEvents(filePath);
-      
-      // 2. 调用 AI 分析
-      const result = await invoke<string>("analyze_session", {
-        filePath,
-        goal,
-        apiKey
+
+      // 2. 调用新的 optimize_prompt 命令（使用 LLMClientManager 中配置的 API）
+      const result = await invoke<string>("optimize_prompt", {
+        sessionFile: filePath,
+        goal
       });
       setAnalysisResult(result);
     } catch (e) {
@@ -83,14 +106,23 @@ function App() {
 
   return (
     <div className="container">
-      <h1>Claude Session Monitor</h1>
+      <div className="header-row">
+        <h1>Claude Session Monitor</h1>
+        <button
+          className="settings-btn"
+          onClick={() => navigate('/settings')}
+          title="配置 LLM API 提供商"
+        >
+          ⚙️ 设置 (F6)
+        </button>
+      </div>
 
       <div className="config-section">
         <div className="input-group">
           <label>Session File:</label>
           <div className="row">
-            <input 
-              value={filePath} 
+            <input
+              value={filePath}
               onChange={(e) => setFilePath(e.target.value)}
               placeholder="Path to .jsonl file"
             />
@@ -99,28 +131,24 @@ function App() {
         </div>
 
         <div className="input-group">
-          <label>Gemini API Key:</label>
-          <input 
-            type="password"
-            value={apiKey} 
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="AIzaSy..."
-          />
-        </div>
-
-        <div className="input-group">
           <label>Next Goal:</label>
-          <textarea 
-            value={goal} 
+          <textarea
+            value={goal}
             onChange={(e) => setGoal(e.target.value)}
             placeholder="e.g. Fix the null pointer exception in user service"
             rows={2}
           />
         </div>
 
-        <button 
+        <div className="info-note">
+          <small>
+            ℹ️ API 配置已移至设置页 (F6)。请确保已配置活跃的 LLM 提供商。
+          </small>
+        </div>
+
+        <button
           className="primary-btn"
-          onClick={handleAnalyze} 
+          onClick={handleAnalyze}
           disabled={analyzing}
         >
           {analyzing ? "Analyzing..." : "Analyze & Generate Prompt"}

@@ -8,6 +8,28 @@
   flex-direction: column;
 }
 
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.header-row h1 {
+  margin: 0;
+}
+
+.settings-btn {
+  background: #6c757d;
+  color: white;
+  border: none;
+  font-size: 0.9em;
+}
+
+.settings-btn:hover {
+  background: #5a6268;
+}
+
 .config-section {
   display: flex;
   flex-direction: column;
@@ -59,6 +81,14 @@ button {
 
 .primary-btn:disabled {
   background: #ccc;
+}
+
+.info-note {
+  background: #e7f3ff;
+  border-left: 3px solid #007bff;
+  padding: 10px;
+  border-radius: 4px;
+  color: #004085;
 }
 
 .main-content {
