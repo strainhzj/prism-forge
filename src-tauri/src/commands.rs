@@ -7,6 +7,7 @@ use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
 use crate::llm::LLMClientManager;
+use crate::llm::interface::TestConnectionResult;
 use crate::database::{ApiProvider, ApiProviderType, ApiProviderRepository};
 use crate::llm::security::ApiKeyStorage;
 
@@ -28,6 +29,9 @@ pub struct SaveProviderRequest {
 
     /// API Key（明文，仅用于传输）
     pub api_key: Option<String>,
+
+    /// 配置的模型名称
+    pub model: Option<String>,
 
     /// 额外配置 JSON
     pub config_json: Option<String>,
@@ -57,6 +61,9 @@ pub struct ProviderResponse {
     /// API Key 引用标识
     pub api_key_ref: Option<String>,
 
+    /// 配置的模型名称
+    pub model: Option<String>,
+
     /// 额外配置 JSON
     pub config_json: Option<String>,
 
@@ -78,6 +85,7 @@ impl From<ApiProvider> for ProviderResponse {
             name: provider.name,
             base_url: provider.base_url,
             api_key_ref: provider.api_key_ref,
+            model: provider.model,
             config_json: provider.config_json,
             is_active: provider.is_active,
             has_api_key: false,
@@ -136,6 +144,7 @@ pub fn cmd_get_providers(
                 name: provider.name,
                 base_url: provider.base_url,
                 api_key_ref: provider.api_key_ref,
+                model: provider.model,
                 config_json: provider.config_json,
                 is_active: provider.is_active,
                 has_api_key,
@@ -173,16 +182,18 @@ pub async fn cmd_save_provider(
             name: request.name,
             base_url: request.base_url,
             api_key_ref: existing.api_key_ref,
+            model: request.model,
             config_json: request.config_json,
             is_active: request.is_active,
         }
     } else {
         // 创建新提供商
-        let new_provider = ApiProvider::new(
+        let mut new_provider = ApiProvider::new(
             request.provider_type,
             request.name.clone(),
             Some(request.base_url.clone()),
         );
+        new_provider.model = request.model;
 
         // 先插入数据库获取 ID
         let mut created = repo.create_provider(new_provider)?;
@@ -288,12 +299,12 @@ pub fn cmd_set_active_provider(
 /// 3. 发送测试请求
 ///
 /// # 返回
-/// 返回测试是否成功
+/// 返回 TestConnectionResult 包含详细的成功/失败信息
 #[tauri::command]
 pub async fn cmd_test_provider_connection(
     manager: State<'_, LLMClientManager>,
     id: i64,
-) -> std::result::Result<bool, CommandError> {
-    let success = manager.test_provider(id).await?;
-    Ok(success)
+) -> std::result::Result<TestConnectionResult, CommandError> {
+    let result = manager.test_provider(id).await?;
+    Ok(result)
 }

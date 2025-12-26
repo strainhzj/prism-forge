@@ -11,6 +11,7 @@ import {
   ApiProviderType,
   type SaveProviderRequest,
   type ProviderResponse,
+  DEFAULT_MODELS,
 } from '../../stores/useSettingsStore';
 
 // ==================== 表单数据类型 ====================
@@ -22,6 +23,7 @@ interface ProviderFormData {
   apiKey?: string;
   configJson?: string;
   isActive: boolean;
+  model?: string;
 }
 
 // ==================== Props ====================
@@ -59,12 +61,14 @@ const PROVIDER_TYPE_OPTIONS = [
   { value: ApiProviderType.OPENAI, label: 'OpenAI', description: 'OpenAI 或兼容接口（OneAPI、中转服务等）' },
   { value: ApiProviderType.ANTHROPIC, label: 'Anthropic', description: 'Claude (Anthropic)' },
   { value: ApiProviderType.OLLAMA, label: 'Ollama', description: '本地 Ollama 服务' },
+  { value: ApiProviderType.XAI, label: 'X AI', description: 'X AI (Grok)' },
 ];
 
 const DEFAULT_BASE_URLS: Record<ApiProviderType, string> = {
   [ApiProviderType.OPENAI]: 'https://api.openai.com/v1',
   [ApiProviderType.ANTHROPIC]: 'https://api.anthropic.com',
   [ApiProviderType.OLLAMA]: 'http://127.0.0.1:11434',
+  [ApiProviderType.XAI]: 'https://api.x.ai/v1',
 };
 
 // ==================== 组件 ====================
@@ -91,6 +95,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
       apiKey: '',
       configJson: '',
       isActive: false,
+      model: '',
     },
   });
 
@@ -114,6 +119,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
         apiKey: '', // API Key 不回显，需要重新输入
         configJson: provider.configJson || '',
         isActive: provider.isActive,
+        model: provider.model || '',
       });
     }
   }, [provider, reset]);
@@ -192,6 +198,21 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
         {errors.baseUrl && <span className="error-text">{errors.baseUrl.message}</span>}
         <small className="help-text">
           默认值: {DEFAULT_BASE_URLS[providerType]}
+        </small>
+      </div>
+
+      {/* 模型 */}
+      <div className="form-group">
+        <label htmlFor="model">模型</label>
+        <input
+          id="model"
+          type="text"
+          className="form-control"
+          placeholder={DEFAULT_MODELS[providerType]}
+          {...register('model')}
+        />
+        <small className="help-text">
+          留空使用默认模型: {DEFAULT_MODELS[providerType]}
         </small>
       </div>
 
