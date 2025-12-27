@@ -78,6 +78,18 @@ async fn analyze_session(
     optimize_prompt(session_file, goal, llm_manager).await
 }
 
+/// 解析会话文件（用于前端预览展示）
+///
+/// 此命令将 JSONL 格式的 Claude 会话文件解析为结构化事件列表，
+/// 供前端 UI 展示会话日志内容。
+#[tauri::command]
+fn parse_session_file(file_path: String) -> Result<Vec<optimizer::ParsedEvent>, String> {
+    use optimizer::PromptOptimizer;
+
+    PromptOptimizer::parse_session_file(&file_path)
+        .map_err(|e| e.to_string())
+}
+
 fn main() {
     // 初始化数据库
     database::migrations::get_db_path()
@@ -95,6 +107,7 @@ fn main() {
         .manage(llm_manager)
         .invoke_handler(tauri::generate_handler![
             get_latest_session_path,
+            parse_session_file,
             optimize_prompt,
             analyze_session, // 保留旧命令以兼容
             cmd_get_providers,

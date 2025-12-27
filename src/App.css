@@ -96,12 +96,19 @@ button {
   gap: 20px;
   flex-grow: 1;
   overflow: hidden; /* 防止撑开页面 */
+  width: 100%;
+  max-width: 100%;
 }
 
 .result-panel {
-  flex: 1;
+  /* 固定宽度：占 50% 或固定像素值 */
+  width: 50%;
+  min-width: 400px;
+  max-width: 600px;
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* 防止内容撑开面板 */
+  flex-shrink: 0; /* 防止被压缩 */
 }
 
 .result-box {
@@ -111,16 +118,27 @@ button {
   padding: 15px;
   flex-grow: 1;
   overflow-y: auto;
-  white-space: pre-wrap;
+  overflow-x: auto; /* 水平内容超出时也滚动 */
+  white-space: pre-wrap; /* 保留换行，但在长单词时换行 */
+  word-wrap: break-word; /* 长单词/URL 换行 */
+  word-break: break-word; /* 强制在单词内换行 */
   background-color: #f9fdfc;
+  /* 防止内容撑开容器 */
+  min-width: 0;
+  width: 100%;
 }
 
 .debug-panel {
-  flex: 1;
+  /* 固定宽度：占剩余空间或固定像素值 */
+  width: 50%;
+  min-width: 400px;
+  max-width: 600px;
   display: flex;
   flex-direction: column;
   border-left: 1px solid #eee;
   padding-left: 20px;
+  overflow: hidden; /* 防止内容撑开面板 */
+  flex-shrink: 0; /* 防止被压缩 */
 }
 
 .debug-header {
@@ -132,10 +150,14 @@ button {
 .events-list {
   flex-grow: 1;
   overflow-y: auto;
+  overflow-x: hidden; /* 防止水平溢出 */
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding-right: 5px;
+  /* 防止内容撑开容器 */
+  min-width: 0;
+  width: 100%;
 }
 
 .event-card {
@@ -144,6 +166,13 @@ button {
   border-radius: 6px;
   font-size: 0.85em;
   background: white;
+  /* 防止内容撑开容器 */
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
 }
 
 .event-card.tool_result {
@@ -162,10 +191,33 @@ button {
   font-size: 0.8em;
   margin-bottom: 5px;
   font-weight: bold;
+  /* 防止内容撑开 */
+  min-width: 0;
+  width: 100%;
+}
+
+/* 确保 event-content 也正确处理溢出 */
+.event-card .event-content {
+  /* 防止长内容撑开 */
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
 }
 
 .placeholder {
   color: #999;
   text-align: center;
   margin-top: 20px;
+}
+
+.error-message {
+  color: #721c24;
+  background: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-left: 3px solid #dc3545;
+  padding: 10px;
+  border-radius: 4px;
+  margin: 10px 0;
+  font-size: 0.9em;
 }

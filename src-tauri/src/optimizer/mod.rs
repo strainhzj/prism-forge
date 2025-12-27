@@ -10,6 +10,7 @@ use std::time::SystemTime;
 
 use crate::llm::LLMClientManager;
 use crate::llm::interface::{Message, MessageRole, ModelParams};
+use crate::database::ApiProviderType;
 
 // ==================== 数据结构 ====================
 
@@ -39,6 +40,64 @@ pub struct OptimizeResult {
 
 /// Prompt Optimizer - 使用 LLM 分析和优化提示词
 pub struct PromptOptimizer;
+
+// ==================== 辅助函数 ====================
+
+/// 根据提供商类型创建优化的 ModelParams
+///
+/// 不同提供商有不同的参数特性，此函数根据提供商类型返回优化的默认参数
+fn create_optimizer_params(
+    provider_type: ApiProviderType,
+    model: &str,
+    temperature: Option<f32>,
+    max_tokens: Option<u32>,
+) -> ModelParams {
+    // 使用配置的值，如果没有配置则使用提供商特定的默认值
+    let temp = temperature.unwrap_or_else(|| match provider_type {
+        ApiProviderType::Google | ApiProviderType::GoogleVertex => 0.5,
+        ApiProviderType::Ollama => 0.6,
+        _ => 0.7,
+    });
+
+    let tokens = max_tokens.unwrap_or_else(|| match provider_type {
+        ApiProviderType::Anthropic => 4000,
+        ApiProviderType::Ollama => 1500,
+        _ => 2000,
+    });
+
+    ModelParams::new(model)
+        .with_temperature(temp)
+        .with_max_tokens(tokens)
+}
+
+/// 从配置创建优化的 ModelParams（支持 config_json 覆盖）
+///
+/// 优先级：数据库字段 > config_json > 提供商默认值
+fn create_optimizer_params_with_config(
+    provider_type: ApiProviderType,
+    model: &str,
+    temperature: Option<f32>,
+    max_tokens: Option<u32>,
+    config_json: Option<&String>,
+) -> Result<ModelParams> {
+    // 先使用数据库配置的值
+    let mut temp = temperature;
+    let mut tokens = max_tokens;
+
+    // 如果有扩展配置，尝试解析并覆盖
+    if let Some(config_str) = config_json {
+        if let Ok(config) = serde_json::from_str::<serde_json::Value>(config_str) {
+            if let Some(v) = config.get("optimizer_temperature").and_then(|v| v.as_f64()) {
+                temp = Some(v as f32);
+            }
+            if let Some(v) = config.get("optimizer_max_tokens").and_then(|v| v.as_u64()) {
+                tokens = Some(v as u32);
+            }
+        }
+    }
+
+    Ok(create_optimizer_params(provider_type, model, temp, tokens))
+}
 
 impl PromptOptimizer {
     /// 创建新的优化器
@@ -101,16 +160,40 @@ impl PromptOptimizer {
             system_prompt, context_str, request.goal
         );
 
-        // 4. 调用 LLM
-        let client = llm_manager.get_active_client()?;
+        // 4. 获取活跃提供商配置
+        let provider = llm_manager.get_active_provider_config()
+            .context("无法获取活跃提供商配置")?;
+        let model = provider.effective_model();
+
+        #[cfg(debug_assertions)]
+        eprintln!("[PromptOptimizer] Using provider: {:?}, model: {}",
+                  provider.provider_type, model);
+
+        // 5. 创建提供商特定的参数
+        let params = create_optimizer_params_with_config(
+            provider.provider_type,
+            model,
+            provider.temperature,
+            provider.max_tokens,
+            provider.config_json.as_ref(),
+        ).context("创建优化器参数失败")?;
+
+        // 打印参数详情
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[PromptOptimizer] Params:");
+            eprintln!("  - model: {}", params.model);
+            eprintln!("  - temperature: {}", params.temperature);
+            eprintln!("  - max_tokens: {:?}", params.max_tokens);
+        }
+
+        // 6. 调用 LLM
+        let client = llm_manager.get_active_client()
+            .context("无法获取 LLM 客户端")?;
 
         let messages = vec![
             Message::user(full_text)
         ];
-
-        // ModelParams::new 需要模型名称，使用通用模型名
-        let params = ModelParams::new("gpt-3.5-turbo")
-            .with_max_tokens(2000);
 
         let response = client.chat_completion(messages, params).await?;
 
@@ -120,8 +203,8 @@ impl PromptOptimizer {
         Ok(result)
     }
 
-    /// 解析会话文件
-    fn parse_session_file(file_path: &str) -> Result<Vec<ParsedEvent>> {
+    /// 解析会话文件（公共方法，可供 Tauri 命令调用）
+    pub fn parse_session_file(file_path: &str) -> Result<Vec<ParsedEvent>> {
         let file = File::open(file_path)
             .context(format!("无法打开会话文件: {}", file_path))?;
         let reader = BufReader::new(file);

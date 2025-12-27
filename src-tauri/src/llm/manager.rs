@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use crate::database::{ApiProvider, ApiProviderType, ApiProviderRepository};
 use crate::llm::security::ApiKeyStorage;
 use crate::llm::interface::{LLMService, TestConnectionResult};
-use crate::llm::providers::{OpenAIProvider, AnthropicProvider, OllamaProvider, XAIProvider};
+use crate::llm::providers::{OpenAIProvider, AnthropicProvider, OllamaProvider, XAIProvider, GoogleProvider, GoogleVertexProvider};
 
 /// LLM 客户端管理器
 pub struct LLMClientManager {
@@ -121,6 +121,83 @@ impl LLMClientManager {
 
                 Ok(Box::new(client))
             }
+            ApiProviderType::Google => {
+                // 先检查配置，判断使用哪种模式
+                let config = provider.get_config()?;
+                let use_vertexai = config
+                    .as_ref()
+                    .and_then(|c| c.get("use_vertexai"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
+                if use_vertexai {
+                    // Vertex AI 模式：需要 project 和 access_token
+                    let project = config
+                        .as_ref()
+                        .and_then(|c| c.get("project"))
+                        .and_then(|p| p.as_str())
+                        .context("Vertex AI 模式需要配置 project")?
+                        .to_string();
+
+                    let location = config
+                        .as_ref()
+                        .and_then(|c| c.get("location"))
+                        .and_then(|l| l.as_str())
+                        .unwrap_or("us-central1")
+                        .to_string();
+
+                    // 读取 access_token（可选，如果没有配置会返回错误）
+                    let access_token = config
+                        .as_ref()
+                        .and_then(|c| c.get("access_token"))
+                        .and_then(|t| t.as_str())
+                        .map(|t| t.to_string());
+
+                    let client = GoogleProvider::new_vertexai(
+                        project,
+                        location,
+                        Some(provider.base_url.clone()),
+                        access_token,
+                    );
+
+                    Ok(Box::new(client))
+                } else {
+                    // ML Dev API 模式：需要从 keyring 获取 API Key
+                    let api_key_ref = provider
+                        .api_key_ref
+                        .as_ref()
+                        .context("Google ML Dev API 提供商未配置 API Key")?;
+
+                    let api_key = ApiKeyStorage::get_api_key(provider.id.unwrap_or(0))
+                        .with_context(|| format!("无法获取 Google API Key (provider_id={})", provider.id.unwrap_or(0)))?;
+
+                    let client = GoogleProvider::with_ref(
+                        api_key,
+                        provider.base_url.clone(),
+                        api_key_ref.clone(),
+                    );
+
+                    Ok(Box::new(client))
+                }
+            }
+            ApiProviderType::GoogleVertex => {
+                // Google Vertex AI Public Preview：从 keyring 获取 API Key
+                let api_key_ref = provider
+                    .api_key_ref
+                    .as_ref()
+                    .context("Google Vertex AI 提供商未配置 API Key")?;
+
+                let api_key = ApiKeyStorage::get_api_key(provider.id.unwrap_or(0))
+                    .with_context(|| format!("无法获取 Google Vertex AI API Key (provider_id={})", provider.id.unwrap_or(0)))?;
+
+                let client = GoogleVertexProvider::with_ref(
+                    api_key,
+                    provider.base_url.clone(),
+                    api_key_ref.clone(),
+                );
+
+                Ok(Box::new(client))
+            }
         }
     }
 
@@ -171,6 +248,14 @@ impl LLMClientManager {
         eprintln!("[LLMClientManager] Connection test result: {:?}", result);
 
         Ok(result)
+    }
+
+    /// 获取当前活跃的提供商配置
+    ///
+    /// 用于需要访问提供商元数据（如模型配置、类型等）的场景
+    pub fn get_active_provider_config(&self) -> Result<ApiProvider> {
+        let repo = self.repository.lock().unwrap();
+        repo.get_active_provider()?.context("未设置活跃的 API 提供商，请先在设置中配置")
     }
 }
 

@@ -6,8 +6,12 @@ pub mod openai;
 pub mod anthropic;
 pub mod ollama;
 pub mod xai;
+pub mod google;
+pub mod googlevertex;
 
 pub use openai::OpenAIProvider;
 pub use anthropic::AnthropicProvider;
 pub use ollama::OllamaProvider;
 pub use xai::XAIProvider;
+pub use google::GoogleProvider;
+pub use googlevertex::GoogleVertexProvider;

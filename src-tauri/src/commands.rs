@@ -36,12 +36,18 @@ pub struct SaveProviderRequest {
     /// 额外配置 JSON
     pub config_json: Option<String>,
 
+    /// Temperature 参数
+    pub temperature: Option<f32>,
+
+    /// Max Tokens 参数
+    pub max_tokens: Option<u32>,
+
     /// 是否设置为活跃提供商
     pub is_active: bool,
 }
 
 /// 提供商响应（包含敏感信息掩码）
-/// 
+///
 /// 注意：手动展开 ApiProvider 字段以确保 camelCase 序列化一致性
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,6 +73,12 @@ pub struct ProviderResponse {
     /// 额外配置 JSON
     pub config_json: Option<String>,
 
+    /// Temperature 参数
+    pub temperature: Option<f32>,
+
+    /// Max Tokens 参数
+    pub max_tokens: Option<u32>,
+
     /// 是否为当前活跃的提供商
     pub is_active: bool,
 
@@ -87,6 +99,8 @@ impl From<ApiProvider> for ProviderResponse {
             api_key_ref: provider.api_key_ref,
             model: provider.model,
             config_json: provider.config_json,
+            temperature: provider.temperature,
+            max_tokens: provider.max_tokens,
             is_active: provider.is_active,
             has_api_key: false,
             api_key_mask: None,
@@ -146,6 +160,8 @@ pub fn cmd_get_providers(
                 api_key_ref: provider.api_key_ref,
                 model: provider.model,
                 config_json: provider.config_json,
+                temperature: provider.temperature,
+                max_tokens: provider.max_tokens,
                 is_active: provider.is_active,
                 has_api_key,
                 api_key_mask,
@@ -184,6 +200,8 @@ pub async fn cmd_save_provider(
             api_key_ref: existing.api_key_ref,
             model: request.model,
             config_json: request.config_json,
+            temperature: request.temperature,
+            max_tokens: request.max_tokens,
             is_active: request.is_active,
         }
     } else {
@@ -194,6 +212,8 @@ pub async fn cmd_save_provider(
             Some(request.base_url.clone()),
         );
         new_provider.model = request.model;
+        new_provider.temperature = request.temperature;
+        new_provider.max_tokens = request.max_tokens;
 
         // 先插入数据库获取 ID
         let mut created = repo.create_provider(new_provider)?;
