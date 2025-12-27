@@ -24,6 +24,8 @@ interface ProviderFormData {
   configJson?: string;
   isActive: boolean;
   model?: string;
+  temperature?: number;
+  maxTokens?: number;
 }
 
 // ==================== Props ====================
@@ -62,6 +64,8 @@ const PROVIDER_TYPE_OPTIONS = [
   { value: ApiProviderType.ANTHROPIC, label: 'Anthropic', description: 'Claude (Anthropic)' },
   { value: ApiProviderType.OLLAMA, label: 'Ollama', description: '本地 Ollama 服务' },
   { value: ApiProviderType.XAI, label: 'X AI', description: 'X AI (Grok)' },
+  { value: ApiProviderType.GOOGLE, label: 'Google', description: 'Google Gemini ML Dev API (API Key 认证)' },
+  { value: ApiProviderType.GOOGLE_VERTEX, label: 'Google Vertex', description: 'Google Vertex AI Public Preview (API Key URL 参数)' },
 ];
 
 const DEFAULT_BASE_URLS: Record<ApiProviderType, string> = {
@@ -69,6 +73,8 @@ const DEFAULT_BASE_URLS: Record<ApiProviderType, string> = {
   [ApiProviderType.ANTHROPIC]: 'https://api.anthropic.com',
   [ApiProviderType.OLLAMA]: 'http://127.0.0.1:11434',
   [ApiProviderType.XAI]: 'https://api.x.ai/v1',
+  [ApiProviderType.GOOGLE]: 'https://generativelanguage.googleapis.com',
+  [ApiProviderType.GOOGLE_VERTEX]: 'https://aiplatform.googleapis.com',
 };
 
 // ==================== 组件 ====================
@@ -96,6 +102,8 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
       configJson: '',
       isActive: false,
       model: '',
+      temperature: 0.7,
+      maxTokens: 2000,
     },
   });
 
@@ -120,6 +128,8 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
         configJson: provider.configJson || '',
         isActive: provider.isActive,
         model: provider.model || '',
+        temperature: provider.temperature ?? 0.7,
+        maxTokens: provider.maxTokens ?? 2000,
       });
     }
   }, [provider, reset]);
@@ -213,6 +223,47 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
         />
         <small className="help-text">
           留空使用默认模型: {DEFAULT_MODELS[providerType]}
+        </small>
+      </div>
+
+      {/* Temperature */}
+      <div className="form-group">
+        <label htmlFor="temperature">Temperature</label>
+        <input
+          id="temperature"
+          type="number"
+          step="0.1"
+          min="0"
+          max="2"
+          className="form-control"
+          placeholder="0.7"
+          {...register('temperature', {
+            min: { value: 0, message: 'Temperature 不能小于 0' },
+            max: { value: 2, message: 'Temperature 不能大于 2' },
+          })}
+        />
+        {errors.temperature && <span className="error-text">{errors.temperature.message}</span>}
+        <small className="help-text">
+          控制随机性 (0.0 - 2.0)，默认 0.7
+        </small>
+      </div>
+
+      {/* Max Tokens */}
+      <div className="form-group">
+        <label htmlFor="maxTokens">Max Tokens</label>
+        <input
+          id="maxTokens"
+          type="number"
+          min="1"
+          className="form-control"
+          placeholder="2000"
+          {...register('maxTokens', {
+            min: { value: 1, message: 'Max Tokens 必须大于 0' },
+          })}
+        />
+        {errors.maxTokens && <span className="error-text">{errors.maxTokens.message}</span>}
+        <small className="help-text">
+          最大输出 token 数，默认 2000
         </small>
       </div>
 

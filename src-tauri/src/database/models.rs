@@ -17,6 +17,10 @@ pub enum ApiProviderType {
     Ollama,
     /// X AI (Grok)
     XAI,
+    /// Google Gemini (ML Dev API - API Key 认证)
+    Google,
+    /// Google Vertex AI Public Preview (API Key via URL parameter)
+    GoogleVertex,
 }
 
 impl ApiProviderType {
@@ -27,6 +31,8 @@ impl ApiProviderType {
             ApiProviderType::Anthropic => "https://api.anthropic.com",
             ApiProviderType::Ollama => "http://127.0.0.1:11434",
             ApiProviderType::XAI => "https://api.x.ai/v1",
+            ApiProviderType::Google => "https://generativelanguage.googleapis.com",
+            ApiProviderType::GoogleVertex => "https://aiplatform.googleapis.com",
         }
     }
 
@@ -37,6 +43,8 @@ impl ApiProviderType {
             ApiProviderType::Anthropic => "claude-3-5-sonnet-20241022",
             ApiProviderType::Ollama => "llama3",
             ApiProviderType::XAI => "grok-4-1-fast-reasoning",
+            ApiProviderType::Google => "gemini-2.5-flash-lite",
+            ApiProviderType::GoogleVertex => "gemini-2.5-flash-lite",
         }
     }
 
@@ -91,6 +99,18 @@ pub struct ApiProvider {
     #[serde(rename = "config_json")]
     pub config_json: Option<String>,
 
+    /// Temperature 参数（控制随机性）
+    ///
+    /// 范围: 0.0 - 2.0，默认 0.7
+    #[serde(rename = "temperature")]
+    pub temperature: Option<f32>,
+
+    /// Max Tokens 参数（最大输出 token 数）
+    ///
+    /// 默认 2000
+    #[serde(rename = "max_tokens")]
+    pub max_tokens: Option<u32>,
+
     /// 是否为当前活跃的提供商
     ///
     /// 同一时间只能有一个活跃提供商
@@ -113,6 +133,8 @@ impl ApiProvider {
             api_key_ref: None,
             model: None,
             config_json: None,
+            temperature: Some(0.7),
+            max_tokens: Some(2000),
             is_active: false,
         }
     }
@@ -176,6 +198,8 @@ mod tests {
         assert_eq!(ApiProviderType::Anthropic.default_base_url(), "https://api.anthropic.com");
         assert_eq!(ApiProviderType::Ollama.default_base_url(), "http://127.0.0.1:11434");
         assert_eq!(ApiProviderType::XAI.default_base_url(), "https://api.x.ai/v1");
+        assert_eq!(ApiProviderType::Google.default_base_url(), "https://generativelanguage.googleapis.com");
+        assert_eq!(ApiProviderType::GoogleVertex.default_base_url(), "https://aiplatform.googleapis.com");
     }
 
     #[test]
@@ -184,6 +208,8 @@ mod tests {
         assert!(ApiProviderType::Anthropic.requires_api_key());
         assert!(!ApiProviderType::Ollama.requires_api_key());
         assert!(ApiProviderType::XAI.requires_api_key());
+        assert!(ApiProviderType::Google.requires_api_key());
+        assert!(ApiProviderType::GoogleVertex.requires_api_key());
     }
 
     #[test]
@@ -225,6 +251,8 @@ mod tests {
         assert_eq!(ApiProviderType::Anthropic.default_model(), "claude-3-5-sonnet-20241022");
         assert_eq!(ApiProviderType::Ollama.default_model(), "llama3");
         assert_eq!(ApiProviderType::XAI.default_model(), "grok-4-1-fast-reasoning");
+        assert_eq!(ApiProviderType::Google.default_model(), "gemini-2.5-flash-lite");
+        assert_eq!(ApiProviderType::GoogleVertex.default_model(), "gemini-2.5-flash-lite");
     }
 
     #[test]

@@ -30,6 +30,7 @@ function App() {
   const [parsedEvents, setParsedEvents] = useState<ParsedEvent[]>([]);
   const [analysisResult, setAnalysisResult] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
+  const [parseError, setParseError] = useState("");  // 解析错误信息
 
   // F6 快捷键导航到设置页面
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -59,22 +60,29 @@ function App() {
     try {
       const path = await invoke<string>("get_latest_session_path");
       setFilePath(path);
+      setParseError("");  // 清空之前的错误
       // 自动加载解析结果进行预览
       loadParsedEvents(path);
     } catch (e) {
-      console.error(e);
-      setFilePath(""); 
-      // alert("未找到会话文件");
+      const errorMsg = `自动检测文件失败: ${e}`;
+      console.error(errorMsg);
+      setParseError(errorMsg);
+      setFilePath("");
     }
   };
 
   const loadParsedEvents = async (path: string) => {
     if (!path) return;
     try {
+      setParseError("");  // 清空之前的错误
       const events = await invoke<ParsedEvent[]>("parse_session_file", { filePath: path });
       setParsedEvents(events);
+      debugLog("解析成功", `获取到 ${events.length} 个事件`);
     } catch (e) {
-      console.error("解析失败", e);
+      const errorMsg = `解析会话文件失败: ${e}`;
+      console.error(errorMsg);
+      setParseError(errorMsg);
+      setParsedEvents([]);  // 清空之前的结果
     }
   };
 
@@ -175,7 +183,8 @@ function App() {
             <button onClick={() => loadParsedEvents(filePath)} className="sm-btn">Refresh</button>
           </div>
           <div className="events-list">
-            {parsedEvents.length === 0 && <p className="placeholder">No events parsed.</p>}
+            {parseError && <p className="error-message">{parseError}</p>}
+            {parsedEvents.length === 0 && !parseError && <p className="placeholder">No events parsed.</p>}
             {parsedEvents.slice().reverse().map((ev, i) => (
               <div key={i} className={`event-card ${ev.event_type}`}>
                 <div className="event-meta">

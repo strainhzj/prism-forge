@@ -61,6 +61,8 @@ export enum ApiProviderType {
   ANTHROPIC = 'anthropic',
   OLLAMA = 'ollama',
   XAI = 'xai',
+  GOOGLE = 'google',
+  GOOGLE_VERTEX = 'googlevertex',
 }
 
 /**
@@ -73,6 +75,8 @@ export interface ApiProvider {
   baseUrl: string;
   apiKeyRef?: string;
   configJson?: string;
+  temperature?: number;
+  maxTokens?: number;
   isActive: boolean;
 }
 
@@ -86,6 +90,8 @@ export interface ProviderResponse {
   baseUrl: string;
   apiKeyRef?: string;
   configJson?: string;
+  temperature?: number;
+  maxTokens?: number;
   isActive: boolean;
   hasApiKey: boolean;
   apiKeyMask?: string;
@@ -102,6 +108,8 @@ export interface SaveProviderRequest {
   baseUrl: string;
   apiKey?: string;
   configJson?: string;
+  temperature?: number;
+  maxTokens?: number;
   isActive: boolean;
   model?: string;
 }
@@ -114,6 +122,8 @@ export const DEFAULT_MODELS: Record<ApiProviderType, string> = {
   [ApiProviderType.ANTHROPIC]: 'claude-3-5-sonnet-20241022',
   [ApiProviderType.OLLAMA]: 'llama3',
   [ApiProviderType.XAI]: 'grok-4-1-fast-reasoning',
+  [ApiProviderType.GOOGLE]: 'gemini-2.5-flash-lite',
+  [ApiProviderType.GOOGLE_VERTEX]: 'gemini-2.5-flash-lite',
 };
 
 /**
@@ -208,6 +218,8 @@ export const useSettingsStore = create<SettingsState>()(
             baseUrl: request.baseUrl,
             apiKey: request.apiKey,
             configJson: request.configJson,
+            temperature: request.temperature,
+            maxTokens: request.maxTokens,
             isActive: request.isActive,
             model: request.model,
           },

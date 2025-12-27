@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 2;
+const CURRENT_DB_VERSION: i32 = 3;
 
 /// 初始化数据库
 ///
@@ -71,6 +71,7 @@ fn run_migrations(conn: &mut Connection) -> Result<()> {
         match version {
             1 => migrate_v1(conn)?,
             2 => migrate_v2(conn)?,
+            3 => migrate_v3(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -166,6 +167,33 @@ fn migrate_v2_impl(conn: &mut Connection) -> Result<()> {
         "ALTER TABLE api_providers ADD COLUMN model TEXT;",
         [],
     )?;
+    Ok(())
+}
+
+/// 迁移到版本 3: 添加 temperature 和 max_tokens 列
+#[cfg(test)]
+pub fn migrate_v3(conn: &mut Connection) -> Result<()> {
+    migrate_v3_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v3(conn: &mut Connection) -> Result<()> {
+    migrate_v3_impl(conn)
+}
+
+fn migrate_v3_impl(conn: &mut Connection) -> Result<()> {
+    // 添加 temperature 列（默认值 0.7）
+    conn.execute(
+        "ALTER TABLE api_providers ADD COLUMN temperature REAL DEFAULT 0.7;",
+        [],
+    )?;
+
+    // 添加 max_tokens 列（默认值 2000）
+    conn.execute(
+        "ALTER TABLE api_providers ADD COLUMN max_tokens INTEGER DEFAULT 2000;",
+        [],
+    )?;
+
     Ok(())
 }
 

@@ -232,6 +232,22 @@ impl ApiKeyValidator {
                     // 某些情况可能不同，这里只做警告不报错
                 }
             }
+            crate::database::ApiProviderType::Google => {
+                // Google ML Dev API Key 通常以 AIza 或 GOO 开头
+                // Vertex AI 使用 OAuth2，不需要 API Key 验证
+                if !key.starts_with("AIza") && !key.starts_with("GOO") {
+                    // Google Cloud Service Account Key 可能不同
+                    // 这里只做警告不报错
+                }
+            }
+            crate::database::ApiProviderType::GoogleVertex => {
+                // Google Vertex AI Public Preview 使用 Google Cloud API Key
+                // 格式与 ML Dev API 类似
+                if !key.starts_with("AIza") && !key.starts_with("GOO") {
+                    // Google Cloud Service Account Key 可能不同
+                    // 这里只做警告不报错
+                }
+            }
         }
 
         Ok(())

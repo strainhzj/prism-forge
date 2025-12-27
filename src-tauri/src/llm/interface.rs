@@ -230,7 +230,55 @@ impl TestConnectionResult {
 pub fn categorize_error(error: &str) -> (ConnectionErrorType, String) {
     let error_lower = error.to_lowercase();
 
-    // 认证错误
+    // ========== Google API 特定错误处理 ==========
+    // Google Quota Exceeded (429)
+    if error_lower.contains("quota exceeded")
+        || error_lower.contains("quota")
+        || error_lower.contains("resource has been exhausted")
+        || error_lower.contains("billing")
+    {
+        return (
+            ConnectionErrorType::Request,
+            "API 配额已用尽或计费问题".to_string(),
+        );
+    }
+
+    // Google Model Not Found / Invalid Model
+    if error_lower.contains("model not found")
+        || error_lower.contains("invalid model")
+        || error_lower.contains("model:")
+        || error_lower.contains("does not exist")
+    {
+        return (
+            ConnectionErrorType::Request,
+            "模型不存在或不可用".to_string(),
+        );
+    }
+
+    // Google Content Filter / Safety
+    if error_lower.contains("content filter")
+        || error_lower.contains("safety")
+        || error_lower.contains("blocked")
+    {
+        return (
+            ConnectionErrorType::Request,
+            "内容被安全过滤器拦截".to_string(),
+        );
+    }
+
+    // Google API Key Invalid (401, 403)
+    if error_lower.contains("api key not valid")
+        || error_lower.contains("api key invalid")
+        || error_lower.contains("unauthenticated")
+        || error_lower.contains("authentication error")
+    {
+        return (
+            ConnectionErrorType::Authentication,
+            "Google API Key 无效".to_string(),
+        );
+    }
+
+    // ========== 通用认证错误 ==========
     if error_lower.contains("unauthorized")
         || error_lower.contains("401")
         || error_lower.contains("403")
