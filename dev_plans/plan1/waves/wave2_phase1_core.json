@@ -1,0 +1,354 @@
+{
+  "wave_id": "WAVE_2",
+  "name": "第二波：PHASE_1 核心任务",
+  "description": "完成会话扫描器和表结构扩展，实现基础的会话发现功能",
+  "branch": {
+    "name": "feat/phase1-wave2",
+    "base": "master",
+    "strategy": "feature_branch",
+    "depends_on": ["feat/phase1-wave1"]
+  },
+  "sequential_tasks": [
+    {
+      "task_id": "T1_2",
+      "name": "实现会话扫描器",
+      "sub_branch": "feat/phase1-wave2-t1_2",
+      "assignee": "backend",
+      "estimated_hours": 20,
+      "priority": "critical",
+      "status": "pending",
+      "requirement_ref": ["F1.1", "F1.3", "F1.4"],
+      "dependencies": ["T1_1"],
+      "output_artifacts": [
+        "src-tauri/src/monitor/scanner.rs",
+        "src-tauri/src/monitor/mod.rs",
+        "src-tauri/src/commands.rs (新增 scan_sessions 命令)"
+      ],
+      "implementation_steps": [
+        {
+          "step": 1,
+          "title": "创建 monitor 模块",
+          "description": "建立监控模块的基础结构",
+          "files": ["src-tauri/src/monitor/mod.rs"],
+          "modules": [
+            "pub mod scanner;",
+            "pub mod watcher; // 预留"
+          ],
+          "verification": "模块编译通过"
+        },
+        {
+          "step": 2,
+          "title": "实现会话文件扫描",
+          "description": "扫描 ~/.claude/projects/ 目录查找 JSONL 文件",
+          "files": ["src-tauri/src/monitor/scanner.rs"],
+          "functions": [
+            "pub fn get_claude_projects_dir() -> Result<PathBuf>",
+            "pub fn scan_session_files() -> Result<Vec<PathBuf>>",
+            "pub fn extract_session_metadata(path: &Path) -> Result<SessionMetadata>"
+          ],
+          "scan_logic": [
+            "1. 获取用户目录: dirs::home_dir()",
+            "2. 拼接路径: .claude/projects/**/*.jsonl",
+            "3. 使用 glob crate 遍历所有 JSONL 文件",
+            "4. 从文件名提取 session_id (UUID 格式)",
+            "5. 从文件路径提取 project_path",
+            "6. 读取文件元数据: created_at, updated_at (通过 file.stat())"
+          ],
+          "verification": "能扫描并返回所有会话文件路径"
+        },
+        {
+          "step": 3,
+          "title": "判断会话活跃状态",
+          "description": "基于文件状态判断是否为活跃会话",
+          "files": ["src-tauri/src/monitor/scanner.rs"],
+          "logic": "使用用户选择的「基于文件状态」方案",
+          "detection_methods": {
+            "windows": "检查文件是否被进程锁定 (使用 Windows API)",
+            "fallback": "检查最后修改时间 (24小时内)"
+          },
+          "verification": "正确识别活跃/历史会话"
+        },
+        {
+          "step": 4,
+          "title": "存储会话到数据库",
+          "description": "将扫描到的会话存入 sessions 表",
+          "integration": "使用 SessionRepository",
+          "upsert_logic": [
+            "1. 检查 session_id 是否已存在",
+            "2. 如果存在，更新 updated_at 和 is_active",
+            "3. 如果不存在，创建新记录",
+            "4. 触发活跃状态更新（触发器自动处理）"
+          ],
+          "verification": "数据库中有会话记录"
+        },
+        {
+          "step": 5,
+          "title": "创建 Tauri Command",
+          "description": "暴露 scan_sessions 命令",
+          "files": ["src-tauri/src/commands.rs"],
+          "command_signature": "pub fn scan_sessions() -> Result<Vec<SessionMeta>>",
+          "return_format": [
+            "{ sessionId, projectPath, projectName, createdAt, updatedAt, messageCount, isActive }"
+          ],
+          "verification": "前端调用返回会话列表"
+        },
+        {
+          "step": 6,
+          "title": "性能优化",
+          "description": "确保扫描 100 个会话 < 2 秒",
+          "optimizations": [
+            "使用并行扫描 (rayon crate)",
+            "缓存已扫描结果",
+            "增量扫描（仅检查变更的文件）"
+          ],
+          "verification": "性能测试达标"
+        }
+      ],
+      "acceptance_criteria": [
+        "AC1: 启动应用后自动扫描 ~/.claude/projects/",
+        "AC2: 返回所有会话的元数据列表",
+        "AC3: 活跃会话的 is_active 字段为 true",
+        "AC4: 扫描 100 个会话 < 2 秒",
+        "AC5: 处理不存在的目录（返回空列表而非报错）",
+        "AC6: 处理损坏的 JSONL 文件（跳过而非崩溃）"
+      ],
+      "testing_checklist": [
+        "TC1.2.1: 测试空目录场景（~/.claude/projects/ 不存在）",
+        "TC1.2.2: 测试单个会话文件扫描",
+        "TC1.2.3: 测试嵌套项目目录扫描",
+        "TC1.2.4: 测试活跃会话检测（Windows 锁定检测）",
+        "TC1.2.5: 测试性能：100 个会话扫描时间",
+        "TC1.2.6: 测试损坏文件的容错处理"
+      ]
+    },
+    {
+      "task_id": "T1_3",
+      "name": "扩展数据库表结构",
+      "sub_branch": "feat/phase1-wave2-t1_3",
+      "assignee": "backend",
+      "estimated_hours": 8,
+      "priority": "high",
+      "status": "pending",
+      "requirement_ref": ["F5.3", "F5.4", "F6", "F7"],
+      "dependencies": ["T1_1"],
+      "output_artifacts": [
+        "src-tauri/src/database/migrations.rs (版本 9-11)",
+        "src-tauri/src/database/models.rs (扩展字段)"
+      ],
+      "implementation_steps": [
+        {
+          "step": 1,
+          "title": "扩展 sessions 表",
+          "description": "添加 rating, tags, is_archived 字段",
+          "migration_version": 9,
+          "sql": [
+            "ALTER TABLE sessions ADD COLUMN rating INTEGER DEFAULT 0;",
+            "ALTER TABLE sessions ADD COLUMN tags TEXT;",
+            "ALTER TABLE sessions ADD COLUMN is_archived INTEGER DEFAULT 0;"
+          ],
+          "verification": "字段添加成功"
+        },
+        {
+          "step": 2,
+          "title": "创建 saved_prompts 表",
+          "description": "用于保存用户生成的提示词",
+          "migration_version": 10,
+          "sql": [
+            "CREATE TABLE saved_prompts (...)"
+          ],
+          "verification": "表创建成功"
+        },
+        {
+          "step": 3,
+          "title": "创建 meta_templates 表",
+          "description": "用于存储系统提示词模板",
+          "migration_version": 11,
+          "sql": [
+            "CREATE TABLE meta_templates (...)"
+          ],
+          "verification": "表创建成功"
+        },
+        {
+          "step": 4,
+          "title": "更新数据模型",
+          "description": "在 Session 结构体中添加新字段",
+          "files": ["src-tauri/src/database/models.rs"],
+          "fields": [
+            "pub rating: i32,  // 0-5",
+            "pub tags: Option<String>,  // JSON Array",
+            "pub is_archived: bool"
+          ],
+          "verification": "序列化/反序列化正常"
+        },
+        {
+          "step": 5,
+          "title": "实现辅助方法",
+          "description": "添加 tags 的序列化/反序列化方法",
+          "methods": [
+            "pub fn get_tags(&self) -> Result<Vec<String>>",
+            "pub fn set_tags(&mut self, tags: Vec<String>) -> Result<()>"
+          ],
+          "verification": "单元测试通过"
+        }
+      ],
+      "acceptance_criteria": [
+        "AC1: sessions 表包含 rating, tags, is_archived 字段",
+        "AC2: saved_prompts 表正确创建",
+        "AC3: meta_templates 表正确创建",
+        "AC4: 能插入测试数据并查询",
+        "AC5: 标签字段能正确处理 JSON 数组"
+      ],
+      "testing_checklist": [
+        "TC1.3.1: 测试 rating 字段约束 (0-5)",
+        "TC1.3.2: 测试 tags 字段 JSON 序列化",
+        "TC1.3.3: 测试 is_archived 默认值",
+        "TC1.3.4: 测试 saved_prompts CRUD",
+        "TC1.3.5: 测试 meta_templates CRUD"
+      ]
+    },
+    {
+      "task_id": "T1_PERF",
+      "name": "性能基准测试 - 启动与扫描",
+      "sub_branch": "feat/phase1-wave2-t1_perf",
+      "assignee": "qa",
+      "estimated_hours": 6,
+      "priority": "medium",
+      "status": "pending",
+      "requirement_ref": ["NF1"],
+      "dependencies": ["T1_2"],
+      "output_artifacts": [
+        "src-tauri/tests/performance.rs",
+        "docs/performance_report_phase1.md"
+      ],
+      "implementation_steps": [
+        {
+          "step": 1,
+          "title": "创建性能测试框架",
+          "description": "建立基准测试基础设施",
+          "files": ["src-tauri/tests/performance.rs"],
+          "tools": ["criterion rs for benchmarking"],
+          "verification": "测试框架运行正常"
+        },
+        {
+          "step": 2,
+          "title": "启动时间测试",
+          "description": "测量应用启动到可交互的时间",
+          "target": "< 3 秒",
+          "method": "从双击到首个 Tauri Command 响应",
+          "verification": "测量结果达标"
+        },
+        {
+          "step": 3,
+          "title": "会话扫描测试",
+          "description": "测量扫描 100 个会话的时间",
+          "target": "< 2 秒",
+          "method": "创建 100 个测试 JSONL 文件并测量扫描时间",
+          "verification": "测量结果达标"
+        },
+        {
+          "step": 4,
+          "title": "生成性能报告",
+          "description": "记录测试结果和优化建议",
+          "output": "docs/performance_report_phase1.md",
+          "content": [
+            "测试环境信息",
+            "各项指标测量结果",
+            "与目标值对比",
+            "性能瓶颈分析",
+            "优化建议"
+          ],
+          "verification": "报告完整且可读"
+        }
+      ],
+      "acceptance_criteria": [
+        "AC1: 启动时间 < 3 秒",
+        "AC2: 会话扫描 (100个) < 2 秒",
+        "AC3: 性能报告完整",
+        "AC4: 未达标的指标有优化方案"
+      ],
+      "testing_checklist": [
+        "TC_PERF_1: 冷启动时间测试",
+        "TC_PERF_2: 热启动时间测试",
+        "TC_PERF_3: 空目录扫描时间",
+        "TC_PERF_4: 100 个会话扫描时间",
+        "TC_PERF_5: 1000 个会话扫描时间（压力测试）"
+      ]
+    }
+  ],
+  "verification_checkpoints": [
+    {
+      "checkpoint_id": "CP_WAVE2_SCAN",
+      "name": "会话扫描验证",
+      "commands": [
+        "invoke('scan_sessions')"
+      ],
+      "expected_outputs": [
+        "返回会话列表，包含 sessionId, projectPath, isActive 等字段",
+        "至少包含 1 个测试会话（如有）"
+      ]
+    },
+    {
+      "checkpoint_id": "CP_WAVE2_TABLES",
+      "name": "表结构验证",
+      "commands": [
+        "PRAGMA table_info(sessions);"
+      ],
+      "expected_outputs": [
+        "包含 rating, tags, is_archived 字段"
+      ]
+    },
+    {
+      "checkpoint_id": "CP_WAVE2_PERF",
+      "name": "性能验证",
+      "commands": [
+        "cargo test --test performance -- --nocapture"
+      ],
+      "expected_outputs": [
+        "所有性能测试通过",
+        "启动时间 < 3s",
+        "扫描时间 < 2s"
+      ]
+    }
+  ],
+  "git_strategy": {
+    "workflow": "sequential_with_sub_branches",
+    "steps": [
+      "1. 从 feat/phase1-wave1 创建 feat/phase1-wave2 主分支",
+      "2. 按顺序创建子分支（T1_2 -> T1_3 -> T1_PERF）",
+      "3. 每个子分支完成后合并到 feat/phase1-wave2",
+      "4. 所有任务完成后合并 feat/phase1-wave2 到 master"
+    ],
+    "branch_structure": {
+      "master": "主分支",
+      "feat/phase1-wave1": "第一波主分支（已合并）",
+      "feat/phase1-wave2": "本波主分支",
+      "feat/phase1-wave2-t1_2": "T1_2 任务子分支",
+      "feat/phase1-wave2-t1_3": "T1_3 任务子分支",
+      "feat/phase1-wave2-t1_perf": "T1_PERF 任务子分支"
+    }
+  },
+  "deliverables": [
+    "可工作的会话扫描器",
+    "完整的数据库表结构",
+    "性能测试报告",
+    "会话扫描 API 文档"
+  ],
+  "risks_and_mitigations": [
+    {
+      "risk": "~/.claude/projects/ 目录不存在",
+      "probability": "low",
+      "impact": "medium",
+      "mitigation": "返回空列表而非报错，在 UI 中提示用户"
+    },
+    {
+      "risk": "Windows 文件锁定检测失败",
+      "probability": "medium",
+      "impact": "low",
+      "mitigation": "降级到基于时间的判断逻辑"
+    }
+  ],
+  "next_wave_dependencies": [
+    "WAVE_3: 依赖 T1_2 完成（会话扫描）",
+    "WAVE_4: 依赖本波全部完成（PHASE_1 完整功能）"
+  ]
+}
