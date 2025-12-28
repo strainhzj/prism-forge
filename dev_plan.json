@@ -1,0 +1,140 @@
+{
+  project Claude Code Session Monitor - LLM API Integration,
+  phases [
+    {
+      id phase_1,
+      name 基础架构与数据层 (Rust),
+      description 建立存储 API 配置的数据库表，并引入必要的 Rust 依赖。,
+      tasks [
+        {
+          id 1.1,
+          status completed,
+          instruction 在 `src-tauriCargo.toml` 中添加以下依赖：`reqwest` (带 json 和 stream 特性), `async-openai`, `keyring`, `secrecy`, `thiserror`, `anyhow`。确保版本兼容。
+        },
+        {
+          id 1.2,
+          status completed,
+          instruction 在 `src-taurisrcdatabasemodels.rs` 中定义 `ApiProvider` 结构体。字段需包含：`id`, `provider_type` (枚举 OpenAI, Anthropic, Ollama), `name`, `base_url`, `api_key_ref` (存密钥引用而非明文), `config_json`, `is_active`。
+        },
+        {
+          id 1.3,
+          status completed,
+          instruction 在 `src-taurisrcdatabasemigrations.rs` 或相应的 SQL 初始化位置，添加创建 `api_providers` 表的 SQL 语句。表结构参考文档 5.2 节。
+        },
+        {
+          id 1.4,
+          status completed,
+          instruction 创建或更新 `src-taurisrcdatabaserepository.rs`，实现 `create_provider`, `get_all_providers`, `get_active_provider`, `update_provider`, `delete_provider` 方法。
+        }
+      ]
+    },
+    {
+      id phase_2,
+      name LLM 客户端核心逻辑 (Rust - 参考 Chatbox),
+      description 核心模块，实现多厂商适配和密钥安全存储。,
+      tasks [
+        {
+          id 2.1,
+          status completed,
+          instruction 创建 `src-taurisrcllmsecurity.rs`。使用 `keyring` crate 实现两个函数：`save_api_key(provider_id, key)` 和 `get_api_key(provider_id)`。确保处理了不同操作系统的密钥库差异。
+        },
+        {
+          id 2.2,
+          status completed,
+          instruction 创建 `src-taurisrcllminterface.rs`。定义 `LLMService` trait，包含 `chat_completion` 和 `stream_completion` 方法。统一输入参数为 `messages VecMessage` 和 `params ModelParams`。
+        },
+        {
+          id 2.3,
+          status completed,
+          instruction 创建 `src-taurisrcllmprovidersopenai.rs`。实现 `LLMService` trait。使用 `async-openai` 库，支持自定义 `base_url` 以适配 OneAPI 或中转服务。
+        },
+        {
+          id 2.4,
+          status completed,
+          instruction 创建 `src-taurisrcllmprovidersanthropic.rs`。实现 `LLMService` trait。使用 `reqwest` 手动构造请求，适配 Claude 3.5 格式。
+        },
+        {
+          id 2.5,
+          status completed,
+          instruction 创建 `src-taurisrcllmprovidersollama.rs`。实现 `LLMService` trait。指向默认地址 `http127.0.0.111434`，不需要 API Key。
+        },
+        {
+          id 2.6,
+          status completed,
+          instruction 创建 `src-taurisrcllmmanager.rs`。实现 `LLMClientManager` 结构体。它应该能从数据库读取 `active_provider`，从 keyring 读取密钥，并实例化对应的 Provider 客户端。
+        }
+      ]
+    },
+    {
+      id phase_3,
+      name Tauri 接口暴露 (Rust Bridge),
+      description 将后端逻辑暴露给前端调用。,
+      tasks [
+        {
+          id 3.1,
+          status completed,
+          instruction 在 `src-taurisrclib.rs` 或 `main.rs` 中注册 `llm` 模块，并将 `LLMClientManager` 添加到 Tauri 的 `manage` 状态中。
+        },
+        {
+          id 3.2,
+          status completed,
+          instruction 在 `src-taurisrccommands.rs` 中实现：`cmd_get_providers`, `cmd_save_provider` (同时更新数据库和 keyring), `cmd_delete_provider`, `cmd_set_active_provider`。
+        },
+        {
+          id 3.3,
+          status completed,
+          instruction 实现 `cmd_test_provider_connection(provider_id)`。该命令应尝试发送一个简单的 'Hello' 消息给 LLM，验证 Key 和 Base URL 是否正确。
+        }
+      ]
+    },
+    {
+      id phase_4,
+      name 前端设置界面 (React + Zustand),
+      description 构建用户界面。,
+      tasks [
+        {
+          id 4.1,
+          status completed,
+          instruction 创建 `srcstoresuseSettingsStore.ts`。使用 Zustand 定义 `providers`, `activeProviderId` 状态，以及 `fetchProviders`, `saveProvider` 等异步 action。
+        },
+        {
+          id 4.2,
+          status completed,
+          instruction 创建 `srccomponentssettingsProviderForm.tsx`。使用 `react-hook-form`。根据选择的 `provider_type` (OpenAIAnthropicOllama) 动态显示隐藏 'API Key' 和 'Base URL' 字段。
+        },
+        {
+          id 4.3,
+          status completed,
+          instruction 创建 `srcpagesSettings.tsx`。左侧显示提供商列表，右侧显示选中提供商的详情表单。添加 'Test Connection' 按钮。
+        },
+        {
+          id 4.4,
+          status completed,
+          instruction 确保 API Key 输入框为 `type='password'`，并且在前端仅显示掩码或不回显。
+        }
+      ]
+    },
+    {
+      id phase_5,
+      name 业务逻辑集成,
+      description 将新的 LLM 管理器应用到“提示词优化”功能中。,
+      tasks [
+        {
+          id 5.1,
+          status completed,
+          instruction 修改 `src-taurisrcoptimizermod.rs`。移除硬编码的 API 调用。注入 `LLMClientManager`。
+        },
+        {
+          id 5.2,
+          status completed,
+          instruction 修改 `optimize_prompt` Tauri command。在调用算法前，先通过 `LLMClientManager` 获取当前活跃的客户端实例。
+        },
+        {
+          id 5.3,
+          status completed,
+          instruction 在前端 `PromptBuilder` 组件中，点击“生成优化提示词”。验证请求是否通过了用户在“设置”页配置的 API Channel 发出。
+        }
+      ]
+    }
+  ]
+}
