@@ -238,6 +238,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
           className="form-control"
           placeholder="0.7"
           {...register('temperature', {
+            valueAsNumber: true,  // 自动转换为数字类型，空值转为 null
             min: { value: 0, message: 'Temperature 不能小于 0' },
             max: { value: 2, message: 'Temperature 不能大于 2' },
           })}
@@ -258,6 +259,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
           className="form-control"
           placeholder="2000"
           {...register('maxTokens', {
+            valueAsNumber: true,  // 自动转换为数字类型，空值转为 null
             min: { value: 1, message: 'Max Tokens 必须大于 0' },
           })}
         />

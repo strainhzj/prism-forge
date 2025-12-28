@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import "./App.css";
 
 // ==================== 调试模式 ====================
 const DEBUG = import.meta.env.DEV;
+
+// 自动刷新间隔（毫秒）
+const AUTO_REFRESH_INTERVAL = 3000;
 
 function debugLog(action: string, ...args: unknown[]) {
   if (DEBUG) {
@@ -31,6 +34,10 @@ function App() {
   const [analysisResult, setAnalysisResult] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [parseError, setParseError] = useState("");  // 解析错误信息
+  const [autoRefresh, setAutoRefresh] = useState(false);  // 自动刷新开关
+
+  // 使用 ref 存储 loadParsedEvents 的引用，避免在定时器闭包中过期
+  const loadParsedEventsRef = useRef<(path: string) => Promise<void>>();
 
   // F6 快捷键导航到设置页面
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -56,6 +63,24 @@ function App() {
     autoDetectFile();
   }, []);
 
+  // 自动刷新定时器
+  useEffect(() => {
+    if (autoRefresh && filePath) {
+      debugLog('auto-refresh', '启动自动刷新，间隔:', AUTO_REFRESH_INTERVAL);
+      const intervalId = setInterval(() => {
+        if (filePath && loadParsedEventsRef.current) {
+          debugLog('auto-refresh', '自动刷新中...');
+          loadParsedEventsRef.current(filePath);
+        }
+      }, AUTO_REFRESH_INTERVAL);
+
+      return () => {
+        debugLog('auto-refresh', '清除自动刷新定时器');
+        clearInterval(intervalId);
+      };
+    }
+  }, [autoRefresh, filePath]);
+
   const autoDetectFile = async () => {
     try {
       const path = await invoke<string>("get_latest_session_path");
@@ -71,7 +96,7 @@ function App() {
     }
   };
 
-  const loadParsedEvents = async (path: string) => {
+  const loadParsedEvents = useCallback(async (path: string) => {
     if (!path) return;
     try {
       setParseError("");  // 清空之前的错误
@@ -84,7 +109,12 @@ function App() {
       setParseError(errorMsg);
       setParsedEvents([]);  // 清空之前的结果
     }
-  };
+  }, []);
+
+  // 更新 ref 引用
+  useEffect(() => {
+    loadParsedEventsRef.current = loadParsedEvents;
+  }, [loadParsedEvents]);
 
   const handleAnalyze = async () => {
     if (!filePath || !goal) {
@@ -110,6 +140,10 @@ function App() {
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const toggleAutoRefresh = () => {
+    setAutoRefresh(prev => !prev);
   };
 
   return (
@@ -180,7 +214,22 @@ function App() {
         <div className="debug-panel">
           <div className="debug-header">
             <h2>Session Log ({parsedEvents.length})</h2>
-            <button onClick={() => loadParsedEvents(filePath)} className="sm-btn">Refresh</button>
+            <div className="refresh-controls">
+              <button
+                onClick={() => loadParsedEvents(filePath)}
+                className="sm-btn"
+                disabled={autoRefresh}
+              >
+                Refresh
+              </button>
+              <button
+                onClick={toggleAutoRefresh}
+                className={`sm-btn ${autoRefresh ? 'active' : ''}`}
+                title={autoRefresh ? '停止自动刷新' : '开启自动刷新'}
+              >
+                {autoRefresh ? '⏸ 自动刷新中' : '▶ 自动刷新'}
+              </button>
+            </div>
           </div>
           <div className="events-list">
             {parseError && <p className="error-message">{parseError}</p>}

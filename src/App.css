@@ -102,7 +102,7 @@ button {
 
 .result-panel {
   /* 固定宽度：占 50% 或固定像素值 */
-  width: 50%;
+  width: 42%;
   min-width: 400px;
   max-width: 600px;
   display: flex;
@@ -118,14 +118,23 @@ button {
   padding: 15px;
   flex-grow: 1;
   overflow-y: auto;
-  overflow-x: auto; /* 水平内容超出时也滚动 */
-  white-space: pre-wrap; /* 保留换行，但在长单词时换行 */
-  word-wrap: break-word; /* 长单词/URL 换行 */
-  word-break: break-word; /* 强制在单词内换行 */
+  overflow-x: hidden; /* 隐藏水平滚动条，内容自动换行 */
   background-color: #f9fdfc;
   /* 防止内容撑开容器 */
   min-width: 0;
-  width: 100%;
+  width: 90%;
+}
+
+/* result-box 内的 pre 标签支持自动换行 */
+.result-box pre {
+  white-space: pre-wrap; /* 保留换行符，同时允许自动换行 */
+  word-wrap: break-word; /* 长单词/URL 换行 */
+  word-break: break-word; /* 强制在单词内换行 */
+  overflow-wrap: break-word; /* 现代浏览器标准属性 */
+  margin: 0;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+  line-height: 1.5;
 }
 
 .debug-panel {
@@ -145,6 +154,46 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* 刷新按钮容器 */
+.refresh-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* 小按钮样式 */
+.sm-btn {
+  padding: 4px 10px;
+  font-size: 0.8em;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sm-btn:hover:not(:disabled) {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.sm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 自动刷新激活状态 */
+.sm-btn.active {
+  background: #28a745;
+  color: white;
+  border-color: #28a745;
+}
+
+.sm-btn.active:hover {
+  background: #218838;
+  border-color: #1e7e34;
 }
 
 .events-list {
