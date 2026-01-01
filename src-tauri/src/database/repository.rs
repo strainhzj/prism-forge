@@ -1247,4 +1247,133 @@ impl SessionRepository {
             }
         })
     }
+
+    /// 评分加权向量相似度检索
+    ///
+    /// # 参数
+    /// - `query_embedding`: 查询向量（384 维）
+    /// - `limit`: 返回结果数量上限
+    ///
+    /// # 返回
+    /// 返回按加权分数排序的会话搜索结果列表
+    ///
+    /// # 说明
+    /// 结合相似度和用户评分的混合排序：
+    /// - 加权公式：weighted_score = 0.7 * cosine_similarity + 0.3 * (rating / 5.0)
+    /// - cosine_similarity = 1.0 - distance
+    /// - 未评分会话使用默认 2.5 分
+    /// - 自动排除低分会话（rating < 2）和归档会话
+    /// - 自动合并同一会话的多条匹配消息，取加权分数最高的一条
+    ///
+    /// # 加权效果
+    /// 5 星会话在相似度稍低时仍能排在前面，提升优质内容的检索优先级
+    pub fn weighted_vector_search_sessions(
+        &self,
+        query_embedding: &[f32],
+        limit: usize,
+    ) -> Result<Vec<crate::database::models::VectorSearchResult>> {
+        if query_embedding.len() != 384 {
+            return Err(anyhow::anyhow!(
+                "查询向量维度错误，期望 384，实际 {}",
+                query_embedding.len()
+            ));
+        }
+
+        let embedding_json = serde_json::to_string(query_embedding)
+            .map_err(|e| anyhow::anyhow!("序列化查询向量失败: {}", e))?;
+
+        // 使用单条 SQL 完成加权计算和过滤
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT
+                    s.session_id,
+                    s.rating,
+                    m.summary,
+                    distance(me.embedding, ?1) AS vec_dist,
+                    ((1.0 - distance(me.embedding, ?1)) * 0.7 +
+                     (COALESCE(s.rating, 2.5) / 5.0 * 0.3)) AS weighted_score
+                 FROM message_embeddings me
+                 INNER JOIN message_embedding_map mem ON me.rowid = mem.vec_row_id
+                 INNER JOIN messages m ON m.id = mem.message_id
+                 INNER JOIN sessions s ON m.session_id = s.session_id
+                 WHERE s.is_archived = 0  -- 排除归档会话
+                   AND (s.rating IS NULL OR s.rating >= 2)  -- 排除低分会话
+                 ORDER BY weighted_score DESC
+                 LIMIT ?2"
+            )?;
+
+            let results = stmt.query_map(params![embedding_json, limit * 2], |row| {
+                let session_id: String = row.get(0)?;
+                let rating: Option<i32> = row.get(1)?;
+                let summary: Option<String> = row.get(2)?;
+                let distance: f64 = row.get(3)?;
+                let weighted_score: f64 = row.get(4)?;
+
+                Ok((
+                    session_id,
+                    rating.unwrap_or(2),  // 用于后续计算
+                    summary.unwrap_or_default(),
+                    distance,
+                    weighted_score,
+                ))
+            })?;
+
+            // 收集并去重（同一会话取最高加权分数）
+            let mut session_map: std::collections::HashMap<String, (f64, f64, String)> = std::collections::HashMap::new();
+
+            for result in results {
+                let (session_id, _rating, summary, distance, weighted_score) = result?;
+                session_map
+                    .entry(session_id)
+                    .and_modify(|(existing_score, existing_dist, _)| {
+                        if weighted_score > *existing_score {
+                            *existing_score = weighted_score;
+                            *existing_dist = distance;
+                        }
+                    })
+                    .or_insert((weighted_score, distance, summary));
+            }
+
+            // 构建结果列表
+            let mut final_results = Vec::new();
+            for (session_id, (_weighted_score, distance, summary)) in session_map {
+                if let Some(session) = self.get_session_by_id(&session_id)? {
+                    final_results.push(crate::database::models::VectorSearchResult {
+                        session,
+                        similarity_score: distance,
+                        summary,
+                    });
+                }
+            }
+
+            // 按加权分数排序并限制数量
+            final_results.sort_by(|a, b| {
+                let score_a = calculate_weighted_score(
+                    1.0 - a.similarity_score,
+                    a.session.rating.unwrap_or(2),
+                );
+                let score_b = calculate_weighted_score(
+                    1.0 - b.similarity_score,
+                    b.session.rating.unwrap_or(2),
+                );
+                score_b.partial_cmp(&score_a).unwrap()
+            });
+            final_results.truncate(limit);
+
+            Ok(final_results)
+        })
+    }
+}
+
+/// 计算加权分数
+///
+/// # 参数
+/// - `cosine_similarity`: 余弦相似度（0-1）
+/// - `rating`: 用户评分（1-5）
+///
+/// # 返回
+/// 加权分数（0-1）
+fn calculate_weighted_score(cosine_similarity: f64, rating: i32) -> f64 {
+    let rating_normalized = rating as f64 / 5.0;
+    0.7 * cosine_similarity + 0.3 * rating_normalized
 }
