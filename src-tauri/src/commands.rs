@@ -1684,6 +1684,15 @@ pub struct VectorSearchRequest {
     /// 返回结果数量上限（默认 5）
     #[serde(rename = "limit")]
     pub limit: Option<usize>,
+    /// 是否使用评分加权排序（默认 false）
+    ///
+    /// 当启用时：
+    /// - 结合相似度和用户评分的混合排序
+    /// - 公式：weighted_score = 0.7 * cosine_similarity + 0.3 * (rating / 5.0)
+    /// - 5 星会话在相似度稍低时仍能排在前面
+    /// - 排除低分会话（rating < 2）和归档会话
+    #[serde(rename = "weighted")]
+    pub weighted: Option<bool>,
 }
 
 /// 向量相似度搜索
@@ -1691,26 +1700,44 @@ pub struct VectorSearchRequest {
 /// 根据查询文本检索最相似的历史会话。
 ///
 /// # 参数
-/// - `request`: 包含查询文本和结果数量限制
+/// - `request`: 包含查询文本、结果数量限制和是否使用加权排序
 ///
 /// # 返回
-/// 返回按相似度排序的会话搜索结果列表
+/// 返回按相似度或加权分数排序的会话搜索结果列表
 ///
 /// # 功能
 /// - 使用 BGE-small-en-v1.5 生成查询向量
 /// - 使用 sqlite-vec 的 distance 函数计算余弦相似度
 /// - 自动合并同一会话的多条匹配消息
+/// - 支持评分加权排序（提升优质会话优先级）
+///
+/// # 加权模式
+/// 当 `weighted = true` 时：
+/// - 结合相似度和用户评分混合排序
+/// - 公式：weighted_score = 0.7 * cosine_similarity + 0.3 * (rating / 5.0)
+/// - 5 星会话在相似度稍低时仍能排在前面
+/// - 自动排除低分会话（rating < 2）和归档会话
 ///
 /// # 示例
 /// ```javascript
+/// // 纯相似度排序
 /// const results = await invoke('vector_search', {
 ///   query: '如何实现文件上传功能',
-///   limit: 5
+///   limit: 5,
+///   weighted: false  // 或省略，默认 false
 /// });
-/// console.log(results);
+///
+/// // 评分加权排序
+/// const weightedResults = await invoke('vector_search', {
+///   query: '实现用户登录',
+///   limit: 5,
+///   weighted: true  // 启用加权，5 星优质会话优先
+/// });
+///
+/// // 结果格式
 /// // [
 /// //   {
-/// //     session: { session_id: '...', project_name: '...', ... },
+/// //     session: { session_id: '...', project_name: '...', rating: 5, ... },
 /// //     similarityScore: 0.23,
 /// //     summary: '实现文件上传...'
 /// //   },
@@ -1734,6 +1761,7 @@ pub async fn vector_search(
     }
 
     let limit = request.limit.unwrap_or(5).min(20); // 最多返回 20 条
+    let use_weighted = request.weighted.unwrap_or(false); // 默认不使用加权
 
     // 生成查询向量
     let generator = EmbeddingGenerator::new()
@@ -1758,10 +1786,19 @@ pub async fn vector_search(
         })?;
 
     let repo = SessionRepository::with_conn(conn);
-    let results = repo.vector_search_sessions(&query_embedding, limit)
-        .map_err(|e| CommandError {
-            message: format!("向量检索失败: {}", e),
-        })?;
+
+    // 根据加权参数选择检索方法
+    let results = if use_weighted {
+        repo.weighted_vector_search_sessions(&query_embedding, limit)
+            .map_err(|e| CommandError {
+                message: format!("加权向量检索失败: {}", e),
+            })?
+    } else {
+        repo.vector_search_sessions(&query_embedding, limit)
+            .map_err(|e| CommandError {
+                message: format!("向量检索失败: {}", e),
+            })?
+    };
 
     Ok(results)
 }
