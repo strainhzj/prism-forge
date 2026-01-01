@@ -1,0 +1,510 @@
+{
+  "_file_type": "metadata",
+  "_description": "Wave 1 元数据：版本历史、Agent 指令、文件操作、基本信息",
+  "wave_id": "WAVE_1",
+  "name": "第一波：数据库基石",
+  "description": "建立项目数据持久化基础，包含 SQLite 数据库扩展、向量嵌入支持和 Token 计数功能",
+  "branch": {
+    "name": "feat/phase1-wave1",
+    "base": "master",
+    "strategy": "feature_branch"
+  },
+  "_version_history": {
+    "current": "v1.12",
+    "changelog": [
+      {
+        "version": "v1.12",
+        "date": "2025-12-29",
+        "changes": [
+          "【Dry-Run 改进 v4】wave1.4_integration.json 添加 main_plan.json 状态同步步骤",
+          "  - 在 WAVE1_INTEGRATION 任务中添加详细的状态更新指导",
+          "  - 明确 completed_tasks 数组更新方式（添加 T1_1, T2_7）",
+          "  - 明确 global_status 字段更新方式（current_phase, overall_progress, last_updated）",
+          "  - 明确 PHASE_1 状态改为 completed",
+          "【Dry-Run 改进 v4】wave1.4_integration.json 细化 CP_WAVE1_CONCURRENCY 验证检查点",
+          "  - 添加具体的 cargo test 命令（concurrent_create_sessions, concurrent_read_sessions）",
+          "  - 添加明确的预期输出（test output 格式）",
+          "  - 添加验证 SQL 命令（COUNT(*) 查询）",
+          "  - 添加 _reference 引用 wave1.5_templates.json 中的 concurrent_test_template",
+          "【Dry-Run 改进 v4】更新整体完整性评分从 99 提升到 100（完全无歧义）"
+        ]
+      },
+      {
+        "version": "v1.11",
+        "date": "2025-12-29",
+        "changes": [
+          "【完善建议执行】完善回滚计划备份细节（resources/wave1/database/09_rollback_plan.md）",
+          "  - 添加数据库位置确认步骤（0.1）",
+          "  - 添加跨平台备份命令（macOS/Linux/Windows PowerShell/CMD）",
+          "  - 添加备份验证步骤（文件大小检查、可读性验证）",
+          "  - 添加备份记录文件生成功能",
+          "  - 添加备份失败处理指南",
+          "【完善建议执行】wave1.5_templates.json 添加 _critical_reminder 部分",
+          "  - 添加 ⚠️ 执行前必读提醒（HIGHEST 优先级）",
+          "  - 添加资源文件阅读时机说明（when_to_read）",
+          "  - 添加模板快速参考映射（template_mapping）",
+          "【完善建议执行】wave1.6_strategy.json 添加完整的 Git 工作流命令",
+          "  - 添加阶段 0：准备工作（确认分支、拉取代码、检查工作区）",
+          "  - 添加阶段 1：创建 Wave 主分支（feat/phase1-wave1）",
+          "  - 添加阶段 2：创建并行任务分支（feat/phase1-wave1-t1_1/t2_7）",
+          "  - 添加阶段 3：合并并行任务分支（包含冲突解决）",
+          "  - 添加阶段 4：最终合并到 master（包含分支清理）",
+          "  - 添加提交消息模板（t1_1_commits 和 t2_7_commits）",
+          "【完善建议执行】wave1.2_task_t1_1.json 添加进度跟踪标记",
+          "  - 所有 7 个步骤添加 status 字段（默认 [ ] 待开始）",
+          "  - 支持 [ ] 待开始 | [~] 进行中 | [x] 已完成 三种状态",
+          "【完善建议执行】wave1.3_task_t2_7.json 添加进度跟踪标记",
+          "  - 所有 3 个步骤添加 status 字段（默认 [ ] 待开始）",
+          "  - 支持 [ ] 待开始 | [~] 进行中 | [x] 已完成 三种状态",
+          "【完善建议执行】更新整体完整性评分从 98 提升到 99"
+        ]
+      },
+      {
+        "version": "v1.10",
+        "date": "2025-12-29",
+        "changes": [
+          "【Dry-Run 改进 v3】修正 wave1.5_templates.json 描述，添加 _metadata 和 extraction_date",
+          "【Dry-Run 改进 v3】精简 wave1.3_task_t2_7.json details 数组，移除重复的实现细节",
+          "【Dry-Run 改进 v3】更新 tokenizer_mapping 资源引用为 01_tokenizer_design.md",
+          "【Dry-Run 改进 v3】在 resources/wave1/README.md 添加完整性验证脚本",
+          "【Dry-Run 改进 v3】资源文件 README 升级到 v1.1",
+          "【Dry-Run 改进 v3】整体完整性评分从 95 提升到 98"
+        ]
+      },
+      {
+        "version": "v1.9",
+        "date": "2025-12-29",
+        "changes": [
+          "【Dry-Run 改进完成】wave1.5_templates.json 添加 llm_client_manager_template",
+          "【Dry-Run 改进完成】wave1.5_templates.json 添加 command_update_template",
+          "【Dry-Run 改进完成】wave1.5_templates.json 添加 lib_rs_error_handling_template",
+          "【Dry-Run 改进完成】wave1.3_task_t2_7.json 明确 TokenStats 定义位置",
+          "【Dry-Run 改进完成】wave1.2_task_t1_1.json 添加并发测试位置说明",
+          "【Dry-Run 改进完成】wave1.2_task_t1_1.json Step 3 添加 run_migrations pub 修改提醒",
+          "【Dry-Run 改进完成】wave1.4_integration.json 添加向量维度迁移策略",
+          "【Dry-Run 改进完成】整体完整性评分从 85 提升到 95"
+        ]
+      },
+      {
+        "version": "v1.8",
+        "date": "2025-12-29",
+        "changes": [
+          "【Dry-Run 改进执行】添加 recommended_reading_order，明确文件阅读优先级",
+          "【Dry-Run 改进执行】添加 _clarifications 部分，系统化解决所有歧义问题",
+          "【Dry-Run 改进执行】统一向量维度说明，明确 384 维（BGE-small-en-v1.5）为本阶段使用，1536 维为参考",
+          "【Dry-Run 改进执行】添加 run_migrations_visibility 决策，明确必须改为 pub 函数",
+          "【Dry-Run 改进执行】修正 count_tokens 函数签名说明，必须包含 model 参数",
+          "【Dry-Run 改进执行】添加 llm_client_manager_modifications 指导，说明 LLMClientManager 的修改方式",
+          "【Dry-Run 改进执行】添加 commands_rs_update_guidance，说明现有命令的更新需求",
+          "【Dry-Run 改进执行】添加 wal_mode_configuration，说明 WAL 模式的配置顺序",
+          "【Dry-Run 改进执行】添加 test_coverage_tool，推荐使用 cargo-tarpaulin",
+          "【Dry-Run 改进执行】添加 token_model_matching_edge_cases，说明模型名称边界情况的处理",
+          "【Dry-Run 改进执行】添加 rollback_failure_handling，改进回滚失败处理方案",
+          "【Dry-Run 改进执行】添加 migration_failure_handling，说明迁移失败的处理方式",
+          "【Dry-Run 改进执行】添加 error_handling_complete_pattern，说明完整的错误处理模式",
+          "【Dry-Run 改进执行】在 wave1.5_templates.json 添加完整的并发测试用例示例",
+          "【Dry-Run 改进执行】更新 database_size_projection，基于 384 维向量重新计算",
+          "【Dry-Run 改进执行】在 _agent_instructions.required_reading 中添加 llm/manager.rs"
+        ]
+      },
+      {
+        "version": "v1.7",
+        "date": "2025-12-29",
+        "changes": [
+          "【Dry-Run 分析改进】添加 _critical_resources 部分，显式标识 wave1.5_templates.json 为关键代码模板文件",
+          "【Dry-Run 分析改进】添加 _design_decisions 部分，记录关键设计决策的背景和依据",
+          "【Dry-Run 分析改进】明确 module_export_strategy：pub mod repository 与 pub use repository 的关系",
+          "【Dry-Run 分析改进】添加 vector_storage_format_rationale：解释为何使用 JSON 而非 BLOB 存储向量",
+          "【Dry-Run 分析改进】添加 performance_benchmarks：补充性能测试基准数据和目标",
+          "【Dry-Run 分析改进】在 _agent_instructions.required_reading 中强调 wave1.5_templates.json 的优先级"
+        ]
+      },
+      {
+        "version": "v1.6",
+        "date": "2025-12-29",
+        "changes": [
+          "【Dry-Run 修复 v2】移除 module_declaration_template 中的 get_connection 导出",
+          "【Dry-Run 修复 v2】更新 initialization_order.phase_2_after_db 使用 LLMClientManager::with_conn() 替代 from_default_db()",
+          "【Dry-Run 修复 v2】修正 T2_7 get_tokenizer 函数签名为 static Cl100kBase（私有函数）",
+          "【Dry-Run 修复 v2】明确 MessageEmbedding.embedding 字段为 String 类型（存储 JSON 序列化的 Vec<f32>）",
+          "【Dry-Run 修复 v2】添加 vector_insertion_template：向量插入和查询的完整 Rust 实现示例",
+          "【Dry-Run 修复 v2】添加 migrate_functions_visibility：明确 migrate_v4-v8 为私有函数",
+          "【Dry-Run 修复 v2】统一时间戳处理说明：Repository 自动设置时间戳，开发者无需手动设置",
+          "【Dry-Run 修复 v2】完善 lib_rs_integration：添加完整的 lib.rs 集成代码和 Tauri Command 状态注入示例"
+        ]
+      },
+      {
+        "version": "v1.5",
+        "date": "2025-12-29",
+        "changes": [
+          "【Dry-Run 修复】添加 log 依赖到 Step 1 依赖列表",
+          "【Dry-Run 修复】修正 API 兼容性说明中 get_db_path 的错误描述",
+          "【Dry-Run 修复】完善 T2_7 错误处理和 Cl100kBase 创建说明",
+          "【Dry-Run 修复】修正回滚计划 Step 1 的逻辑错误",
+          "【Dry-Run 修复】添加 Cargo.toml 合并策略详细说明",
+          "【Dry-Run 修复】添加 Message.timestamp 语义说明",
+          "【Dry-Run 修复】添加向量存储实现细节",
+          "【Dry-Run 修复】完善 LLMClientManager 集成说明",
+          "【Dry-Run 修复】添加分支冲突解决指南",
+          "【Dry-Run 修复】补充并发测试用例实现指南",
+          "【Dry-Run 修复】明确 run_migrations 可见性",
+          "【Dry-Run 修复】添加 TokenStats 结构体定义到 T2_7",
+          "【Dry-Run 修复】修正 supplementary_templates 中的导出错误"
+        ]
+      },
+      {
+        "version": "v1.4",
+        "date": "2025-12-29",
+        "changes": [
+          "修复 02_init_design.md 中 sqlite-vec 加载方式错误（改用 vec_init() 而非 load_extension()）",
+          "添加 Rust 版本兼容性说明（std::sync::OnceLock 需要 Rust 1.70+）",
+          "添加 once_cell 依赖条件说明（Rust < 1.70 时需要）",
+          "修复 State 泛型语法错误（State<'_, ...> 改为 State<'_, ...>）",
+          "修复 run_migrations() 调用签名（&conn 改为 &mut conn）",
+          "添加 PRAGMA busy_timeout = 30s 并发控制说明",
+          "明确时间戳验证函数和 tags 辅助方法的放置位置（models.rs）",
+          "修复测试辅助函数模板类型问题（在 Mutex 包装前执行迁移）",
+          "统一错误处理示例（使用 .map_err() 而非 .unwrap()）"
+        ]
+      },
+      {
+        "version": "v1.3",
+        "date": "2025-12-28",
+        "changes": [
+          "明确 Breaking Change 完整迁移路径（ApiProviderRepository 同时迁移到 Arc<Mutex<Connection>>）",
+          "添加 sqlite-vec 扩展加载的详细实现（bundled 版本自动加载）",
+          "完善 Repository 构造函数设计（统一使用 with_conn() 模式）",
+          "添加时间戳验证函数和 tags 空值处理逻辑",
+          "统一错误处理模式（使用 .map_err() 替代 .unwrap()）",
+          "添加并发控制策略（busy_timeout = 30s）",
+          "完善 Token 计数器模型映射规则（精确匹配 + 模糊匹配 + 默认值）",
+          "为性能目标添加测试环境参数说明",
+          "在回滚计划前置步骤 0：数据库备份",
+          "补充 supplementary_templates：sqlite-vec 加载、错误处理、测试辅助函数"
+        ]
+      },
+      {
+        "version": "v1.2",
+        "date": "2025-12-28",
+        "changes": [
+          "明确 get_connection() 向后兼容性方案（保留原函数，新增 get_connection_shared()）",
+          "添加时间戳赋值责任说明（Repository 层自动设置）",
+          "添加 tags 字段序列化处理方式",
+          "添加 search_similar 实现细节（threshold, limit 参数）",
+          "添加 lib.rs 修改示例",
+          "更新 DDL 说明（移除 DEFAULT 和触发器）"
+        ]
+      },
+      {
+        "version": "v1.1",
+        "date": "2025-12-28",
+        "changes": [
+          "添加 _version_history 追踪数据库版本演进 (v0→v8)",
+          "添加 _agent_instructions 指定必读文件",
+          "更新 _file_operations 说明 mod.rs 需要添加模块声明",
+          "Step 2 添加数据库初始化详细说明（单例模式，无 DatabaseManager）",
+          "Step 4 添加 details 数组说明时间戳处理和 Repository 使用方式",
+          "Step 5 新增模块导出更新步骤",
+          "新增 rollback_plan 7步回滚计划",
+          "新增 initialization_order 初始化顺序说明",
+          "新增 api_compatibility_commitments API 兼容性承诺",
+          "添加 supplementary_templates 包含模块声明模板和 init.rs 完整模板",
+          "removed_tasks 说明 T3_5 移至后续阶段",
+          "integration_tasks 添加 Cargo.toml 合并提醒"
+        ]
+      },
+      {
+        "version": "v1.0",
+        "date": "2025-12-25",
+        "changes": [
+          "初始版本",
+          "定义 T1_1, T2_7, T3_5 三个并行任务"
+        ]
+      }
+    ],
+    "database_versions": {
+      "v0": "初始状态（空数据库）",
+      "v1": "创建 api_providers 表（2025-12-XX）",
+      "v2": "api_providers 添加 config_json 字段",
+      "v3": "api_providers 添加触发器（is_active 唯一性）",
+      "v4": "创建 sessions 表（Wave 1 新增）",
+      "v5": "创建 messages 表（Wave 1 新增）",
+      "v6": "创建 message_embeddings 虚拟表和映射表（Wave 1 新增）",
+      "v7": "创建 saved_prompts 表（Wave 1 新增）",
+      "v8": "创建 meta_templates 表（Wave 1 新增）"
+    }
+  },
+  "_critical_resources": {
+    "description": "关键资源文件，包含实现所需的完整代码模板和设计决策",
+    "priority_reading": [
+      {
+        "file": "dev_plans/plan1/waves/wave1.5_templates.json",
+        "purpose": "【最高优先级】包含所有实现所需的完整代码模板",
+        "key_templates": [
+          "module_declaration_template - database/mod.rs 的完整导出声明",
+          "init_rs_complete_template - init.rs 实现参考",
+          "lib_rs_integration - lib.rs 的完整集成代码示例",
+          "vector_insertion_template - 向量插入和查询的完整实现",
+          "repository_error_handling_template - Mutex 错误处理模式",
+          "tags_validation_template - tags 字段验证和辅助方法",
+          "timestamp_validation_template - 时间戳验证函数",
+          "test_helper_template - 测试辅助函数模板",
+          "tokenizer_model_matching_template - Token 计数器模型匹配逻辑",
+          "run_migrations_visibility - run_migrations 可见性说明",
+          "migrate_functions_visibility - migrate_v4-v8 可见性说明"
+        ],
+        "note": "执行任何代码修改前，必须先阅读此文件中的相关模板"
+      },
+      {
+        "file": "dev_plans/plan1/waves/wave1.4_integration.json",
+        "purpose": "Breaking Change 迁移路径和 API 兼容性承诺",
+        "key_sections": [
+          "api_compatibility_commitments - 现有 API 的兼容性说明",
+          "breaking_changes - Breaking Change 的完整迁移路径（5步）",
+          "migration_warnings - 迁移过程中的注意事项",
+          "initialization_order - 新的初始化顺序（Phase 1 & Phase 2）",
+          "rollback_plan - 7步回滚计划"
+        ],
+        "note": "在修改 ApiProviderRepository 或 lib.rs 之前，必须仔细阅读 api_compatibility_commitments 和 breaking_changes 部分"
+      }
+    ]
+  },
+  "_agent_instructions": {
+    "recommended_reading_order": [
+      "第一步：wave1.1_metadata.json (本文件) - 了解元数据和关键决策",
+      "第二步：wave1.4_integration.json - Breaking Changes 迁移必读（优先级最高）",
+      "第三步：wave1.5_templates.json - 代码模板（执行任何代码修改前必读）",
+      "第四步：wave1.2_task_t1_1.json - T1_1 任务详情（按步骤执行）",
+      "第五步：wave1.3_task_t2_7.json - T2_7 任务详情（按步骤执行）",
+      "第六步：wave1.6_strategy.json - Git 策略和风险",
+      "参考资源：wave1/resources/ 目录下的 SQL 和设计文档",
+      "现有代码：src-tauri/src/database/* 和 src-tauri/src/lib.rs"
+    ],
+    "required_reading": [
+      "dev_plans/plan1/waves/wave1_database.json (主文件)",
+      "dev_plans/plan1/waves/wave1.1_metadata.json (本文件)",
+      "dev_plans/plan1/waves/wave1.4_integration.json (集成、验证、回滚 - Breaking Change 迁移必读)",
+      "dev_plans/plan1/waves/wave1.5_templates.json (补充模板 - 执行前必读)",
+      "dev_plans/plan1/waves/wave1.2_task_t1_1.json (T1_1 任务详情)",
+      "dev_plans/plan1/waves/wave1.3_task_t2_7.json (T2_7 任务详情)",
+      "dev_plans/plan1/waves/wave1.6_strategy.json (Git 策略、风险)",
+      "dev_plans/plan1/resources/wave1/README.md",
+      "dev_plans/plan1/resources/wave1/database/01_complete_schema_ddl.sql",
+      "dev_plans/plan1/resources/wave1/database/02_init_design.md",
+      "src-tauri/src/database/mod.rs (理解当前导出)",
+      "src-tauri/src/lib.rs (理解 Tauri 状态管理)",
+      "src-tauri/src/database/migrations.rs (理解现有迁移机制)",
+      "src-tauri/src/llm/manager.rs (理解 LLMClientManager)"
+    ],
+    "context_understanding": [
+      "项目已有 api_providers 表 (v1-v3 迁移已完成)",
+      "现有 ApiProviderRepository 直接存储 Connection，需改为 Arc<Mutex<Connection>>",
+      "Tauri 状态使用 LLMClientManager，不需要 DatabaseManager 包装器",
+      "使用 dirs::home_dir() 获取路径 ~/.prism-forge/prism_forge.db",
+      "schema_migrations 表用于版本追踪",
+      "这是一个 Breaking Change：所有 Repository 和调用方都需要同步更新"
+    ],
+    "critical_decisions": [
+      "数据库连接：使用 OnceLock + Arc<Mutex<Connection>> 全局单例，不使用 DatabaseManager",
+      "时间戳格式：使用 chrono::Utc::now().to_rfc3339() 而非 SQLite 的 datetime('now')",
+      "Repository 存储：统一存储 Arc<Mutex<Connection>> 引用（包括 ApiProviderRepository）",
+      "Repository 构造：使用 with_conn(Arc<Mutex<Connection>>) 模式，移除 from_default_db()",
+      "错误处理：统一使用 .map_err() 处理 Mutex 错误，避免 .unwrap()",
+      "并发控制：设置 busy_timeout = 30s 避免死锁",
+      "T3_5 任务：本阶段仅定义 MetaTemplate 结构体，CRUD 操作延后到 Wave 2/3"
+    ]
+  },
+  "_design_decisions": {
+    "_resource_reference": "dev_plans/plan1/resources/wave1/database/07_design_decisions.md",
+    "description": "详细的设计决策记录已提取到资源文件",
+    "key_decisions_included": [
+      "模块导出策略（pub mod vs pub use）",
+      "向量存储格式选择（String vs BLOB）",
+      "数据库连接单例模式（OnceLock + Arc<Mutex<>>）",
+      "时间戳格式统一（RFC3339）"
+    ]
+  },
+  "_performance_benchmarks": {
+    "_resource_reference": "dev_plans/plan1/resources/wave1/database/08_performance_benchmarks.md",
+    "description": "详细的性能基准数据和测试方法已提取到资源文件",
+    "key_benchmarks_included": [
+      "测试环境配置（硬件、软件、向量配置）",
+      "性能目标（初始化、向量操作、Token计数、并发）",
+      "数据库规模预测（存储假设、扩展预测）",
+      "性能测试方法（单元测试、Benchmark集成）"
+    ]
+  },
+  "_clarifications": {
+    "description": "澄清 Dry-Run 分析中发现的歧义问题和缺失信息",
+    "run_migrations_visibility": {
+      "decision": "run_migrations() 必须改为 pub 函数",
+      "reason": "database/init.rs 中的 get_connection_shared() 需要调用 run_migrations()",
+      "migration_v4_v8_visibility": "私有函数 (不需要 pub)",
+      "clarification": "只有 run_migrations() 需要设为 pub，migrate_v4() 到 migrate_v8() 保持私有",
+      "signature": "pub fn run_migrations(conn: &mut Connection) -> Result<()>"
+    },
+    "count_tokens_function_signature": {
+      "correct_signature": "pub fn count_tokens(text: &str, model: &str) -> Result<usize>",
+      "note": "wave1.3_task_t2_7.json line 38 中的签名不完整，缺少 model 参数",
+      "clarification": "函数必须包含 model 参数才能进行模型匹配和精确计数"
+    },
+    "module_declaration_export_clarification": {
+      "pub_mod_vs_pub_use": "pub mod repository; 和 pub use repository::ApiProviderRepository; 不冲突",
+      "explanation": [
+        "pub mod repository; 使 repository 子模块可从外部访问",
+        "pub use repository::ApiProviderRepository; 提供便捷的快捷导入",
+        "外部代码使用：use crate::database::ApiProviderRepository;",
+        "不会产生路径冲突，因为 pub use 只是重新导出类型"
+      ],
+      "new_repositories_export": "SessionRepository, MessageRepository, MessageEmbeddingRepository 也需要添加到 pub use 列表"
+    },
+    "database_path_cross_platform": {
+      "windows_path": "%USERPROFILE%\\.prism-forge\\prism_forge.db",
+      "macos_linux_path": "~/.prism-forge/prism_forge.db",
+      "clarification": "dirs::home_dir() 会自动处理跨平台差异，返回的用户主目录不包含末尾斜杠",
+      "path_construction": "home_dir.join('.prism-forge').join('prism_forge.db')"
+    },
+    "tokenstats_location": {
+      "decision": "TokenStats 结构体定义在 src-tauri/src/database/models.rs",
+      "reason": "TokenStats 是数据库相关的数据结构，与其他数据模型放在一起",
+      "alternative": "也可以定义在 src-tauri/src/tokenizer/mod.rs，但 models.rs 更统一"
+    },
+    "llm_client_manager_modifications": {
+      "current_code": "LLMClientManager::from_default_db()",
+      "target_code": "LLMClientManager::with_conn(Arc<Mutex<Connection>>)",
+      "modifications_required": [
+        "在 llm/manager.rs 中添加 pub fn with_conn(conn: Arc<Mutex<Connection>>) -> Self 方法",
+        "将内部存储的 Connection 改为 Arc<Mutex<Connection>>",
+        "更新所有使用 conn 的方法为 self.conn.lock().map_err() 模式",
+        "保留 from_default_db() 以向后兼容（标记为 deprecated）"
+      ],
+      "signature_example": "pub fn with_conn(conn: Arc<Mutex<Connection>>) -> Self { Self { conn, ... } }"
+    },
+    "commands_rs_update_guidance": {
+      "existing_commands": "cmd_get_providers, cmd_save_provider, cmd_delete_provider, cmd_set_active_provider, cmd_test_provider_connection",
+      "modifications_needed": [
+        "更新 LLMClientManager 的创建方式：from_default_db() 改为 with_conn()",
+        "如果命令直接访问数据库，需要添加 State<Arc<Mutex<Connection>>> 参数",
+        "使用 .lock().map_err() 而非 .lock().unwrap() 处理 Mutex 错误"
+      ],
+      "new_commands": "count_prompt_tokens - 暴露 Token 计数功能给前端"
+    },
+    "wal_mode_configuration": {
+      "pragma_statement": "PRAGMA journal_mode = WAL;",
+      "where_to_add": "在 database/init.rs 的 get_connection_shared() 中，连接建立后立即执行",
+      "order": [
+        "1. Connection::open()",
+        "2. PRAGMA foreign_keys = ON",
+        "3. PRAGMA busy_timeout = 30000",
+        "4. PRAGMA journal_mode = WAL",
+        "5. vec_init() 加载 sqlite-vec",
+        "6. run_migrations()"
+      ],
+      "benefits": [
+        "提升并发读性能",
+        "减少磁盘写入",
+        "支持读写并发"
+      ]
+    },
+    "test_coverage_tool": {
+      "recommended_tool": "cargo-tarpaulin",
+      "installation": "cargo install cargo-tarpaulin",
+      "usage": "cargo tarpaulin --out Html --output-dir coverage",
+      "alternative": "cargo-llvm-cov (需要 nightly Rust)",
+      "target": "80% 代码覆盖率"
+    },
+    "token_model_matching_edge_cases": {
+      "problem": "模型名称可能包含额外后缀或前缀",
+      "examples": [
+        "gpt-4-turbo-latest",
+        "claude-3-5-sonnet-20241022"
+      ],
+      "solution": [
+        "精确匹配优先：检查是否在已知模型列表中",
+        "模糊匹配：使用 model.contains('gpt-4') 而非 model == 'gpt-4'",
+        "Claude 检测：model.contains('claude')",
+        "默认回退：使用 cl100k_base 并记录警告日志"
+      ],
+      "implementation_note": "wave1.5_templates.json 中的 tokenizer_model_matching_template 已包含此逻辑"
+    },
+    "rollback_failure_handling": {
+      "problem": "如果备份恢复失败且数据库文件被删除",
+      "improved_steps": [
+        "Step 0: 创建数据库备份（强制执行）",
+        "Step 1a: 尝试从备份恢复",
+        "Step 1b: 如果恢复失败，提示用户手动备份并确认",
+        "Step 1c: 只有在用户确认后才删除数据库文件",
+        "Step 7: 验证回滚，如果失败则提示用户联系支持"
+      ],
+      "user_guidance": "如果回滚失败，请保留备份文件并重新初始化数据库"
+    },
+    "migration_failure_handling": {
+      "problem": "如果 run_migrations() 执行到一半失败",
+      "current_behavior": "事务会自动回滚，数据库保持在迁移前的状态",
+      "next_startup": "下次启动时会重新尝试迁移",
+      "manual_intervention": "如果迁移持续失败，检查 schema_migrations 表的版本号",
+      "manual_fix_sql": "UPDATE schema_migrations SET version = N WHERE id = 1; -- N 是上一个成功的版本"
+    },
+    "concurrent_test_complete_example": {
+      "location": "添加到 wave1.5_templates.json 的 concurrent_test_template",
+      "description": "完整的并发测试用例示例，包含 10 个线程并发创建 Session",
+      "key_points": [
+        "使用 Arc<Mutex<Connection>> 共享连接",
+        "每个线程在独立的 Repository 上操作",
+        "使用 thread::spawn 创建线程",
+        "使用 join 等待所有线程完成",
+        "验证无死锁、数据一致性"
+      ]
+    },
+    "cargo_toml_merge_strategy": {
+      "problem": "T1_1 和 T2_7 并行任务都会修改 Cargo.toml",
+      "strategy": [
+        "在 wave1.4_integration.json 的 integration_tasks 中添加说明",
+        "合并时手动检查依赖版本冲突",
+        "最终依赖列表应包含：sqlite-vec, tiktoken-rs, log, chrono, dirs（已存在）",
+        "按字母顺序排列依赖以减少冲突"
+      ],
+      "example": "[dependencies]\nchrono = { version = \"0.4\", features = [\"serde\"] }\ndirs = \"5.0\"\nlog = \"0.4\"\n..."
+    },
+    "test_helper_complete_example": {
+      "problem": "run_migrations() 是私有的，测试代码无法调用",
+      "solutions": [
+        "方案 A（推荐）：将 run_migrations() 改为 pub（符合上面的 run_migrations_visibility 决策）",
+        "方案 B：添加 #[cfg(test)] pub fn run_migrations_for_test() 包装函数",
+        "方案 C：在测试中直接调用 migrate_v1() 到 migrate_v8()（不推荐，维护成本高）"
+      ],
+      "recommended_code": "使用方案 A，因为 init.rs 需要调用 run_migrations()，改为 pub 是合理的"
+    },
+    "error_handling_complete_pattern": {
+      "mutex_lock_pattern": "let db = self.conn.lock().map_err(|e| anyhow::anyhow!(\"数据库连接被毒化: {}\", e))?;",
+      "when_to_log": "对于可恢复的错误（如 Mutex 被毒化），记录 warn 级别日志",
+      "when_to_propagate": "对于严重错误（如数据库损坏），传播给上层处理",
+      "user_facing_messages": "将技术错误转换为用户友好的消息",
+      "example": "\"无法访问数据库，请重试\" 而非 \"Mutex poison error\""
+    }
+  },
+  "_file_operations": {
+    "modify": [
+      "src-tauri/Cargo.toml - 添加 sqlite-vec, tiktoken-rs, chrono 依赖",
+      "src-tauri/src/database/mod.rs - 添加 pub mod init; 和 pub mod repository; (保留 pub use)",
+      "src-tauri/src/database/migrations.rs - 添加 migrate_v4 到 migrate_v8 函数，添加 sqlite-vec 加载",
+      "src-tauri/src/database/models.rs - 添加 Session, Message, MessageEmbedding, SavedPrompt, MetaTemplate 结构体",
+      "src-tauri/src/database/repository.rs - BREAKING CHANGE: 更新 ApiProviderRepository，添加 SessionRepository, MessageRepository, MessageEmbeddingRepository",
+      "src-tauri/src/lib.rs - 添加 database::init 模块引用，更新初始化逻辑（参考 wave1.5_templates.json:lib_rs_integration）",
+      "src-tauri/src/commands.rs - 添加 count_tokens 相关命令"
+    ],
+    "create": [
+      "src-tauri/src/database/init.rs - 数据库初始化和连接管理（单例模式，参考 wave1.5_templates.json:init_rs_complete_template）",
+      "src-tauri/src/tokenizer/mod.rs - Token 计数器模块（参考 wave1.5_templates.json:tokenizer_model_matching_template）"
+    ]
+  },
+  "removed_tasks": [
+    {
+      "task_id": "T3_5",
+      "name": "实现 Meta-Prompt 管理",
+      "reason": "本阶段仅定义 MetaTemplate 数据模型，完整的 CRUD 操作和 Tauri 命令延后到 Wave 2/3 实现",
+      "moved_to": "Wave 2 或 Wave 3",
+      "current_scope": "在 T1_1 Step 4 中定义 MetaTemplate 结构体，不实现 Repository 和 Commands"
+    }
+  ]
+}

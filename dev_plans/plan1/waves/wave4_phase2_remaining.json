@@ -6,7 +6,9 @@
     "name": "feat/phase2-wave4",
     "base": "master",
     "strategy": "feature_branch",
-    "depends_on": ["feat/phase2-wave3"]
+    "depends_on": [
+      "feat/phase2-wave3"
+    ]
   },
   "parallel_tasks": [
     {
@@ -17,8 +19,13 @@
       "estimated_hours": 16,
       "priority": "critical",
       "status": "pending",
-      "requirement_ref": ["F2.5"],
-      "dependencies": ["T1_1", "T2_3"],
+      "requirement_ref": [
+        "F2.5"
+      ],
+      "dependencies": [
+        "T1_1",
+        "T2_3"
+      ],
       "output_artifacts": [
         "src-tauri/src/embedding/mod.rs",
         "src-tauri/src/embedding/generator.rs"
@@ -28,14 +35,18 @@
           "step": 1,
           "title": "添加 FastEmbed 依赖",
           "description": "在 Cargo.toml 添加 fastembed",
-          "commands": ["添加: fastembed = \"3.3\""],
+          "commands": [
+            "添加: fastembed = \"3.3\""
+          ],
           "verification": "cargo check 编译通过"
         },
         {
           "step": 2,
           "title": "实现 EmbeddingGenerator",
           "description": "创建向量生成器",
-          "files": ["src-tauri/src/embedding/generator.rs"],
+          "files": [
+            "src-tauri/src/embedding/generator.rs"
+          ],
           "functions": [
             "pub struct EmbeddingGenerator { model: EmbeddingModel }",
             "pub fn new() -> Result<Self>",
@@ -94,8 +105,13 @@
       "estimated_hours": 14,
       "priority": "high",
       "status": "pending",
-      "requirement_ref": ["F1.2", "F4.4"],
-      "dependencies": ["T1_2"],
+      "requirement_ref": [
+        "F1.2",
+        "F4.4"
+      ],
+      "dependencies": [
+        "T1_2"
+      ],
       "output_artifacts": [
         "src-tauri/src/monitor/watcher.rs"
       ],
@@ -104,14 +120,18 @@
           "step": 1,
           "title": "添加 notify 依赖",
           "description": "在 Cargo.toml 添加 notify",
-          "commands": ["添加: notify = \"6.1\""],
+          "commands": [
+            "添加: notify = \"6.1\""
+          ],
           "verification": "cargo check 编译通过"
         },
         {
           "step": 2,
           "title": "实现文件监控器",
           "description": "使用 notify crate 监控目录变更",
-          "files": ["src-tauri/src/monitor/watcher.rs"],
+          "files": [
+            "src-tauri/src/monitor/watcher.rs"
+          ],
           "functions": [
             "pub struct SessionWatcher { watcher: RecommendedWatcher, tx: mpsc::Sender<WatchEvent> }",
             "pub fn new() -> Result<Self>",
@@ -169,8 +189,13 @@
       "estimated_hours": 12,
       "priority": "high",
       "status": "pending",
-      "requirement_ref": ["F8.1", "F8.2"],
-      "dependencies": ["T2_3"],
+      "requirement_ref": [
+        "F8.1",
+        "F8.2"
+      ],
+      "dependencies": [
+        "T2_3"
+      ],
       "output_artifacts": [
         "src-tauri/src/parser/extractor.rs (扩展)",
         "src-tauri/src/commands.rs (导出命令)"
@@ -180,7 +205,9 @@
           "step": 1,
           "title": "定义提取等级",
           "description": "定义 L1/L2/L3 三级视图",
-          "files": ["src-tauri/src/parser/extractor.rs"],
+          "files": [
+            "src-tauri/src/parser/extractor.rs"
+          ],
           "levels": [
             "L1 (Full Trace): 包含所有内容",
             "L2 (Clean Flow): 过滤工具参数和中间输出",
@@ -216,7 +243,9 @@
           "step": 4,
           "title": "创建 Tauri Commands",
           "description": "暴露提取和导出命令",
-          "files": ["src-tauri/src/commands.rs"],
+          "files": [
+            "src-tauri/src/commands.rs"
+          ],
           "commands": [
             "extract_session(session_id: String, level: ExtractionLevel) -> Result<String>",
             "export_session(session_id: String, format: ExportFormat) -> Result<String>"
@@ -303,5 +332,7 @@
       "impact": "medium",
       "mitigation": "限制监控深度，添加节流"
     }
-  ]
+  ],
+  "_file_type": "wave_manifest",
+  "_description": "WAVE_4: 第四波：PHASE_2 剩余任务与向量嵌入"
 }

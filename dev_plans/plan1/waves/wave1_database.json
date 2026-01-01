@@ -1,371 +1,102 @@
 {
+  "_file_type": "wave_manifest",
+  "_description": "Wave 1 主指引文件：指向所有子任务文件",
+  "_version": "v1.8.1",
+  "_version_description": "非破坏性修复：解决 P1 和 P2 问题（TokenStats 缺失、测试迁移未显式化、LLMClientManager 验收、资源文件交叉引用）",
   "wave_id": "WAVE_1",
-  "name": "第一波：无依赖任务启动",
-  "description": "启动项目基础建设，包含无外部依赖的三个核心任务",
+  "name": "第一波：数据库基石",
+  "description": "建立项目数据持久化基础，包含 SQLite 数据库扩展、向量嵌入支持和 Token 计数功能",
   "branch": {
     "name": "feat/phase1-wave1",
     "base": "master",
     "strategy": "feature_branch"
+  },
+  "_agent_instructions": {
+    "execution_order": [
+      "1. 首先阅读 wave1.1_metadata.json 了解项目元数据和关键决策",
+      "2. 根据 wave1.2_task_t1_1.json 执行 T1_1 任务（数据库集成）",
+      "3. 根据 wave1.3_task_t2_7.json 执行 T2_7 任务（Token 计数器）",
+      "4. 参考 wave1.5_templates.json 实现具体代码模板",
+      "5. 根据 wave1.4_integration.json 执行集成测试和验证",
+      "6. 参考 wave1.6_strategy.json 处理 Git 策略和风险"
+    ],
+    "required_reading_files": [
+      "wave1.1_metadata.json",
+      "wave1.2_task_t1_1.json",
+      "wave1.3_task_t2_7.json",
+      "wave1.4_integration.json",
+      "wave1.5_templates.json",
+      "wave1.6_strategy.json"
+    ],
+    "external_resources": [
+      "dev_plans/plan1/resources/wave1/README.md",
+      "dev_plans/plan1/resources/wave1/database/01_complete_schema_ddl.sql",
+      "dev_plans/plan1/resources/wave1/database/02_init_design.md"
+    ]
+  },
+  "_file_structure": {
+    "wave1_database.json": "主指引文件（本文件）",
+    "wave1.1_metadata.json": "元数据：版本历史、Agent 指令、文件操作、基本信息",
+    "wave1.2_task_t1_1.json": "任务 T1_1：集成 SQLite 与 sqlite-vec（完整实现步骤）",
+    "wave1.3_task_t2_7.json": "任务 T2_7：集成 Tiktoken 计数器（完整实现步骤）",
+    "wave1.4_integration.json": "集成指南：集成任务、验证检查点、回滚计划、API 兼容性",
+    "wave1.5_templates.json": "代码模板：模块声明、初始化、错误处理、测试辅助等模板",
+    "wave1.6_strategy.json": "策略指南：Git 策略、风险缓解、交付物"
   },
   "parallel_tasks": [
     {
       "task_id": "T1_1",
       "name": "集成 SQLite 与 sqlite-vec",
       "sub_branch": "feat/phase1-wave1-t1_1",
-      "assignee": "backend",
-      "estimated_hours": 16,
+      "file_reference": "wave1.2_task_t1_1.json",
+      "estimated_hours": 20,
       "priority": "critical",
-      "status": "pending",
-      "requirement_ref": ["F5.1", "F5.2"],
-      "dependencies": [],
-      "output_artifacts": [
-        "src-tauri/Cargo.toml (更新依赖)",
-        "src-tauri/src/database/migrations.rs (扩展表结构)",
-        "src-tauri/src/database/models.rs (新增数据模型)",
-        "src-tauri/src/database/repository.rs (新增 CRUD 方法)"
-      ],
-      "implementation_steps": [
-        {
-          "step": 1,
-          "title": "添加 Rust 依赖",
-          "description": "在 Cargo.toml 中添加 sqlite-vec 0.5",
-          "commands": [
-            "编辑 src-tauri/Cargo.toml",
-            "添加: sqlite-vec = { version = \"0.5\", features = [\"bundled\"] }"
-          ],
-          "verification": "cargo check 编译通过"
-        },
-        {
-          "step": 2,
-          "title": "编写迁移脚本",
-          "description": "创建 sessions, messages, message_embeddings, saved_prompts, meta_templates 表",
-          "files": ["src-tauri/src/database/migrations.rs"],
-          "details": [
-            "迁移到版本 4: 创建 sessions 表",
-            "迁移到版本 5: 创建 messages 表 (轻量化，不含 content_json)",
-            "迁移到版本 6: 创建 message_embeddings 虚拟表 (vec0)",
-            "迁移到版本 7: 创建 saved_prompts 表",
-            "迁移到版本 8: 创建 meta_templates 表",
-            "添加必要的索引优化查询性能"
-          ],
-          "sql_scripts": [
-            "CREATE TABLE sessions (...)",
-            "CREATE TABLE messages (...)",
-            "CREATE VIRTUAL TABLE message_embeddings USING vec0(embedding FLOAT(384))",
-            "CREATE TABLE saved_prompts (...)",
-            "CREATE TABLE meta_templates (...)"
-          ],
-          "verification": "数据库初始化后所有表结构正确"
-        },
-        {
-          "step": 3,
-          "title": "定义数据模型",
-          "description": "在 models.rs 中添加新的 Rust 结构体",
-          "files": ["src-tauri/src/database/models.rs"],
-          "models": [
-            "pub struct Session { id, session_id, project_path, project_name, file_path, rating, tags, is_archived, is_active, created_at, updated_at }",
-            "pub struct Message { id, session_id, uuid, parent_uuid, type, timestamp, offset, length, summary, parent_idx }",
-            "pub struct MessageEmbedding { message_id, embedding, summary, created_at }",
-            "pub struct SavedPrompt { id, session_id, category, title, content, rating, usage_count, tokens, created_at }",
-            "pub struct MetaTemplate { id, key, name, content, description, is_active, updated_at }"
-          ],
-          "verification": "所有模型实现了 Serialize/Deserialize trait"
-        },
-        {
-          "step": 4,
-          "title": "实现 CRUD 操作",
-          "description": "在 repository.rs 中添加数据访问方法",
-          "files": ["src-tauri/src/database/repository.rs"],
-          "methods": [
-            "SessionRepository: create, get_by_id, get_all, update, delete, get_active_sessions, get_by_project",
-            "MessageRepository: create, get_by_session, get_by_uuid, get_by_offset, delete_by_session",
-            "MessageEmbeddingRepository: insert, search_similar, delete_by_message",
-            "SavedPromptRepository: create, get_by_category, update_rating, increment_usage",
-            "MetaTemplateRepository: get_active, update_content, list_all"
-          ],
-          "verification": "单元测试覆盖所有 CRUD 方法"
-        },
-        {
-          "step": 5,
-          "title": "测试向量功能",
-          "description": "验证 sqlite-vec 扩展加载和向量距离计算",
-          "test_sql": [
-            "SELECT vec_version();",
-            "SELECT distance('[0.1, 0.2, ...]', '[0.3, 0.4, ...]');"
-          ],
-          "verification": "能正确执行向量距离查询"
-        }
-      ],
-      "acceptance_criteria": [
-        "AC1: 数据库文件在 ~/.prism-forge/prism_forge.db 正确创建",
-        "AC2: 执行 SELECT name FROM sqlite_master WHERE type='table' 返回所有6张表",
-        "AC3: 执行 SELECT vec_version() 返回版本号（如 0.5.0）",
-        "AC4: 能插入测试数据并成功查询",
-        "AC5: cargo test 测试全部通过",
-        "AC6: 代码覆盖率 > 80%"
-      ],
-      "testing_checklist": [
-        "TC1.1: 验证数据库迁移从版本 0 升级到版本 8",
-        "TC1.2: 验证 sessions 表的触发器正确工作（is_active 唯一性）",
-        "TC1.3: 验证外键约束（messages.session_id -> sessions.session_id）",
-        "TC1.4: 验证 message_embeddings 虚拟表能正确存储向量",
-        "TC1.5: 验证向量距离查询返回正确的余弦相似度",
-        "TC1.6: 验证并发读写不会损坏数据库"
-      ],
-      "performance_targets": [
-        "PT1.1: 数据库初始化时间 < 500ms",
-        "PT1.2: 单条插入操作 < 10ms",
-        "PT1.3: 向量距离查询 (Top-5) < 50ms"
-      ],
-      "notes": [
-        "sqlite-vec 需要静态编译，确保 Cargo.toml 正确配置 features",
-        "向量维度固定为 384 (BGE-small-en-v1.5)",
-        "所有时间字段使用 RFC3339 格式存储",
-        "tags 字段存储 JSON Array 字符串"
-      ]
+      "dependencies": []
     },
     {
       "task_id": "T2_7",
       "name": "集成 Tiktoken 计数器",
       "sub_branch": "feat/phase1-wave1-t2_7",
-      "assignee": "backend",
+      "file_reference": "wave1.3_task_t2_7.json",
       "estimated_hours": 6,
       "priority": "high",
-      "status": "pending",
-      "requirement_ref": ["F3.5"],
-      "dependencies": [],
-      "output_artifacts": [
-        "src-tauri/src/tokenizer/mod.rs",
-        "src-tauri/src/commands.rs (新增 count_tokens 命令)"
-      ],
-      "implementation_steps": [
-        {
-          "step": 1,
-          "title": "添加依赖",
-          "description": "在 Cargo.toml 添加 tiktoken-rs",
-          "commands": [
-            "添加: tiktoken-rs = \"0.5\""
-          ],
-          "verification": "cargo check 编译通过"
-        },
-        {
-          "step": 2,
-          "title": "实现 tokenizer 模块",
-          "description": "创建 tokenizer 模块和计数函数",
-          "files": ["src-tauri/src/tokenizer/mod.rs"],
-          "functions": [
-            "pub fn count_tokens(text: &str) -> Result<usize>",
-            "pub fn estimate_cost(tokens: usize, model: &str) -> f64",
-            "pub fn get_tokenizer(model: &str) -> Result<Cl100kBase>"
-          ],
-          "pricing": {
-            "gpt-4": { "input": 0.01, "output": 0.03 },
-            "gpt-3.5-turbo": { "input": 0.0005, "output": 0.0015 },
-            "claude-3-5-sonnet": { "input": 0.003, "output": 0.015 }
-          },
-          "verification": "单元测试验证计数准确性"
-        },
-        {
-          "step": 3,
-          "title": "创建 Tauri Command",
-          "description": "暴露 count_prompt_tokens 命令给前端",
-          "files": ["src-tauri/src/commands.rs"],
-          "command_signature": "pub fn count_prompt_tokens(prompt: String) -> Result<TokenStats>",
-          "response_format": "{ count: number, estimatedCost: number }",
-          "verification": "从前端调用返回正确结果"
-        }
-      ],
-      "acceptance_criteria": [
-        "AC1: 输入测试文本，返回的 Token 数与 OpenAI 官方计数一致",
-        "AC2: 支持主流模型的 Token 计数（GPT-4, GPT-3.5, Claude）",
-        "AC3: 费用估算误差 < 5%",
-        "AC4: 处理空字符串和特殊字符不会崩溃",
-        "AC5: 性能：计数 10000 tokens < 100ms"
-      ],
-      "testing_checklist": [
-        "TC2.7.1: 测试英文文本计数准确性",
-        "TC2.7.2: 测试中文文本计数准确性",
-        "TC2.7.3: 测试混合中英文文本计数",
-        "TC2.7.4: 测试代码块计数（包含特殊字符）",
-        "TC2.7.5: 测试不同模型的费用估算"
-      ]
-    },
+      "dependencies": []
+    }
+  ],
+  "removed_tasks": [
     {
       "task_id": "T3_5",
       "name": "实现 Meta-Prompt 管理",
-      "sub_branch": "feat/phase1-wave1-t3_5",
-      "assignee": "backend",
-      "estimated_hours": 8,
-      "priority": "high",
-      "status": "pending",
-      "requirement_ref": ["F9.3"],
-      "dependencies": ["T1_1"],
-      "output_artifacts": [
-        "src-tauri/src/optimizer/meta_prompt.rs",
-        "src-tauri/src/commands.rs (新增 Meta-Prompt 相关命令)"
-      ],
-      "implementation_steps": [
-        {
-          "step": 1,
-          "title": "定义 Meta-Prompt 结构",
-          "description": "创建系统提示词数据模型",
-          "files": ["src-tauri/src/database/models.rs"],
-          "models": [
-            "pub struct MetaTemplate { id, key, name, content, description, is_active, updated_at }"
-          ],
-          "verification": "模型实现 Serialize/Deserialize"
-        },
-        {
-          "step": 2,
-          "title": "实现 Meta-Prompt 管理器",
-          "description": "创建 meta_prompt.rs 模块",
-          "files": ["src-tauri/src/optimizer/meta_prompt.rs"],
-          "functions": [
-            "pub fn get_meta_template(key: &str) -> Result<Option<MetaTemplate>>",
-            "pub fn update_meta_template(key: &str, content: String) -> Result<()>",
-            "pub fn list_meta_templates() -> Result<Vec<MetaTemplate>>",
-            "pub fn init_default_templates() -> Result<()>"
-          ],
-          "default_templates": {
-            "session_analyzer": {
-              "name": "会话分析器",
-              "description": "用于分析 Claude Code 会话内容"
-            },
-            "prompt_optimizer": {
-              "name": "提示词优化器",
-              "description": "用于生成优化的提示词"
-            }
-          },
-          "verification": "单元测试覆盖所有方法"
-        },
-        {
-          "step": 3,
-          "title": "创建 Tauri Commands",
-          "description": "暴露 Meta-Prompt 管理命令",
-          "files": ["src-tauri/src/commands.rs"],
-          "commands": [
-            "get_meta_template(key: String) -> Result<MetaTemplate>",
-            "update_meta_template(key: String, content: String) -> Result<()>",
-            "list_meta_templates() -> Result<Vec<MetaTemplate>>",
-            "reset_meta_template(key: String) -> Result<()>"
-          ],
-          "verification": "命令注册并可通过前端调用"
-        }
-      ],
-      "acceptance_criteria": [
-        "AC1: 应用启动时自动初始化默认 Meta-Prompt",
-        "AC2: 能通过命令修改 Meta-Prompt 内容",
-        "AC3: 修改后立即生效（无需重启应用）",
-        "AC4: 支持重置为默认模板",
-        "AC5: 列表显示所有 Meta-Prompt 及其状态"
-      ],
-      "testing_checklist": [
-        "TC3.5.1: 测试获取不存在的 Meta-Prompt 返回 None",
-        "TC3.5.2: 测试更新 Meta-Prompt 内容持久化",
-        "TC3.5.3: 测试初始化默认模板",
-        "TC3.5.4: 测试重置模板功能",
-        "TC3.5.5: 测试并发修改模板的安全性"
-      ]
+      "reason": "本阶段仅定义 MetaTemplate 数据模型，完整的 CRUD 操作和 Tauri 命令延后到 Wave 5 实现",
+      "moved_to": "Wave 5 (PHASE_3 核心业务逻辑)"
     }
   ],
-  "integration_tasks": [
-    {
-      "task_id": "WAVE1_INTEGRATION",
-      "name": "第一波任务集成与合并",
-      "description": "验证三个并行任务完成后正确集成",
-      "steps": [
-        "合并 T1_1 分支到 feat/phase1-wave1",
-        "合并 T2_7 分支到 feat/phase1-wave1",
-        "合并 T3_5 分支到 feat/phase1-wave1",
-        "解决冲突（如有）",
-        "运行完整测试套件",
-        "更新 main_plan.json 状态"
-      ],
-      "acceptance_criteria": [
-        "所有子分支成功合并",
-        "cargo test --all 通过",
-        "cargo clippy 无警告",
-        "cargo fmt 检查通过",
-        "应用能正常启动"
-      ]
-    }
-  ],
-  "verification_checkpoints": [
-    {
-      "checkpoint_id": "CP_WAVE1_DB",
-      "name": "数据库验证",
-      "commands": [
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;",
-        "SELECT vec_version();"
-      ],
-      "expected_outputs": [
-        "api_providers, message_embeddings, message_metadata, messages, meta_templates, saved_prompts, sessions, schema_migrations",
-        "0.5.0"
-      ]
-    },
-    {
-      "checkpoint_id": "CP_WAVE1_TOKEN",
-      "name": "Token 计数器验证",
-      "commands": [
-        "invoke('count_prompt_tokens', { prompt: 'Hello, world!' })"
-      ],
-      "expected_outputs": [
-        "Token count 应约为 3-4（取决于分词器）"
-      ]
-    },
-    {
-      "checkpoint_id": "CP_WAVE1_META",
-      "name": "Meta-Prompt 验证",
-      "commands": [
-        "invoke('list_meta_templates')"
-      ],
-      "expected_outputs": [
-        "返回至少 2 个默认模板（session_analyzer, prompt_optimizer）"
-      ]
-    }
-  ],
-  "git_strategy": {
-    "workflow": "parallel_sub_branches",
-    "steps": [
-      "1. 从 master 创建 feat/phase1-wave1 主分支",
-      "2. 从 feat/phase1-wave1 创建三个子分支（T1_1, T2_7, T3_5）",
-      "3. 各任务完成后，合并子分支到 feat/phase1-wave1",
-      "4. 集成测试通过后，合并 feat/phase1-wave1 到 master",
-      "5. 删除已合并的子分支"
-    ],
-    "branch_structure": {
-      "master": "主分支",
-      "feat/phase1-wave1": "本波主分支",
-      "feat/phase1-wave1-t1_1": "T1_1 任务子分支",
-      "feat/phase1-wave1-t2_7": "T2_7 任务子分支",
-      "feat/phase1-wave1-t3_5": "T3_5 任务子分支"
-    },
-    "commit_message_format": "[WAVE1-{task_id}] {action}: {description}",
-    "merge_policy": "squash_and_merge"
+  "_quick_reference": {
+    "database_versions": "v0-v8 (参考 wave1.1_metadata.json)",
+    "acceptance_criteria": "参考 wave1.2_task_t1_1.json 和 wave1.3_task_t2_7.json",
+    "verification_checkpoints": "参考 wave1.4_integration.json",
+    "rollback_plan": "参考 wave1.4_integration.json",
+    "code_templates": "参考 wave1.5_templates.json",
+    "git_strategy": "参考 wave1.6_strategy.json"
   },
-  "deliverables": [
-    "完整的数据库 schema 和迁移脚本",
-    "可工作的 Token 计数器",
-    "Meta-Prompt 管理系统",
-    "完整的单元测试覆盖",
-    "技术文档（API 文档、数据库设计文档）"
+  "success_criteria": [
+    "所有 7 张表正确创建（api_providers + 6 张新表）",
+    "sqlite-vec 扩展加载成功，SELECT vec_version() 返回 0.5.0",
+    "向量距离查询功能正常工作",
+    "Token 计数器支持 GPT/Claude 模型",
+    "所有单元测试通过（覆盖率 > 80%）",
+    "并发访问测试通过（无死锁）",
+    "集成测试验证通过",
+    "main_plan.json 状态已同步更新（completed_tasks, global_status）"
   ],
-  "risks_and_mitigations": [
-    {
-      "risk": "sqlite-vec 编译失败",
-      "probability": "medium",
-      "impact": "high",
-      "mitigation": "使用 bundled features 预编译版本，必要时降级到纯 SQL 实现"
-    },
-    {
-      "risk": "T3_5 依赖 T1_1 完成后才可测试",
-      "probability": "high",
-      "impact": "medium",
-      "mitigation": "使用 Mock 数据进行单元测试，待 T1_1 完成后再进行集成测试"
-    }
-  ],
-  "next_wave_dependencies": [
-    "WAVE_2: 依赖 T1_1 完成（数据库表结构）",
-    "WAVE_3: 依赖 T1_1 和 T2_7 完成（数据库 + Token 计数）"
-  ]
+  "_backup_info": {
+    "original_file_backup": "wave1_database.json.backup",
+    "backup_date": "2025-12-29",
+    "reason": "原文件长度约 38000 字符，已拆分为 7 个子文件便于 Claude Code 处理"
+  },
+  "_version_history": {
+    "v1.0": "初始版本",
+    "v1.8": "拆分为多个子文件，添加资源文件引用",
+    "v1.8.1": "非破坏性修复（2025-12-30）：P1 修复 1-2, P2 修复 1-2 (详情见变更日志)"
+  }
 }

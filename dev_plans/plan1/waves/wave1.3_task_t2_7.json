@@ -1,0 +1,181 @@
+{
+  "_file_type": "task_definition",
+  "_description": "Wave 1 任务 T2_7：集成 Tiktoken 计数器",
+  "task_id": "T2_7",
+  "name": "集成 Tiktoken 计数器",
+  "sub_branch": "feat/phase1-wave1-t2_7",
+  "assignee": "backend",
+  "estimated_hours": 6,
+  "priority": "high",
+  "status": "completed",
+  "requirement_ref": [
+    "F3.5"
+  ],
+  "dependencies": [],
+  "output_artifacts": [
+    "src-tauri/Cargo.toml (更新依赖)",
+    "src-tauri/src/tokenizer/mod.rs",
+    "src-tauri/src/commands.rs (新增 count_tokens 命令)"
+  ],
+  "implementation_steps": [
+    {
+      "step": 1,
+      "title": "添加依赖",
+      "description": "在 Cargo.toml 添加 tiktoken-rs",
+      "status": "[x]",  // 进度跟踪: [ ] 待开始 | [~] 进行中 | [x] 已完成
+      "commands": [
+        "添加: tiktoken-rs = \"0.5\""
+      ],
+      "verification": "cargo check 编译通过"
+    },
+    {
+      "step": 2,
+      "title": "实现 tokenizer 模块",
+      "description": "创建 tokenizer 模块和计数函数",
+      "status": "[x]",  // 进度跟踪: [ ] 待开始 | [~] 进行中 | [x] 已完成
+      "files": [
+        "src-tauri/src/tokenizer/mod.rs"
+      ],
+      "functions": [
+        "pub fn count_tokens(text: &str, model: &str) -> Result<usize>",
+        "pub fn estimate_cost(tokens: usize, model: &str) -> Result<f64>",
+        "fn get_tokenizer() -> &'static Cl100kBase (私有函数，使用 OnceLock 单例)"
+      ],
+      "pricing": {
+        "_resource_reference": "dev_plans/plan1/resources/wave1/tokenizer/02_pricing_and_mapping.md",
+        "description": "详细的模型定价和映射规则已提取到资源文件",
+        "summary": "OpenAI GPT-4 ($0.01/$0.03), GPT-3.5 ($0.0005/$0.0015), Claude ($0.003/$0.015)"
+      },
+      "tokenizer_mapping": {
+        "_resource_reference": "dev_plans/plan1/resources/wave1/tokenizer/01_tokenizer_design.md",
+        "description": "完整的 Tokenizer 实现代码（含模型匹配逻辑、测试用例、Tauri Command 集成）已提取到资源文件",
+        "summary": "精确匹配 -> 模糊匹配 -> Claude 近似 -> 默认回退"
+      },
+      "edge_case_tests": {
+        "_resource_reference": "dev_plans/plan1/resources/wave1/tokenizer/03_edge_case_tests.md",
+        "description": "完整的边界测试用例集（70+ 测试用例，覆盖 8 个主要类别）",
+        "test_categories": [
+          "空值和边界输入 (8 个用例)",
+          "特殊字符和 Unicode (10 个用例)",
+          "代码块和编程语法 (10 个用例)",
+          "多语言文本 (10 个用例)",
+          "大文本性能 (8 个用例)",
+          "模型名称边界 (10 个用例)",
+          "费用计算边界 (10 个用例)",
+          "并发和线程安全 (4 个用例)"
+        ],
+        "implementation_reference": "参考资源文件中的完整测试代码，可直接复制到 tokenizer/mod.rs"
+      },
+      "details": [
+        "使用 tiktoken-rs 的 Cl100kBase tokenizer",
+        "模型匹配逻辑：1) 精确匹配已知模型 -> 2) 模糊匹配（GPT/*）-> 3) Claude 近似计算 -> 4) 默认值",
+        "对于 Claude 模型，使用 cl100k_base 并乘以 1.2 系数作为近似值",
+        "价格计算：(tokens / 1000) * price_per_1k，返回费用估算 USD 美元",
+        "使用 OnceLock 单例模式缓存 tokenizer 实例",
+        "错误处理：使用 .map_err() 将 tiktoken-rs 错误转换为 anyhow::Error",
+        "TokenStats 结构体定义在 src-tauri/src/database/models.rs",
+        "count_tokens 函数签名：pub fn count_tokens(text: &str, model: &str) -> Result<usize>"
+      ]
+    },
+    {
+      "step": 3,
+      "title": "创建 Tauri Command",
+      "description": "暴露 count_prompt_tokens 命令给前端",
+      "status": "[x]",  // 进度跟踪: [ ] 待开始 | [~] 进行中 | [x] 已完成
+      "files": [
+        "src-tauri/src/commands.rs"
+      ],
+      "command_signature": "pub fn count_prompt_tokens(prompt: String) -> Result<TokenStats>",
+      "response_format": "{ count: number, estimatedCost: number }",
+      "verification": "从前端调用返回正确结果",
+      "details": [
+        "TokenStats 结构体：#[derive(Serialize, Deserialize)] pub struct TokenStats { pub count: usize, pub estimated_cost: f64 }",
+        "使用 #[serde(rename_all = \"camelCase\")] 确保字段名转换为驼峰命名",
+        "错误处理：使用 map_err() 将 anyhow::Error 转换为 CommandError"
+      ]
+    }
+  ],
+  "acceptance_criteria": [
+    "AC1: 输入测试文本，返回的 Token 数与 OpenAI 官方计数一致（误差 < 1%）",
+    "AC2: 支持主流模型的 Token 计数（GPT-4, GPT-3.5, Claude）",
+    "AC3: Claude 模型使用近似计算，误差约 20%（可接受）",
+    "AC4: 费用估算误差 < 5%",
+    "AC5: 处理空字符串和特殊字符不会崩溃",
+    "AC6: 性能：计数 10000 tokens < 100ms",
+    "AC7: 未知模型返回默认计数并记录警告日志"
+  ],
+  "testing_checklist": {
+    "_note": "完整的边界测试用例实现代码已提取到 resources/wave1/tokenizer/03_edge_case_tests.md",
+    "_resource_reference": "dev_plans/plan1/resources/wave1/tokenizer/03_edge_case_tests.md",
+    "description": "70+ 边界测试用例，覆盖 8 个主要类别，可直接复制到 tokenizer/mod.rs",
+    "basic_tests": [
+      "TC-EMPTY-001: 空字符串返回 0 tokens",
+      "TC-EMPTY-007: 单字符英文返回 1 token",
+      "TC-EMPTY-008: 单字符中文返回 1+ token",
+      "TC-SPEC-001: Emoji 表情符号不崩溃",
+      "TC-SPEC-006: 货币符号正确处理",
+      "TC-CODE-001: 简单函数代码块",
+      "TC-MULTI-001: 纯日文文本",
+      "TC-MULTI-006: 中英日阿混合文本"
+    ],
+    "edge_case_tests": [
+      "TC-SPEC-008: 零宽字符处理 (U+200B)",
+      "TC-SPEC-009: 私有使用区字符 (U+E000)",
+      "TC-SPEC-010: 控制字符处理",
+      "TC-CODE-002: 嵌套括号 ((((()))))",
+      "TC-CODE-007: 正则表达式模式",
+      "TC-MULTI-008: JSON 内容解析",
+      "TC-MULTI-010: URL 链接拆分"
+    ],
+    "performance_tests": [
+      "TC-PERF-001: 1000 tokens < 10ms",
+      "TC-PERF-002: 5000 tokens < 50ms",
+      "TC-PERF-003: 10000 tokens < 100ms",
+      "TC-PERF-005: 混合中英文大文本",
+      "TC-PERF-006: 200 行代码大文件",
+      "TC-PERF-007: 10KB JSON 数据",
+      "TC-CONC-001: 10 线程并发计数",
+      "TC-CONC-002: OnceLock 单线程安全",
+      "TC-CONC-003: 不同模型并发调用"
+    ],
+    "model_matching_tests": [
+      "TC-MODEL-001: 空模型名降级到默认",
+      "TC-MODEL-002: 大小写不敏感 (GPT-4 = gpt-4)",
+      "TC-MODEL-003: 版本后缀模糊匹配 (gpt-4-turbo-latest)",
+      "TC-MODEL-004: Claude 带日期后缀匹配",
+      "TC-MODEL-005: 完全未知模型降级",
+      "TC-MODEL-008: null/None 使用默认模型"
+    ],
+    "cost_estimation_tests": [
+      "TC-COST-001: 零 Token 返回 $0.00",
+      "TC-COST-002: 1 Token 费用计算",
+      "TC-COST-003: 1000 Tokens GPT-4 ≈ $0.016",
+      "TC-COST-004: 100000 Tokens 大额费用",
+      "TC-COST-005: Claude 近似费用计算",
+      "TC-COST-009: 不同模型费用应有差异"
+    ],
+    "internationalization_tests": [
+      "TC-MULTI-002: 纯韩文 (안녕하세요)",
+      "TC-MULTI-003: 纯阿拉伯文 (مرحبا)",
+      "TC-MULTI-004: 纯俄文 (Привет мир)",
+      "TC-MULTI-005: 纯泰文 (สวัสดี)",
+      "TC-SPEC-009: 四字节 UTF-8 (𠮷)",
+      "TC-SPEC-004: 右到左文字 (RTL)"
+    ],
+    "acceptance_criteria_tests": [
+      "AC1: 与 OpenAI 官方计数一致 (误差 < 1%)",
+      "AC2: 支持主流模型 (GPT-4, GPT-3.5, Claude)",
+      "AC3: Claude 近似计算误差约 20%",
+      "AC4: 费用估算误差 < 5%",
+      "AC5: 空字符串和特殊字符不崩溃",
+      "AC6: 10000 tokens < 100ms",
+      "AC7: 未知模型返回默认计数并记录警告"
+    ]
+  },
+  "notes": [
+    "tiktoken-rs 仅支持 OpenAI 的 tokenizer，Claude 模型使用近似计算",
+    "Claude 近似系数 1.2 是经验值，实际误差可能达到 20%",
+    "OnceLock 是 Rust 1.70+ 标准库特性，旧版本需使用 once_cell",
+    "价格数据可能变动，需要定期更新参考官方定价页面"
+  ]
+}

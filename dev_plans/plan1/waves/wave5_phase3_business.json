@@ -6,7 +6,9 @@
     "name": "feat/phase3-wave5",
     "base": "master",
     "strategy": "feature_branch",
-    "depends_on": ["feat/phase2-wave4"]
+    "depends_on": [
+      "feat/phase2-wave4"
+    ]
   },
   "sequential_tasks": [
     {
@@ -15,10 +17,14 @@
       "sub_branch": "feat/phase3-wave5-t3_1a",
       "assignee": "backend",
       "estimated_hours": 16,
-      "priority": "critical",
+      "priority": "high",
       "status": "pending",
-      "requirement_ref": ["F3.2"],
-      "dependencies": ["T2_4"],
+      "requirement_ref": [
+        "F3.2"
+      ],
+      "dependencies": [
+        "T2_4"
+      ],
       "output_artifacts": [
         "src-tauri/src/optimizer/retriever.rs"
       ],
@@ -27,7 +33,9 @@
           "step": 1,
           "title": "实现向量检索器",
           "description": "基于 sqlite-vec 的相似度搜索",
-          "files": ["src-tauri/src/optimizer/retriever.rs"],
+          "files": [
+            "src-tauri/src/optimizer/retriever.rs"
+          ],
           "functions": [
             "pub struct VectorRetriever { db: Connection }",
             "pub fn search_similar(&self, query_embedding: &[f32], limit: usize) -> Result<Vec<SessionMatch>>"
@@ -52,7 +60,9 @@
           "step": 2,
           "title": "创建 Tauri Command",
           "description": "暴露向量搜索命令",
-          "files": ["src-tauri/src/commands.rs"],
+          "files": [
+            "src-tauri/src/commands.rs"
+          ],
           "command_signature": "pub fn vector_search(query: String, limit: usize) -> Result<Vec<SessionMatch>>",
           "flow": [
             "1. 使用 EmbeddingGenerator 生成查询向量",
@@ -95,8 +105,14 @@
       "estimated_hours": 10,
       "priority": "high",
       "status": "pending",
-      "requirement_ref": ["F3.3", "6.1"],
-      "dependencies": ["T3_1a", "T2B_2"],
+      "requirement_ref": [
+        "F3.3",
+        "6.1"
+      ],
+      "dependencies": [
+        "T3_1a",
+        "T2B_2"
+      ],
       "output_artifacts": [
         "src-tauri/src/optimizer/rag_engine.rs"
       ],
@@ -105,7 +121,9 @@
           "step": 1,
           "title": "实现加权检索",
           "description": "结合相似度和评分的混合排序",
-          "files": ["src-tauri/src/optimizer/rag_engine.rs"],
+          "files": [
+            "src-tauri/src/optimizer/rag_engine.rs"
+          ],
           "formula": "Score = 0.7 * cosine_similarity + 0.3 * (rating / 5.0)",
           "sql_query": [
             "SELECT",
@@ -165,8 +183,13 @@
       "estimated_hours": 14,
       "priority": "high",
       "status": "pending",
-      "requirement_ref": ["F3.3"],
-      "dependencies": ["T2_3", "T2_7"],
+      "requirement_ref": [
+        "F3.3"
+      ],
+      "dependencies": [
+        "T2_3",
+        "T2_7"
+      ],
       "output_artifacts": [
         "src-tauri/src/optimizer/compressor.rs"
       ],
@@ -193,7 +216,9 @@
           "step": 2,
           "title": "实现压缩器",
           "description": "遍历消息树并压缩",
-          "files": ["src-tauri/src/optimizer/compressor.rs"],
+          "files": [
+            "src-tauri/src/optimizer/compressor.rs"
+          ],
           "functions": [
             "pub struct ContextCompressor;",
             "pub fn compress(&self, context: &SessionContext) -> Result<CompressedContext>",
@@ -237,18 +262,27 @@
       "estimated_hours": 16,
       "priority": "critical",
       "status": "pending",
-      "requirement_ref": ["F3.4", "F6"],
-      "dependencies": ["T3_1b", "T3_2"],
+      "requirement_ref": [
+        "F3.4",
+        "F6"
+      ],
+      "dependencies": [
+        "T3_1b",
+        "T3_2"
+      ],
       "output_artifacts": [
-        "src-tauri/src/optimizer/mod.rs (扩展)",
-        "src-tauri/src/commands.rs (optimize_prompt 命令)"
+        "src-tauri/src/optimizer/mod.rs (扩展 - 集成优化流程)",
+        "src-tauri/src/optimizer/prompt_generator.rs (新增 - 提示词生成器)",
+        "src-tauri/src/commands.rs (扩展 - 新增 optimize_prompt 命令)"
       ],
       "implementation_steps": [
         {
           "step": 1,
           "title": "实现优化流程",
           "description": "整合检索、压缩、生成",
-          "files": ["src-tauri/src/optimizer/mod.rs"],
+          "files": [
+            "src-tauri/src/optimizer/mod.rs"
+          ],
           "flow": [
             "1. 接收用户目标",
             "2. 生成查询向量",
@@ -273,7 +307,9 @@
           "step": 3,
           "title": "创建 Tauri Command",
           "description": "暴露 optimize_prompt 命令",
-          "files": ["src-tauri/src/commands.rs"],
+          "files": [
+            "src-tauri/src/commands.rs"
+          ],
           "command_signature": "pub async fn optimize_prompt(goal: String, session_ids: Vec<String>) -> Result<EnhancedPrompt>",
           "return_format": {
             "original_goal": "用户输入",
@@ -300,6 +336,60 @@
       ]
     },
     {
+      "task_id": "T3_5",
+      "name": "实现 Meta-Prompt 管理",
+      "sub_branch": "feat/phase3-wave5-t3_5",
+      "assignee": "backend",
+      "estimated_hours": 8,
+      "priority": "medium",
+      "status": "pending",
+      "requirement_ref": [
+        "F9.3"
+      ],
+      "dependencies": [
+        "T1_3"
+      ],
+      "output_artifacts": [
+        "src-tauri/src/commands.rs (扩展)"
+      ],
+      "implementation_steps": [
+        {
+          "step": 1,
+          "title": "实现 Meta-Prompt CRUD",
+          "description": "创建获取和更新 Meta-Prompt 的 Tauri 命令",
+          "files": [
+            "src-tauri/src/commands.rs"
+          ],
+          "command_signatures": [
+            "pub fn get_meta_template(category: String) -> Result<MetaTemplate>",
+            "pub fn update_meta_template(category: String, content: String) -> Result<()>"
+          ],
+          "verification": "命令可正常调用"
+        },
+        {
+          "step": 2,
+          "title": "集成到优化器",
+          "description": "优化器使用 Meta-Prompt 生成分析",
+          "files": [
+            "src-tauri/src/optimizer/mod.rs"
+          ],
+          "verification": "使用自定义 Meta-Prompt 成功"
+        }
+      ],
+      "acceptance_criteria": [
+        "AC1: 能获取系统 Meta-Prompt",
+        "AC2: 能更新 Meta-Prompt",
+        "AC3: 更改立即生效",
+        "AC4: 优化器使用新 Meta-Prompt"
+      ],
+      "testing_checklist": [
+        "TC3.5.1: 测试获取默认 Meta-Prompt",
+        "TC3.5.2: 测试更新 Meta-Prompt",
+        "TC3.5.3: 测试优化器使用新 Meta-Prompt",
+        "TC3.5.4: 测试类别区分"
+      ]
+    },
+    {
       "task_id": "T3_PERF",
       "name": "性能基准测试 - 向量检索",
       "sub_branch": "feat/phase3-wave5-t3_perf",
@@ -307,8 +397,12 @@
       "estimated_hours": 8,
       "priority": "medium",
       "status": "pending",
-      "requirement_ref": ["NF1"],
-      "dependencies": ["T3_1a"],
+      "requirement_ref": [
+        "NF1"
+      ],
+      "dependencies": [
+        "T3_1a"
+      ],
       "output_artifacts": [
         "src-tauri/tests/performance_vector.rs",
         "docs/performance_report_phase3.md"
@@ -386,7 +480,7 @@
     "workflow": "sequential_with_sub_branches",
     "steps": [
       "1. 从 feat/phase2-wave4 创建 feat/phase3-wave5 主分支",
-      "2. 按顺序创建子分支（T3_1a -> T3_1b -> T3_2 -> T3_3 -> T3_PERF）",
+      "2. 按顺序创建子分支（T3_1a -> T3_1b -> T3_2 -> T3_3 -> T3_5 -> T3_PERF）",
       "3. 每个子分支完成后合并到 feat/phase3-wave5",
       "4. 所有任务完成后合并到 master"
     ]
@@ -411,5 +505,7 @@
       "impact": "medium",
       "mitigation": "重试机制、降级到模板生成"
     }
-  ]
+  ],
+  "_file_type": "wave_manifest",
+  "_description": "WAVE_5: 第五波：PHASE_3 核心业务逻辑"
 }

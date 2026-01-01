@@ -1,0 +1,286 @@
+{
+  "_file_type": "task_definition",
+  "_description": "T1_2 任务：实现会话扫描器",
+  "_version": "v5.0",
+  "_version_description": "基于虚拟执行引擎 v5.0 优化，修复依赖倒置（添加 T1_3 依赖），补充缺失的超时机制实现（Step 7）",
+  "task_id": "T1_2",
+  "_v5_compliance": {
+    "dependencies_fixed": true,
+    "new_dependencies": ["T1_1", "T1_3"],
+    "rationale": "T1_2 需要完整的 Session 模型（包含 rating, tags, is_archived），必须在 T1_3 之后执行"
+  },
+  "_original_task_id": "T1_2",
+  "name": "实现会话扫描器",
+  "wave_id": "WAVE_2",
+  "sub_branch": "feat/phase1-wave2-t1_2",
+  "assignee": "backend",
+  "estimated_hours": 20,
+  "priority": "critical",
+  "status": "pending",
+  "requirement_ref": ["F1.1", "F1.3", "F1.4"],
+  "dependencies": ["T1_1", "T1_3"],
+  "output_artifacts": [
+    "src-tauri/src/monitor/scanner.rs",
+    "src-tauri/src/monitor/mod.rs",
+    "src-tauri/src/commands.rs (新增 scan_sessions 命令)"
+  ],
+  "implementation_steps": [
+    {
+      "step": 1,
+      "title": "创建 monitor 模块",
+      "description": "建立监控模块的基础结构",
+      "files": ["src-tauri/src/monitor/mod.rs"],
+      "content": "// 监控模块：负责扫描和管理 Claude 会话文件\n\npub mod scanner;\n\n// 预留：watcher 模块用于实时监控会话变化\n// pub mod watcher;",
+      "verification": "模块编译通过",
+      "status": "[ ]"
+    },
+    {
+      "step": 2,
+      "title": "实现会话文件扫描",
+      "description": "扫描 ~/.claude/projects/ 目录查找 JSONL 文件",
+      "files": ["src-tauri/src/monitor/scanner.rs"],
+      "functions": [
+        "pub fn get_claude_projects_dir() -> Result<PathBuf>",
+        "pub fn scan_session_files() -> Result<Vec<SessionMetadata>>",
+        "pub fn extract_session_metadata(path: &Path) -> Result<SessionMetadata>"
+      ],
+      "scan_logic": [
+        "1. 获取用户目录: dirs::home_dir()",
+        "2. 拼接路径: .claude/projects/**/*.jsonl",
+        "3. 使用 glob crate 遍历所有 JSONL 文件",
+        "4. 从文件名提取 session_id (UUID 格式)",
+        "5. 从文件路径提取 project_path",
+        "6. 读取文件元数据: created_at, updated_at (通过 file.stat())"
+      ],
+      "dependencies": [
+        "dirs = \"5.0\"",
+        "glob = \"0.3\""
+      ],
+      "verification": "能扫描并返回所有会话文件路径",
+      "status": "[ ]"
+    },
+    {
+      "step": 3,
+      "title": "判断会话活跃状态",
+      "description": "基于文件状态判断是否为活跃会话",
+      "files": ["src-tauri/src/monitor/scanner.rs"],
+      "logic": "使用用户选择的「基于文件状态」方案",
+      "detection_methods": {
+        "windows": "检查文件是否被进程锁定 (使用 Windows API)",
+        "fallback": "检查最后修改时间 (24小时内)"
+      },
+      "implementation_details": [
+        "Windows: 使用 CreateFileW with GENERIC_READ, dwShareMode=0 检测锁定",
+        "Fallback: 获取 file.metadata().modified()?，与当前时间比较",
+        "阈值: 86400 秒（24 小时）"
+      ],
+      "code_example": {
+        "language": "rust",
+        "file": "src-tauri/src/monitor/scanner.rs",
+        "content": "\nuse std::path::Path;\nuse std::time::SystemTime;\nuse crate::database::settings::get_active_threshold;\n\n/// 检查文件是否被锁定（仅 Windows）\n#[cfg(target_os = \\\"windows\\\")]\nfn is_file_locked(path: &Path) -> bool {\n    use std::os::windows::fs::OpenOptionsExt;\n    use std::fs::OpenOptions;\n\n    // 尝试以独占模式打开文件\n    // share_mode=0 表示独占访问，如果文件被其他进程锁定，会失败\n    match OpenOptions::new()\n        .read(true)\n        .share_mode(0)  // 独占模式\n        .open(path)\n    {\n        Ok(_) => false,  // 成功打开 = 未锁定\n        Err(_) => true   // 失败 = 被锁定\n    }\n}\n\n/// 降级方法：基于时间判断（所有平台通用）\nfn is_active_by_time(path: &Path, threshold_secs: u64) -> bool {\n    let metadata = match std::fs::metadata(path) {\n        Ok(m) => m,\n        Err(_) => return false,\n    };\n\n    let modified = match metadata.modified() {\n        Ok(time) => time,\n        Err(_) => return false,\n    };\n\n    let now = SystemTime::now();\n    let duration = match now.duration_since(modified) {\n        Ok(d) => d,\n        Err(_) => return false,\n    };\n\n    duration.as_secs() < threshold_secs\n}\n\n/// 判断会话是否活跃（Windows 平台）\n#[cfg(target_os = \\\"windows\\\")]\npub fn is_session_active(path: &Path) -> bool {\n    // 优先使用 Windows 锁定检测\n    if is_file_locked(path) {\n        return true;\n    }\n\n    // 降级到时间判断\n    let threshold = get_active_threshold().unwrap_or(86400);\n    is_active_by_time(path, threshold)\n}\n\n/// 判断会话是否活跃（macOS 平台）\n#[cfg(target_os = \\\"macos\\\")]\npub fn is_session_active(path: &Path) -> bool {\n    // macOS 不支持文件锁定检测，直接使用时间判断\n    let threshold = get_active_threshold().unwrap_or(86400);\n    is_active_by_time(path, threshold)\n}\n\n/// 判断会话是否活跃（Linux 平台）\n#[cfg(target_os = \\\"linux\\\")]\npub fn is_session_active(path: &Path) -> bool {\n    // Linux 不支持文件锁定检测（flock 需要进程协作），直接使用时间判断\n    let threshold = get_active_threshold().unwrap_or(86400);\n    is_active_by_time(path, threshold)\n}\n",
+        "notes": [
+          "Windows: 使用文件锁定检测 (CreateFileW with share_mode=0)，准确性高",
+          "macOS: 降级到时间判断，阈值可配置（默认 86400 秒 = 24 小时）",
+          "Linux: 降级到时间判断，阈值可配置（默认 86400 秒 = 24 小时）",
+          "阈值配置: 从 settings 表读取 active_threshold 字段，函数: get_active_threshold() -> u64",
+          "配置存储: Wave 1 migrate_v6 创建的 settings 表，列名 active_threshold",
+          "配置修改: 未来在设置页面 > 高级选项中添加 UI 控件"
+        ]
+      },
+      "configuration_details": {
+        "active_threshold": {
+          "description": "活跃判断时间阈值（秒）",
+          "default_value": 86400,
+          "unit": "秒",
+          "storage": {
+            "table": "settings",
+            "column": "active_threshold",
+            "created_in": "Wave 1 (migrate_v6)",
+            "data_type": "INTEGER"
+          },
+          "read_function": {
+            "signature": "pub fn get_active_threshold(conn: &Connection) -> Result<u64>",
+            "file": "src-tauri/src/database/settings.rs",
+            "implementation": "SELECT active_threshold FROM settings WHERE id = 1"
+          },
+          "write_function": {
+            "signature": "pub fn update_active_threshold(conn: &Connection, value: u64) -> Result<()>",
+            "file": "src-tauri/src/database/settings.rs",
+            "implementation": "UPDATE settings SET active_threshold = ? WHERE id = 1"
+          },
+          "ui_location": "设置页面 > 高级选项 > 活跃判断阈值（待实现）"
+        }
+      },
+      "verification": "正确识别活跃/历史会话",
+      "status": "[ ]"
+    },
+    {
+      "step": 4,
+      "title": "存储会话到数据库",
+      "description": "将扫描到的会话存入 sessions 表",
+      "files": ["src-tauri/src/database/repository.rs"],
+      "integration": "使用 SessionRepository",
+      "methods": [
+        "pub fn upsert_session(&self, metadata: &SessionMetadata) -> Result<Session>"
+      ],
+      "upsert_logic": [
+        "1. 检查 session_id 是否已存在",
+        "2. 如果存在，更新 updated_at 和 is_active",
+        "3. 如果不存在，创建新记录",
+        "4. 触发活跃状态更新（触发器自动处理）"
+      ],
+      "verification": "数据库中有会话记录",
+      "status": "[ ]"
+    },
+    {
+      "step": 5,
+      "title": "创建 Tauri Command",
+      "description": "暴露 scan_sessions 命令",
+      "files": ["src-tauri/src/commands.rs"],
+      "command_signature": "#[tauri::command]\npub async fn scan_sessions(\n    manager: State<'_, LLMClientManager>\n) -> Result<Vec<SessionMeta>, CommandError>",
+      "return_format": [
+        "{ sessionId, projectPath, projectName, createdAt, updatedAt, messageCount, isActive }"
+      ],
+      "implementation_details": [
+        "1. 获取数据库连接: manager.get_conn()",
+        "2. 调用 scanner::scan_session_files()",
+        "3. 对每个会话调用 repository.upsert_session()",
+        "4. 返回 SessionMeta 列表"
+      ],
+      "verification": "前端调用返回会话列表",
+      "status": "[ ]"
+    },
+    {
+      "step": 6,
+      "title": "性能优化",
+      "description": "确保扫描 100 个会话 < 2 秒",
+      "files": ["src-tauri/src/monitor/scanner.rs"],
+      "optimizations": [
+        "使用并行扫描 (rayon crate)",
+        "缓存已扫描结果",
+        "增量扫描（仅检查变更的文件）"
+      ],
+      "implementation": [
+        "rayon: 加入依赖 rayon = \"1.10\"",
+        "并行: use rayon::prelude::*; files.par_iter().map(...)",
+        "缓存: 使用 std::collections::HashMap 缓存上次扫描结果",
+        "增量: 基于 modified 时间判断文件是否变更"
+      ],
+      "code_example": {
+        "language": "rust",
+        "file": "src-tauri/src/monitor/scanner.rs",
+        "content": "\nuse rayon::prelude::*;\nuse std::collections::HashMap;\nuse std::sync::{Arc, Mutex};\nuse std::time::SystemTime;\n\n/// 扫描缓存：记录上次扫描结果\n#[derive(Debug, Clone)]\nstruct ScanCache {\n    entries: HashMap<String, SystemTime>,  // path -> last_modified\n}\n\nimpl ScanCache {\n    fn new() -> Self {\n        Self {\n            entries: HashMap::new(),\n        }\n    }\n\n    /// 检查文件是否需要重新扫描\n    fn needs_scan(&self, path: &str, current_modified: SystemTime) -> bool {\n        match self.entries.get(path) {\n            Some(cached) => {\n                // 如果修改时间未变，跳过\n                cached != &current_modified\n            }\n            None => true,\n        }\n    }\n}\n\n/// 并行扫描会话文件\npub fn scan_session_files_parallel() -> Result<Vec<SessionMetadata>> {\n    let projects_dir = get_claude_projects_dir()?;\n\n    // 1. 收集所有 JSONL 文件路径\n    let pattern = projects_dir.join(\\\"**\\\").join(\\\"*.jsonl\\\");\n    let paths: Vec<PathBuf> = glob::glob(pattern.to_str().unwrap())\n        .unwrap()\n        .filter_map(|p| p.ok())\n        .collect();\n\n    // 2. 并行处理每个文件\n    let results: Vec<Result<SessionMetadata>> = paths\n        .par_iter()  // 使用 rayon 并行迭代器\n        .map(|path| extract_session_metadata(path))\n        .collect();\n\n    // 3. 收集成功的结果\n    let sessions: Vec<SessionMetadata> = results\n        .into_iter()\n        .filter_map(|r| r.ok())\n        .collect();\n\n    Ok(sessions)\n}\n\n/// 增量扫描（带缓存）\npub fn scan_session_files_incremental(cache: Option<&ScanCache>) -> Result<Vec<SessionMetadata>> {\n    let projects_dir = get_claude_projects_dir()?;\n    let scan_cache = cache.unwrap_or(&ScanCache::new());\n\n    let pattern = projects_dir.join(\\\"**\\\").join(\\\"*.jsonl\\\");\n    let paths: Vec<PathBuf> = glob::glob(pattern.to_str().unwrap())\n        .unwrap()\n        .filter_map(|p| p.ok())\n        .collect();\n\n    let mut results = Vec::new();\n\n    for path in paths {\n        let path_str = path.to_str().unwrap().to_string();\n        let metadata = std::fs::metadata(&path)?;\n\n        let modified = metadata.modified()?;\n        if scan_cache.needs_scan(&path_str, modified) {\n            // 文件已变更或未缓存，需要处理\n            if let Ok(session) = extract_session_metadata(&path) {\n                results.push(session);\n            }\n        }\n    }\n\n    Ok(results)\n}\n",
+        "notes": [
+          "par_iter() 自动利用所有 CPU 核心",
+          "缓存机制可减少不必要的 I/O 操作",
+          "增量扫描适合定期刷新场景"
+        ]
+      },
+      "verification": "性能测试达标",
+      "status": "[ ]"
+    },
+    {
+      "step": 7,
+      "title": "实现超时机制",
+      "description": "为长时间运行的扫描添加超时保护，防止 UI 阻塞",
+      "_v5_addition": "v5.0 新增：修复数据流断链问题（T1_PERF Step 8 调用此函数）",
+      "files": ["src-tauri/src/monitor/scanner.rs"],
+      "function_signature": "pub fn scan_sessions_with_timeout(timeout: Duration) -> Result<Vec<SessionMetadata>>",
+      "implementation": [
+        "使用 std::thread::spawn 创建扫描线程",
+        "使用 std::thread::sleep 超时等待",
+        "超时后返回超时错误或部分结果",
+        "确保线程资源正确释放"
+      ],
+      "code_example": {
+        "language": "rust",
+        "file": "src-tauri/src/monitor/scanner.rs",
+        "content": "\nuse std::time::{Duration, Instant};\nuse std::thread;\nuse anyhow::{Result, Context};\n\n/// 超时扫描错误\n#[derive(Debug, thiserror::Error)]\npub enum ScanTimeoutError {\n    #[error(\"扫描超时: 超过 {timeout:?}\")]\n    Timeout { timeout: Duration },\n\n    #[error(\"扫描失败: {0}\")]\n    ScanFailed(#[from] anyhow::Error),\n}\n\n/// 带超时的会话扫描\n/// \n/// # Arguments\n/// * `timeout` - 超时时间，建议 Duration::from_secs(10)\n/// \n/// # Returns\n/// * `Ok(Vec<SessionMetadata>)` - 扫描到的会话列表\n/// * `Err(ScanTimeoutError::Timeout)` - 超时\n/// \n/// # Behavior\n/// - 在后台线程执行扫描\n/// - 等待指定时间或扫描完成\n/// - 超时后立即返回，取消后台扫描\npub fn scan_sessions_with_timeout(timeout: Duration) -> Result<Vec<SessionMetadata>> {\n    let start = Instant::now();\n    \n    // 创建通道用于线程间通信\n    let (tx, rx) = std::sync::mpsc::channel();\n    \n    // 在后台线程执行扫描\n    let handle = thread::spawn(move || {\n        let result = scan_session_files();\n        // 发送结果，忽略发送错误（接收端可能已超时关闭）\n        let _ = tx.send(result);\n    });\n    \n    // 等待结果或超时\n    let result = rx.recv_timeout(timeout);\n    \n    match result {\n        Ok(scan_result) => {\n            // 扫描完成\n            let elapsed = start.elapsed();\n            eprintln!(\"扫描完成，耗时: {:?}\", elapsed);\n            scan_result.map_err(|e| ScanTimeoutError::from(e))\n        }\n        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {\n            // 超时\n            eprintln!(\"⚠️  扫描超时: 超过 {:?}\", timeout);\n            // 注意：后台线程仍在运行，但没有简单方法取消它\n            // 实际项目中可考虑使用 atomic flag 或 tokio::time::timeout\n            Err(ScanTimeoutError::Timeout { timeout }.into())\n        }\n        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {\n            // 线程意外终止\n            Err(anyhow::anyhow!(\"扫描线程意外终止\").into())\n        }\n    }\n}\n\n/// 便捷函数：使用默认超时（10 秒）\npub fn scan_sessions_with_default_timeout() -> Result<Vec<SessionMetadata>> {\n    scan_sessions_with_timeout(Duration::from_secs(10))\n}\n",
+        "dependencies": ["std::thread", "std::sync::mpsc", "std::time", "thiserror = \"1.0\""],
+        "notes": [
+          "使用 std::sync::mpsc::channel 进行线程间通信",
+          "recv_timeout 实现超时等待",
+          "后台线程取消需要额外机制（atomic flag 或 tokio）",
+          "thiserror 用于优雅的错误类型定义"
+        ]
+      },
+      "error_handling": {
+        "timeout": "返回 ScanTimeoutError::Timeout，调用方可处理或重试",
+        "partial_result": "当前实现不返回部分结果，超时即失败",
+        "thread_cleanup": "后台线程会自然结束，但资源释放不立即",
+        "future_improvement": "考虑使用 async/await + tokio::time::timeout 实现真正的取消"
+      },
+      "testing": {
+        "unit_tests": [
+          "测试正常扫描完成",
+          "测试超时场景（使用非常短的超时时间）",
+          "测试错误处理"
+        ],
+        "integration_tests": [
+          "T1_PERF Step 8 会调用此函数"
+        ]
+      },
+      "verification": "超时机制正确工作，T1_PERF Step 8 测试通过",
+      "status": "[ ]"
+    }
+  ],
+  "acceptance_criteria": [
+    "AC1: 启动应用后自动扫描 ~/.claude/projects/",
+    "AC2: 返回所有会话的元数据列表",
+    "AC3: 活跃会话的 is_active 字段为 true",
+    "AC4: 扫描 100 个会话 < 2 秒",
+    "AC5: 处理不存在的目录（返回空列表而非报错）",
+    "AC6: 处理损坏的 JSONL 文件（跳过而非崩溃）",
+    "AC7 (v5.0 新增): 超时机制正常工作（10 秒超时）"
+  ],
+  "testing_checklist": [
+    "TC1.2.1: 测试空目录场景（~/.claude/projects/ 不存在）",
+    "TC1.2.2: 测试单个会话文件扫描",
+    "TC1.2.3: 测试嵌套项目目录扫描",
+    "TC1.2.4: 测试活跃会话检测（Windows 锁定检测）",
+    "TC1.2.5: 测试性能：100 个会话扫描时间",
+    "TC1.2.6: 测试损坏文件的容错处理",
+    "TC1.2.7 (v5.0 新增): 测试超时机制正常工作"
+  ],
+  "data_structures": {
+    "SessionMetadata": {
+      "description": "会话元数据结构",
+      "fields": [
+        "session_id: String (UUID)",
+        "project_path: String",
+        "project_name: String",
+        "file_path: PathBuf",
+        "created_at: String (RFC3339)",
+        "updated_at: String (RFC3339)",
+        "message_count: usize",
+        "is_active: bool"
+      ]
+    },
+    "SessionMeta": {
+      "description": "返回给前端的会话元数据（简化版）",
+      "fields": [
+        "sessionId: String",
+        "projectPath: String",
+        "projectName: String",
+        "createdAt: String",
+        "updatedAt: String",
+        "messageCount: usize",
+        "isActive: bool"
+      ]
+    }
+  },
+  "error_handling": {
+    "directory_not_found": "返回空 Vec 而非错误，在日志中记录警告",
+    "corrupted_jsonl": "跳过损坏文件，记录到日志，继续扫描其他文件",
+    "permission_denied": "记录错误，跳过无权限访问的目录",
+    "invalid_uuid": "跳过无效的文件名，记录到日志"
+  },
+  "dependencies_addition": {
+    "cargo_toml": [
+      "dirs = \"5.0\"",
+      "glob = \"0.3\"",
+      "rayon = \"1.10\"",
+      "thiserror = \"1.0\"  // v8.0 新增：Step 7 的 ScanTimeoutError 使用 thiserror::Error"
+    ]
+  }
+}

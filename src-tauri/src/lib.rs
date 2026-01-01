@@ -1,7 +1,12 @@
 // LLM 客户端模块
+// 注意：模块声明顺序很重要，被依赖的模块需要先声明
+pub mod perf;
 mod llm;
 mod database;
 mod commands;
+mod tokenizer;
+mod monitor;
+mod parser;
 
 use llm::LLMClientManager;
 use database::migrations;
@@ -36,6 +41,18 @@ pub fn run() {
             cmd_delete_provider,
             cmd_set_active_provider,
             cmd_test_provider_connection,
+            count_prompt_tokens,
+            scan_sessions,
+            run_benchmarks,
+            parse_session_tree,
+            set_session_rating,
+            set_session_tags,
+            get_session_rating,
+            get_session_tags,
+            archive_session,
+            unarchive_session,
+            get_archived_sessions,
+            get_active_sessions,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

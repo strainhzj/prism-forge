@@ -1,0 +1,206 @@
+{
+  "_file_type": "strategy_guide",
+  "_description": "Wave 1 策略指南：Git 策略、风险缓解、交付物",
+  "git_strategy": {
+    "_resource_reference": "dev_plans/plan1/resources/wave1/database/11_git_strategy.md",
+    "description": "详细的 Git 策略、工作流和冲突解决指南已提取到资源文件",
+    "workflow_summary": "parallel_sub_branches: master -> feat/phase1-wave1 -> feat/phase1-wave1-t1_1/t2_7",
+    "merge_summary": "T1_1 -> feat/phase1-wave1, T2_7 -> feat/phase1-wave1, feat/phase1-wave1 -> master",
+    "branch_setup_commands": {
+      "phase_0_preparation": {
+        "title": "阶段 0：准备工作",
+        "steps": [
+          {
+            "step": 0,
+            "action": "确认当前分支",
+            "command": "git branch --show-current",
+            "expected_output": "master",
+            "note": "如果不在 master 分支，先切换：git checkout master"
+          },
+          {
+            "step": 1,
+            "action": "拉取最新代码",
+            "command": "git pull origin master",
+            "note": "确保本地 master 分支是最新的"
+          },
+          {
+            "step": 2,
+            "action": "确认工作区干净",
+            "command": "git status",
+            "expected_output": "nothing to commit, working tree clean",
+            "note": "如果有未提交的更改，先提交或暂存"
+          }
+        ]
+      },
+      "phase_1_create_wave_branch": {
+        "title": "阶段 1：创建 Wave 主分支",
+        "steps": [
+          {
+            "step": 3,
+            "action": "创建 Wave 1 主分支",
+            "command": "git checkout -b feat/phase1-wave1",
+            "note": "这个分支用于集成 T1_1 和 T2_7 的成果"
+          },
+          {
+            "step": 4,
+            "action": "推送主分支到远程",
+            "command": "git push -u origin feat/phase1-wave1",
+            "note": "可选：如果需要远程备份"
+          }
+        ]
+      },
+      "phase_2_create_parallel_branches": {
+        "title": "阶段 2：创建并行任务分支",
+        "t1_1_branch": [
+          {
+            "step": 5a,
+            "action": "创建 T1_1 任务分支",
+            "command": "git checkout -b feat/phase1-wave1-t1_1",
+            "note": "从 feat/phase1-wave1 分支创建"
+          },
+          {
+            "step": 5b,
+            "action": "开始 T1_1 开发",
+            "command": "# 参考 wave1.2_task_t1_1.json 执行任务",
+            "note": "完成后提交到本分支"
+          }
+        ],
+        "t2_7_branch": [
+          {
+            "step": 6a,
+            "action": "创建 T2_7 任务分支",
+            "command": "git checkout feat/phase1-wave1 && git checkout -b feat/phase1-wave1-t2_7",
+            "note": "从 feat/phase1-wave1 分支创建"
+          },
+          {
+            "step": 6b,
+            "action": "开始 T2_7 开发",
+            "command": "# 参考 wave1.3_task_t2_7.json 执行任务",
+            "note": "完成后提交到本分支"
+          }
+        ]
+      },
+      "phase_3_merge_parallel_branches": {
+        "title": "阶段 3：合并并行任务分支",
+        "steps": [
+          {
+            "step": 7,
+            "action": "切换到 Wave 主分支",
+            "command": "git checkout feat/phase1-wave1"
+          },
+          {
+            "step": 8,
+            "action": "合并 T1_1 分支",
+            "command": "git merge --no-ff feat/phase1-wave1-t1_1 -m \"Merge T1_1: 集成 SQLite 与 sqlite-vec\"",
+            "note": "解决 Cargo.toml 冲突（如有）"
+          },
+          {
+            "step": 9,
+            "action": "合并 T2_7 分支",
+            "command": "git merge --no-ff feat/phase1-wave1-t2_7 -m \"Merge T2_7: 集成 Tiktoken 计数器\"",
+            "note": "再次解决 Cargo.toml 冲突（如有）"
+          },
+          {
+            "step": 10,
+            "action": "运行集成测试",
+            "command": "cargo test --all && cargo clippy",
+            "note": "确保合并后代码能正常工作"
+          }
+        ]
+      },
+      "phase_4_final_merge": {
+        "title": "阶段 4：最终合并到 master",
+        "steps": [
+          {
+            "step": 11,
+            "action": "切换到 master 分支",
+            "command": "git checkout master"
+          },
+          {
+            "step": 12,
+            "action": "拉取最新代码（如有其他更改）",
+            "command": "git pull origin master"
+          },
+          {
+            "step": 13,
+            "action": "合并 Wave 1 主分支",
+            "command": "git merge --no-ff feat/phase1-wave1 -m \"[WAVE_1] 完成数据库基石与 Token 计数器\"",
+            "note": "解决最终冲突（如有）"
+          },
+          {
+            "step": 14,
+            "action": "推送合并结果",
+            "command": "git push origin master"
+          },
+          {
+            "step": 15,
+            "action": "清理临时分支（可选）",
+            "command": "git branch -d feat/phase1-wave1 feat/phase1-wave1-t1_1 feat/phase1-wave1-t2_7",
+            "note": "仅在确认一切正常后执行"
+          }
+        ]
+      }
+    },
+    "commit_message_template": {
+      "t1_1_commits": [
+        "[T1_1] deps: 添加 sqlite-vec 和 chrono 依赖",
+        "[T1_1] refactor: 修改 migrations.rs 支持 v4-v8 迁移",
+        "[T1_1] feat: 实现 database/init.rs 全局单例连接",
+        "[T1_1] feat: 添加 Session, Message, MessageEmbedding 数据模型",
+        "[T1_1] feat: 实现 Session/Message/MessageEmbedding Repository",
+        "[T1_1] test: 添加并发测试和向量功能测试"
+      ],
+      "t2_7_commits": [
+        "[T2_7] deps: 添加 tiktoken-rs 依赖",
+        "[T2_7] feat: 实现 tokenizer 模块和 count_tokens 函数",
+        "[T2_7] feat: 添加 count_prompt_tokens Tauri 命令",
+        "[T2_7] test: 添加 Token 计数器边界测试用例"
+      ]
+    }
+  },
+  "deliverables": [
+    "完整的数据库 schema 和迁移脚本（v4-v8）",
+    "全局单例数据库连接管理（init.rs + sqlite-vec 集成）",
+    "更新后的 ApiProviderRepository 和新增的 Session/Message/MessageEmbedding Repository",
+    "可工作的 Token 计数器（tokenizer 模块，含完善的模型匹配）",
+    "完整的单元测试覆盖（包括并发和错误处理测试）",
+    "技术文档（API 文档、数据库设计文档）"
+  ],
+  "risks_and_mitigations": [
+    {
+      "risk": "sqlite-vec 编译失败",
+      "probability": "low",
+      "impact": "high",
+      "mitigation": "使用 bundled features 预编译版本（已在 Cargo.toml 配置），必要时降级到纯 SQL 实现向量距离计算"
+    },
+    {
+      "risk": "Breaking Change 导致现有功能失效",
+      "probability": "medium",
+      "impact": "high",
+      "mitigation": "完整的单元测试覆盖，迁移后运行所有测试验证功能，保留详细的迁移文档"
+    },
+    {
+      "risk": "并发访问导致死锁",
+      "probability": "low",
+      "impact": "medium",
+      "mitigation": "设置 busy_timeout = 30s，使用 WAL 模式，限制单次操作时间，避免长时间持有锁"
+    },
+    {
+      "risk": "时间戳格式不一致",
+      "probability": "low",
+      "impact": "medium",
+      "mitigation": "统一使用 chrono::Utc::now().to_rfc3339()，添加验证函数，在代码注释中明确说明"
+    },
+    {
+      "risk": "Claude 模型 Token 计数不准确",
+      "probability": "medium",
+      "impact": "low",
+      "mitigation": "使用已知的 1.2 系数近似计算，在文档中说明误差范围，后续可集成 anthropic-rs 提升精度"
+    }
+  ],
+  "test_failure_recovery": {
+    "_resource_reference": "dev_plans/plan1/resources/wave1/database/12_test_failure_recovery.md",
+    "description": "详细的并发测试失败诊断和恢复策略已提取到资源文件",
+    "scenarios_summary": "场景1: 死锁, 场景2: Mutex毒化, 场景3: 数据不一致, 场景4: 连接耗尽"
+  }
+}

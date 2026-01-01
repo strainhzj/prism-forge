@@ -1,0 +1,134 @@
+{
+  "_file_type": "task_definition",
+  "_description": "Wave 3 任务 T2_2：消息树构建",
+  "task_id": "T2_2",
+  "name": "消息树构建",
+  "sub_branch": "feat/phase2-wave3-t2_2",
+  "assignee": "backend",
+  "estimated_hours": 16,
+  "priority": "critical",
+  "status": "completed",
+  "requirement_ref": [
+    "F2.2"
+  ],
+  "dependencies": [
+    "T2_1"
+  ],
+  "output_artifacts": [
+    "src-tauri/src/parser/tree.rs",
+    "src-tauri/src/parser/mod.rs (注册 tree 模块)",
+    "src-tauri/src/commands.rs (新增 parse_session_tree 命令)",
+    "src-tauri/src/lib.rs (注册命令)"
+  ],
+  "implementation_steps": [
+    {
+      "step": 1,
+      "title": "定义消息树数据结构",
+      "description": "创建 MessageNode 和 ConversationTree 结构体",
+      "status": "[x]",
+      "files": [
+        "src-tauri/src/parser/tree.rs"
+      ],
+      "details": [
+        "MessageNode: 包含 id, parent_id, depth, children, message_data 字段",
+        "ConversationTree: 包含 roots, total_count, max_depth, thread_count 元信息",
+        "支持线程 ID (thread_id) 用于多线程对话追踪",
+        "提供便捷方法: is_user_message(), is_assistant_message(), is_tool_use()"
+      ]
+    },
+    {
+      "step": 2,
+      "title": "实现消息树构建算法",
+      "description": "使用迭代算法构建消息树，避免递归栈溢出",
+      "status": "[x]",
+      "files": [
+        "src-tauri/src/parser/tree.rs"
+      ],
+      "functions": [
+        "MessageTreeBuilder::build_from_entries() - 从 JsonlEntry 列表构建树",
+        "MessageTreeBuilder::build_tree_iterative() - 迭代算法实现",
+        "MessageTreeBuilder::count_threads() - 统计线程数量"
+      ],
+      "details": [
+        "两遍扫描算法: 1) 建立父子关系映射 2) 反向构建树（从叶子到根）",
+        "使用 HashMap 存储节点和子节点映射",
+        "反向遍历避免借用冲突，确保线程安全",
+        "自动识别 User 消息作为根节点"
+      ]
+    },
+    {
+      "step": 3,
+      "title": "注册模块和命令",
+      "description": "集成到项目架构",
+      "status": "[x]",
+      "files": [
+        "src-tauri/src/parser/mod.rs",
+        "src-tauri/src/commands.rs",
+        "src-tauri/src/lib.rs"
+      ],
+      "commands": [
+        "parse_session_tree - 解析会话文件并返回消息树"
+      ],
+      "response_format": "{ sessionId, tree, parseDurationMs, messageCount, maxDepth }",
+      "details": [
+        "命令名称使用 parse_session_tree 避免与 main.rs 的 parse_session_file 冲突",
+        "ParseSessionResponse 结构体包含完整树信息和元数据",
+        "支持从文件路径提取会话 ID"
+      ]
+    },
+    {
+      "step": 4,
+      "title": "编写单元测试",
+      "description": "验证消息树构建功能",
+      "status": "[x]",
+      "tests": [
+        "test_build_simple_tree - 构建简单三层树",
+        "test_build_multiple_roots - 多根节点处理",
+        "test_deep_nesting - 深层嵌套（100层）处理",
+        "test_message_type_detection - 消息类型检测"
+      ],
+      "verification": "所有单元测试通过",
+      "details": [
+        "测试覆盖简单树、多根、深层嵌套等场景",
+        "验证迭代算法不会栈溢出",
+        "验证根节点识别和深度计算正确性"
+      ]
+    }
+  ],
+  "acceptance_criteria": [
+    "AC1: 能从 JsonlEntry 列表正确构建消息树",
+    "AC2: 根节点为 User 消息",
+    "AC3: 支持深层嵌套（100+ 层）而不栈溢出",
+    "AC4: 正确计算节点深度",
+    "AC5: 单元测试全部通过",
+    "AC6: cargo check 编译通过"
+  ],
+  "testing_checklist": {
+    "unit_tests": [
+      "test_build_simple_tree - 验证基本树构建",
+      "test_build_multiple_roots - 验证多根节点",
+      "test_deep_nesting - 验证迭代算法深层嵌套",
+      "test_message_type_detection - 验证消息类型识别"
+    ],
+    "verification_commands": [
+      "cargo test parser::tree",
+      "cargo check"
+    ]
+  },
+  "notes": [
+    "使用迭代算法而非递归，避免深层嵌套导致栈溢出",
+    "命令名称改为 parse_session_tree 避免与现有命令冲突",
+    "支持多线程对话（通过 thread_id 字段）",
+    "使用反向构建（叶子到根）避免借用冲突",
+    "所有代码遵循项目中文注释规范"
+  ],
+  "completion_summary": {
+    "date": "2025-12-31",
+    "total_hours": 16,
+    "actual_hours": "约 3 小时",
+    "files_created": 1,
+    "files_modified": 3,
+    "tests_passed": 4,
+    "compilation_status": "通过（仅有警告，无错误）"
+  }
+}

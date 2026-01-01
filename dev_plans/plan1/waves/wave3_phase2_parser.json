@@ -1,501 +1,136 @@
 {
   "wave_id": "WAVE_3",
   "name": "第三波：PHASE_2 解析引擎（与 PHASE_2B 并行）",
+  "status": "completed",
+  "completed_at": "2025-12-31",
   "description": "实现 JSONL 解析、消息树重构、关键信息提取，以及 PHASE_2B 的会话资产管理",
+  "conflict_resolution": {
+    "description": "多任务修改 commands.rs 的合并策略",
+    "strategy": "sequential_merge",
+    "merge_order": [
+      "0. T2_2 完成 → 添加 parse_session_file 命令",
+      "1. T2_5 完成 → 添加 get_message_at 命令",
+      "2. T2B_1 完成 → 添加项目聚合命令（get_projects, get_project_sessions）",
+      "3. T2B_2 完成 → 添加评分标签命令（set_session_rating, set_session_tags）",
+      "4. T2B_3 完成 → 添加归档命令（archive_session, unarchive_session, get_archived_sessions）"
+    ],
+    "integration_verification": [
+      "每个任务完成后，运行 cargo check 验证编译",
+      "最终集成测试验证所有命令可正常调用"
+    ]
+  },
   "branch": {
     "name": "feat/phase2-wave3",
-    "base": "master",
+    "base": "feat/phase1-wave2",
     "strategy": "feature_branch",
-    "depends_on": ["feat/phase1-wave2"]
+    "depends_on": [
+      "WAVE_2"
+    ]
+  },
+  "prerequisites": {
+    "description": "Wave 3 前置条件",
+    "waves_required": [
+      {
+        "wave_id": "WAVE_2",
+        "tasks_required": ["T1_2", "T1_3"],
+        "reason": "T2_1/T2_5 依赖 T1_2 (会话扫描器), T2_3/T2B_2/T2B_3 依赖 T1_3 (数据库表结构)"
+      }
+    ],
+    "database_versions_required": ["v9", "v10", "v11", "v12"],
+    "verification_commands": [
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('saved_prompts', 'meta_templates');",
+      "PRAGMA table_info(sessions); -- 验证 rating, tags, is_archived 字段存在"
+    ]
   },
   "parallel_groups": [
     {
       "group_id": "GROUP_A_PARSER",
-      "name": "解析引擎核心",
-      "description": "JSONL 解析、消息树、关键信息提取",
-      "sub_branch": "feat/phase2-wave3-parser",
-      "sequential_tasks": [
+      "name": "解析引擎组",
+      "branch": "feat/phase2-wave3-parser",
+      "description": "实现 JSONL 解析、消息树构建、关键信息提取",
+      "execution_order": "sequential",
+      "merge_target": "feat/phase2-wave3",
+      "tasks": [
         {
           "task_id": "T2_1",
           "name": "实现 JSONL 流式解析",
-          "assignee": "backend",
           "estimated_hours": 16,
           "priority": "critical",
-          "status": "pending",
-          "requirement_ref": ["F2.1", "F2.2"],
-          "dependencies": ["T1_2"],
-          "output_artifacts": [
-            "src-tauri/src/parser/jsonl.rs",
-            "src-tauri/src/parser/mod.rs"
+          "dependencies": [
+            "T1_2"
           ],
-          "implementation_steps": [
-            {
-              "step": 1,
-              "title": "创建 parser 模块",
-              "description": "建立解析模块结构",
-              "files": ["src-tauri/src/parser/mod.rs"],
-              "verification": "模块编译通过"
-            },
-            {
-              "step": 2,
-              "title": "实现 JSONL 行解析",
-              "description": "解析单行 JSON 并提取元数据",
-              "files": ["src-tauri/src/parser/jsonl.rs"],
-              "functions": [
-                "pub struct JsonlParser { session_id, file_path, last_offset, buffer }",
-                "pub fn parse_line(&mut self, line: &str) -> Result<ParsedMessage>",
-                "pub fn parse_incremental(&mut self) -> Result<Vec<ParsedMessage>>"
-              ],
-              "parsed_fields": [
-                "uuid: String",
-                "parent_uuid: Option<String>",
-                "type: MessageType (User/Assistant/Tool)",
-                "timestamp: DateTime<Utc>",
-                "content: MessageContent",
-                "offset: u64",
-                "length: u64"
-              ],
-              "verification": "能正确解析各种消息类型"
-            },
-            {
-              "step": 3,
-              "title": "处理未完成的行",
-              "description": "实现缓冲区处理逻辑",
-              "buffer_logic": [
-                "1. 检测未完成的 JSON（行尾无换行符）",
-                "2. 保存到 buffer 字段",
-                "3. 下次读取时拼接 buffer 和新行",
-                "4. 解码失败则继续等待更多数据"
-              ],
-              "verification": "正确处理文件写入中的场景"
-            },
-            {
-              "step": 4,
-              "title": "实现 FileShare 模式",
-              "description": "支持 Windows 并发读取",
-              "implementation": "使用 std::os::windows::fs::OpenOptionsExt",
-              "flags": "FILE_SHARE_READ | FILE_SHARE_WRITE",
-              "verification": "能读取被 Claude Code 占用的文件"
-            }
-          ],
-          "acceptance_criteria": [
-            "AC1: 能解析包含工具调用的消息",
-            "AC2: 能解析包含错误的消息",
-            "AC3: 正确处理未完成的行",
-            "AC4: 记录每条消息的 offset 和 length",
-            "AC5: 支持 FileShare 模式读取"
-          ],
-          "testing_checklist": [
-            "TC2.1.1: 测试标准 User 消息解析",
-            "TC2.1.2: 测试包含 tool_use 的 Assistant 消息",
-            "TC2.1.3: 测试 Tool 消息解析",
-            "TC2.1.4: 测试未完成行的缓冲",
-            "TC2.1.5: 测试并发读取 (FileShare)"
-          ]
+          "sub_branch": "feat/phase2-wave3-t2_1"
         },
         {
           "task_id": "T2_2",
           "name": "消息树构建",
-          "assignee": "backend",
-          "estimated_hours": 12,
+          "estimated_hours": 16,
           "priority": "critical",
-          "status": "pending",
-          "requirement_ref": ["F2.2"],
-          "dependencies": ["T2_1"],
-          "output_artifacts": [
-            "src-tauri/src/parser/tree.rs"
+          "dependencies": [
+            "T2_1"
           ],
-          "implementation_steps": [
-            {
-              "step": 1,
-              "title": "定义 MessageNode 结构",
-              "description": "嵌套消息节点",
-              "files": ["src-tauri/src/parser/tree.rs"],
-              "structure": [
-                "pub struct MessageNode {",
-                "  uuid: String,",
-                "  parent_uuid: Option<String>,",
-                "  type: MessageType,",
-                "  timestamp: DateTime<Utc>,",
-                "  content: MessageContent,",
-                "  children: Vec<MessageNode>,",
-                "  metadata: MessageMetadata",
-                "}"
-              ],
-              "verification": "结构实现 Serialize/Deserialize"
-            },
-            {
-              "step": 2,
-              "title": "实现树构建器",
-              "description": "根据 parent_uuid 重构消息树",
-              "files": ["src-tauri/src/parser/tree.rs"],
-              "functions": [
-                "pub struct MessageTreeBuilder { nodes: HashMap<String, MessageNode> }",
-                "pub fn insert(&mut self, msg: ParsedMessage)",
-                "pub fn build(self) -> Vec<MessageNode>"
-              ],
-              "algorithm": [
-                "1. 将所有消息存入 HashMap (uuid -> MessageNode)",
-                "2. 遍历消息，将子消息添加到父消息的 children",
-                "3. 收集所有根节点 (parent_uuid 为 None)",
-                "4. 返回根节点列表"
-              ],
-              "verification": "正确构建嵌套结构"
-            },
-            {
-              "step": 3,
-              "title": "防止栈溢出",
-              "description": "使用迭代算法处理深层嵌套",
-              "implementation": "使用迭代器而非递归",
-              "verification": "处理 100+ 层嵌套不崩溃"
-            }
-          ],
-          "acceptance_criteria": [
-            "AC1: 输出正确的嵌套 MessageNode JSON 结构",
-            "AC2: 根节点为 User 消息",
-            "AC3: 工具调用作为子节点正确嵌套",
-            "AC4: 深层嵌套不导致栈溢出"
-          ],
-          "testing_checklist": [
-            "TC2.2.1: 测试简单对话树（用户-助手）",
-            "TC2.2.2: 测试包含工具调用的树",
-            "TC2.2.3: 测试深层嵌套（50+ 层）",
-            "TC2.2.4: 测试不连续的 UUID（缺失父节点）",
-            "TC2.2.5: 测试循环引用防护"
-          ]
+          "sub_branch": "feat/phase2-wave3-t2_2"
         },
         {
           "task_id": "T2_3",
           "name": "关键信息提取器",
-          "assignee": "backend",
           "estimated_hours": 14,
           "priority": "high",
-          "status": "pending",
-          "requirement_ref": ["F2.3", "F2.4"],
-          "dependencies": ["T2_2"],
-          "output_artifacts": [
-            "src-tauri/src/parser/extractor.rs"
+          "dependencies": [
+            "T2_2",
+            "T1_3"
           ],
-          "implementation_steps": [
-            {
-              "step": 1,
-              "title": "定义提取目标",
-              "description": "确定需要提取的信息类型",
-              "targets": [
-                "tool_calls: 工具调用序列",
-                "errors: 错误消息",
-                "code_changes: 代码变更 (Read/Write 操作)",
-                "file_operations: 文件操作记录"
-              ],
-              "verification": "设计文档完整"
-            },
-            {
-              "step": 2,
-              "title": "实现提取逻辑",
-              "description": "遍历消息树提取关键信息",
-              "files": ["src-tauri/src/parser/extractor.rs"],
-              "functions": [
-                "pub struct ContextExtractor;",
-                "pub fn extract(&self, nodes: &[MessageNode]) -> Result<ExtractedContext>",
-                "pub fn generate_summary(&self, context: &ExtractedContext) -> String"
-              ],
-              "extraction_rules": [
-                "tool_calls: 识别 type=tool_use 的内容",
-                "errors: 识别包含错误关键词的消息",
-                "code_changes: 解析 Write/Edit 工具参数",
-                "file_operations: 统计 Read/Glob 等操作"
-              ],
-              "verification": "正确提取各种类型信息"
-            },
-            {
-              "step": 3,
-              "title": "生成摘要",
-              "description": "生成用于列表展示的 summary",
-              "summary_content": [
-                "用户意图 (第一条 User 消息)",
-                "使用的工具列表",
-                "是否有错误",
-                "代码变更数量"
-              ],
-              "verification": "摘要简洁且信息充分"
-            }
-          ],
-          "acceptance_criteria": [
-            "AC1: MessageNode.metadata 包含 tool_calls 数组",
-            "AC2: MessageNode.metadata 包含 errors 数组",
-            "AC3: MessageNode.metadata 包含 code_changes 数组",
-            "AC4: summary 字段适合列表展示（< 200 字符）"
-          ],
-          "testing_checklist": [
-            "TC2.3.1: 测试工具调用提取",
-            "TC2.3.2: 测试错误消息提取",
-            "TC2.3.3: 测试代码变更提取",
-            "TC2.3.4: 测试摘要生成质量",
-            "TC2.3.5: 测试边界情况（空会话）"
-          ]
+          "sub_branch": "feat/phase2-wave3-t2_3"
         },
         {
           "task_id": "T2_5",
           "name": "实现 FileShare 与 Offset 读取",
-          "assignee": "backend",
           "estimated_hours": 10,
           "priority": "high",
-          "status": "pending",
-          "requirement_ref": ["NF2", "F2.1"],
-          "dependencies": ["T2_1"],
-          "output_artifacts": [
-            "src-tauri/src/parser/reader.rs"
+          "dependencies": [
+            "T2_1"
           ],
-          "implementation_steps": [
-            {
-              "step": 1,
-              "title": "实现 Offset 读取器",
-              "description": "通过 offset 按需读取完整消息",
-              "files": ["src-tauri/src/parser/reader.rs"],
-              "functions": [
-                "pub struct JsonlReader { file_path: PathBuf }",
-                "pub fn read_at(&self, offset: u64, length: u64) -> Result<Message>",
-                "pub fn open_shared(path: &Path) -> Result<File>"
-              ],
-              "verification": "能从文件准确读取单条 JSON"
-            },
-            {
-              "step": 2,
-              "title": "Windows FileShare 实现",
-              "description": "配置文件共享模式",
-              "implementation": "使用 std::os::windows::fs::OpenOptionsExt",
-              "share_mode": "FILE_SHARE_READ | FILE_SHARE_WRITE",
-              "verification": "能读取被占用的文件"
-            },
-            {
-              "step": 3,
-              "title": "创建 Tauri Command",
-              "description": "暴露 get_message_at 命令",
-              "files": ["src-tauri/src/commands.rs"],
-              "command_signature": "pub fn get_message_at(session_id: String, offset: u64, length: u64) -> Result<Message>",
-              "verification": "前端可按需加载消息"
-            }
-          ],
-          "acceptance_criteria": [
-            "AC1: 通过 offset 能从文件准确读取单条 JSON",
-            "AC2: 即使文件被 Claude Code 占用也能读取",
-            "AC3: 读取失败的错误处理完善"
-          ],
-          "testing_checklist": [
-            "TC2.5.1: 测试 offset 准确性",
-            "TC2.5.2: 测试并发读取场景",
-            "TC2.5.3: 测试错误处理（无效 offset）",
-            "TC2.5.4: 测试大文件读取性能"
-          ]
+          "sub_branch": "feat/phase2-wave3-t2_5"
         }
       ]
     },
     {
       "group_id": "GROUP_B_PHASE2B",
-      "name": "PHASE_2B 会话资产管理",
-      "description": "多项目管理、评分标签、归档功能",
-      "sub_branch": "feat/phase2-wave3-phase2b",
-      "parallel_with": "GROUP_A_PARSER",
-      "sequential_tasks": [
+      "name": "会话资产管理组",
+      "branch": "feat/phase2-wave3-phase2b",
+      "description": "实现多项目管理、评分标签、归档功能",
+      "execution_order": "sequential",
+      "merge_target": "feat/phase2-wave3",
+      "tasks": [
         {
           "task_id": "T2B_1",
           "name": "实现项目聚合逻辑",
-          "assignee": "backend",
-          "estimated_hours": 12,
+          "estimated_hours": 16,
           "priority": "high",
-          "status": "pending",
-          "requirement_ref": ["F7.1", "F7.2"],
-          "dependencies": ["T1_2"],
-          "output_artifacts": [
-            "src-tauri/src/knowledge/project_manager.rs",
-            "src-tauri/src/knowledge/mod.rs"
+          "dependencies": [
+            "T1_2"
           ],
-          "implementation_steps": [
-            {
-              "step": 1,
-              "title": "创建 knowledge 模块",
-              "description": "建立知识管理模块",
-              "files": ["src-tauri/src/knowledge/mod.rs"],
-              "verification": "模块编译通过"
-            },
-            {
-              "step": 2,
-              "title": "实现项目聚合",
-              "description": "按项目路径聚合会话",
-              "files": ["src-tauri/src/knowledge/project_manager.rs"],
-              "functions": [
-                "pub fn aggregate_by_project(sessions: &[Session]) -> Vec<ProjectGroup>",
-                "pub fn get_recent_active_session(project: &ProjectGroup) -> Option<Session>"
-              ],
-              "aggregation_logic": [
-                "1. 提取所有唯一的 project_path",
-                "2. 按路径分组会话",
-                "3. 统计每个项目的会话数",
-                "4. 按更新时间排序"
-              ],
-              "verification": "正确聚合项目"
-            },
-            {
-              "step": 3,
-              "title": "实现智能上下文切换",
-              "description": "点击项目时自动加载最近活跃会话",
-              "functions": [
-                "pub fn get_project_context(project_path: &str) -> Result<ProjectContext>"
-              ],
-              "context_content": [
-                "项目基本信息",
-                "最近活跃会话",
-                "会话统计（总数、活跃数）"
-              ],
-              "verification": "返回正确的项目上下文"
-            },
-            {
-              "step": 4,
-          "title": "创建 Tauri Commands",
-              "description": "暴露项目聚合命令",
-              "files": ["src-tauri/src/commands.rs"],
-              "commands": [
-                "get_projects() -> Result<Vec<ProjectGroup>>",
-                "get_project_sessions(project_path: String) -> Result<Vec<Session>>"
-              ],
-              "verification": "前端可获取项目结构"
-            }
-          ],
-          "acceptance_criteria": [
-            "AC1: 前端侧边栏显示项目文件夹结构",
-            "AC2: 点击项目展开其会话列表",
-            "AC3: 项目按更新时间排序",
-            "AC4: 显示每个项目的会话数量"
-          ],
-          "testing_checklist": [
-            "TC2B.1.1: 测试单项目多会话聚合",
-            "TC2B.1.2: 测试多项目聚合",
-            "TC2B.1.3: 测试空项目处理",
-            "TC2B.1.4: 测试项目路径提取准确性"
-          ]
+          "sub_branch": "feat/phase2-wave3-t2b_1"
         },
         {
           "task_id": "T2B_2",
           "name": "实现会话评分与标签",
-          "assignee": "backend",
           "estimated_hours": 10,
-          "priority": "high",
-          "status": "pending",
-          "requirement_ref": ["F7.3"],
-          "dependencies": ["T1_3"],
-          "output_artifacts": [
-            "src-tauri/src/knowledge/rating_system.rs"
+          "priority": "medium",
+          "dependencies": [
+            "T1_3"
           ],
-          "implementation_steps": [
-            {
-              "step": 1,
-              "title": "实现评分功能",
-              "description": "1-5 星评分",
-              "files": ["src-tauri/src/knowledge/rating_system.rs"],
-              "functions": [
-                "pub fn set_session_rating(session_id: &str, rating: i32) -> Result<()>",
-                "pub fn get_session_rating(session_id: &str) -> Result<i32>"
-              ],
-              "validation": "评分范围 0-5，0 表示未评分",
-              "verification": "正确保存和读取评分"
-            },
-            {
-              "step": 2,
-              "title": "实现标签功能",
-              "description": "添加、删除、查询标签",
-              "functions": [
-                "pub fn set_session_tags(session_id: &str, tags: Vec<String>) -> Result<()>",
-                "pub fn add_session_tag(session_id: &str, tag: String) -> Result<()>",
-                "pub fn remove_session_tag(session_id: &str, tag: String) -> Result<()>",
-                "pub fn get_session_tags(session_id: &str) -> Result<Vec<String>>"
-              ],
-              "storage": "JSON Array 存储在 tags 字段",
-              "verification": "标签操作正确"
-            },
-            {
-              "step": 3,
-              "title": "创建 Tauri Commands",
-              "description": "暴露评分和标签命令",
-              "files": ["src-tauri/src/commands.rs"],
-              "commands": [
-                "set_session_rating(session_id: String, rating: i32) -> Result<()>",
-                "set_session_tags(session_id: String, tags: Vec<String>) -> Result<()>"
-              ],
-              "verification": "前端可设置评分和标签"
-            }
-          ],
-          "acceptance_criteria": [
-            "AC1: 能对会话进行 1-5 星评分",
-            "AC2: 能添加多个标签",
-            "AC3: 数据持久化到数据库",
-            "AC4: 能按评分排序会话"
-          ],
-          "testing_checklist": [
-            "TC2B.2.1: 测试评分边界值（0, 1, 5）",
-            "TC2B.2.2: 测试无效评分（-1, 6）",
-            "TC2B.2.3: 测试标签添加/删除",
-            "TC2B.2.4: 测试标签去重",
-            "TC2B.2.5: 测试按评分查询"
-          ]
+          "sub_branch": "feat/phase2-wave3-t2b_2"
         },
         {
           "task_id": "T2B_3",
           "name": "实现归档管理",
-          "assignee": "backend",
           "estimated_hours": 6,
           "priority": "medium",
-          "status": "pending",
-          "requirement_ref": ["F7.4"],
-          "dependencies": ["T1_3"],
-          "output_artifacts": [
-            "src-tauri/src/knowledge/archive.rs"
+          "dependencies": [
+            "T1_3"
           ],
-          "implementation_steps": [
-            {
-              "step": 1,
-              "title": "实现归档功能",
-              "description": "标记会话为归档状态",
-              "files": ["src-tauri/src/knowledge/archive.rs"],
-              "functions": [
-                "pub fn archive_session(session_id: &str) -> Result<()>",
-                "pub fn unarchive_session(session_id: &str) -> Result<()>",
-                "pub fn is_archived(session_id: &str) -> Result<bool>"
-              ],
-              "verification": "归档状态正确更新"
-            },
-            {
-              "step": 2,
-              "title": "更新查询逻辑",
-              "description": "默认查询排除归档会话",
-              "integration": "修改 scan_sessions 和其他查询方法",
-              "logic": "WHERE is_archived = 0",
-              "verification": "归档会话不在默认列表显示"
-            },
-            {
-              "step": 3,
-              "title": "创建 Tauri Commands",
-              "description": "暴露归档命令",
-              "files": ["src-tauri/src/commands.rs"],
-              "commands": [
-                "archive_session(session_id: String) -> Result<()>",
-                "unarchive_session(session_id: String) -> Result<()>",
-                "get_archived_sessions() -> Result<Vec<Session>>"
-              ],
-              "verification": "前端可归档/取消归档"
-            }
-          ],
-          "acceptance_criteria": [
-            "AC1: 归档后的会话不在主列表显示",
-            "AC2: 可通过搜索找到归档会话",
-            "AC3: 可取消归档",
-            "AC4: 归档操作持久化"
-          ],
-          "testing_checklist": [
-            "TC2B.3.1: 测试归档功能",
-            "TC2B.3.2: 测试取消归档",
-            "TC2B.3.3: 测试归档会话不在主列表",
-            "TC2B.3.4: 测试归档会话可搜索"
-          ]
+          "sub_branch": "feat/phase2-wave3-t2b_3"
         }
       ]
     }
@@ -517,7 +152,8 @@
       "checkpoint_id": "CP_WAVE3_EXTRACT",
       "name": "信息提取验证",
       "commands": [
-        "检查 MessageNode.metadata"
+        "invoke('parse_session_file', { session_id: 'test-session-uuid' })",
+        "检查返回的 MessageNode[0].metadata"
       ],
       "expected_outputs": [
         "包含 tool_calls",
@@ -574,9 +210,90 @@
       "probability": "medium",
       "impact": "low",
       "mitigation": "FileShare 模式 + 重试机制"
+    },
+    {
+      "risk": "数据库迁移 v13 失败",
+      "probability": "low",
+      "impact": "high",
+      "mitigation": "提供 rollback 脚本，迁移前备份数据库，添加迁移失败重试机制"
     }
   ],
   "next_wave_dependencies": [
     "WAVE_4: 依赖本波全部完成（PHASE_2 + PHASE_2B）"
-  ]
+  ],
+  "tasks": [
+    {
+      "task_id": "T2_1",
+      "name": "实现 JSONL 流式解析",
+      "status": "completed",
+      "estimated_hours": 16,
+      "priority": "critical",
+      "dependencies": [
+        "T1_2"
+      ]
+    },
+    {
+      "task_id": "T2_2",
+      "name": "消息树构建",
+      "status": "completed",
+      "estimated_hours": 16,
+      "priority": "critical",
+      "dependencies": [
+        "T2_1"
+      ]
+    },
+    {
+      "task_id": "T2_3",
+      "name": "关键信息提取器",
+      "status": "completed",
+      "estimated_hours": 14,
+      "priority": "high",
+      "dependencies": [
+        "T2_2",
+        "T1_3"
+      ]
+    },
+    {
+      "task_id": "T2_5",
+      "name": "实现 FileShare 与 Offset 读取",
+      "status": "completed",
+      "estimated_hours": 10,
+      "priority": "high",
+      "dependencies": [
+        "T2_1"
+      ]
+    },
+    {
+      "task_id": "T2B_1",
+      "name": "实现项目聚合逻辑",
+      "status": "completed",
+      "estimated_hours": 16,
+      "priority": "high",
+      "dependencies": [
+        "T1_2"
+      ]
+    },
+    {
+      "task_id": "T2B_2",
+      "name": "实现会话评分与标签",
+      "status": "completed",
+      "estimated_hours": 10,
+      "priority": "medium",
+      "dependencies": [
+        "T1_3"
+      ]
+    },
+    {
+      "task_id": "T2B_3",
+      "name": "实现归档管理",
+      "status": "completed",
+      "estimated_hours": 6,
+      "priority": "medium",
+      "dependencies": [
+        "T1_3"
+      ]
+    }
+  ],
+  "_file_type": "wave_manifest",
+  "_description": "WAVE_3: 第三波：PHASE_2 解析引擎（与 PHASE_2B 并行）"
 }
