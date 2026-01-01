@@ -18,7 +18,7 @@
       "assignee": "backend",
       "estimated_hours": 16,
       "priority": "critical",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "F2.5"
       ],
@@ -104,7 +104,7 @@
       "assignee": "backend",
       "estimated_hours": 14,
       "priority": "high",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "F1.2",
         "F4.4"
@@ -188,7 +188,7 @@
       "assignee": "backend",
       "estimated_hours": 12,
       "priority": "high",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "F8.1",
         "F8.2"

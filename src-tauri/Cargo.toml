@@ -29,5 +29,10 @@ log = "0.4"
 tiktoken-rs = "0.6"
 regex = "1.10"
 
+# fastembed 在 Windows 上有编译问题，暂时禁用
+# TODO: 等待上游修复后重新启用
+# fastembed = "3.3"
+notify = "6.1"
+
 [dev-dependencies]
 proptest = "1.4"

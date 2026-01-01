@@ -913,4 +913,235 @@ impl SessionRepository {
             sessions.collect::<Result<Vec<_>, _>>().map_err(Into::into)
         })
     }
+
+    /// 保存消息向量嵌入
+    ///
+    /// # 参数
+    /// - `message_id`: 消息 ID
+    /// - `embedding`: 384 维向量
+    /// - `summary`: 消息摘要文本
+    ///
+    /// # 返回
+    /// 返回插入结果或错误
+    ///
+    /// # 说明
+    /// 此方法会将向量插入到 message_embeddings 虚拟表，并更新关联映射
+    pub fn save_message_embedding(
+        &self,
+        message_id: i64,
+        embedding: &[f32],
+        summary: &str,
+    ) -> Result<()> {
+        // 验证向量维度
+        if embedding.len() != 384 {
+            return Err(anyhow::anyhow!(
+                "向量维度错误，期望 384，实际 {}",
+                embedding.len()
+            ));
+        }
+
+        let now = Utc::now().to_rfc3339();
+
+        self.with_conn_inner(|conn| {
+            // 将向量转换为 JSON 数组字符串
+            let embedding_json = serde_json::to_string(embedding)
+                .map_err(|e| anyhow::anyhow!("序列化向量失败: {}", e))?;
+
+            // 检查是否已存在该消息的向量
+            let existing: Option<i64> = conn.query_row(
+                "SELECT vec_row_id FROM message_embedding_map WHERE message_id = ?1",
+                params![message_id],
+                |row| row.get(0),
+            ).ok();
+
+            if let Some(vec_row_id) = existing {
+                // 更新现有向量
+                conn.execute(
+                    "UPDATE message_embeddings
+                     SET embedding = ?1, summary = ?2
+                     WHERE rowid = ?3",
+                    params![embedding_json, summary, vec_row_id],
+                )?;
+            } else {
+                // 插入新向量到 vec0 虚拟表
+                conn.execute(
+                    "INSERT INTO message_embeddings (embedding, summary)
+                     VALUES (?1, ?2)",
+                    params![embedding_json, summary],
+                )?;
+
+                // 获取新插入的行 ID
+                let vec_row_id = conn.last_insert_rowid();
+
+                // 创建关联映射
+                conn.execute(
+                    "INSERT INTO message_embedding_map (message_id, vec_row_id, created_at)
+                     VALUES (?1, ?2, ?3)",
+                    params![message_id, vec_row_id, now],
+                )?;
+            }
+
+            Ok(())
+        })
+    }
+
+    /// 批量保存消息向量嵌入
+    ///
+    /// # 参数
+    /// - `embeddings`: 消息 ID、向量、摘要的三元组列表
+    ///
+    /// # 返回
+    /// 返回插入成功的数量或错误
+    ///
+    /// # 性能
+    /// 批量操作比逐条插入更高效
+    pub fn save_message_embeddings_batch(
+        &self,
+        embeddings: &[(i64, Vec<f32>, String)],
+    ) -> Result<usize> {
+        if embeddings.is_empty() {
+            return Ok(0);
+        }
+
+        let now = Utc::now().to_rfc3339();
+
+        self.with_conn_inner(|conn| {
+            // 开始事务
+            let tx = conn.unchecked_transaction()?;
+
+            let mut count = 0;
+
+            for (message_id, embedding, summary) in embeddings {
+                // 验证向量维度
+                if embedding.len() != 384 {
+                    eprintln!("警告: 消息 {} 的向量维度错误，跳过", message_id);
+                    continue;
+                }
+
+                let embedding_json = serde_json::to_string(embedding)
+                    .map_err(|e| anyhow::anyhow!("序列化向量失败: {}", e))?;
+
+                // 检查是否已存在
+                let existing: Option<i64> = tx.query_row(
+                    "SELECT vec_row_id FROM message_embedding_map WHERE message_id = ?1",
+                    params![message_id],
+                    |row| row.get(0),
+                ).ok();
+
+                if let Some(vec_row_id) = existing {
+                    tx.execute(
+                        "UPDATE message_embeddings
+                         SET embedding = ?1, summary = ?2
+                         WHERE rowid = ?3",
+                        params![embedding_json, summary, vec_row_id],
+                    )?;
+                } else {
+                    tx.execute(
+                        "INSERT INTO message_embeddings (embedding, summary)
+                         VALUES (?1, ?2)",
+                        params![embedding_json, summary],
+                    )?;
+
+                    let vec_row_id = tx.last_insert_rowid();
+
+                    tx.execute(
+                        "INSERT INTO message_embedding_map (message_id, vec_row_id, created_at)
+                         VALUES (?1, ?2, ?3)",
+                        params![message_id, vec_row_id, now],
+                    )?;
+                }
+
+                count += 1;
+            }
+
+            // 提交事务
+            tx.commit()?;
+
+            Ok(count)
+        })
+    }
+
+    /// 获取消息的向量嵌入
+    ///
+    /// # 参数
+    /// - `message_id`: 消息 ID
+    ///
+    /// # 返回
+    /// 返回向量和摘要，如果不存在则返回 None
+    pub fn get_message_embedding(
+        &self,
+        message_id: i64,
+    ) -> Result<Option<(Vec<f32>, String)>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT me.embedding, me.summary
+                 FROM message_embeddings me
+                 INNER JOIN message_embedding_map mem ON me.rowid = mem.vec_row_id
+                 WHERE mem.message_id = ?1"
+            )?;
+
+            let result = stmt.query_row(params![message_id], |row| {
+                let embedding_json: String = row.get(0)?;
+                let summary: String = row.get(1)?;
+
+                let embedding: Vec<f32> = serde_json::from_str(&embedding_json)
+                    .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+
+                Ok((embedding, summary))
+            });
+
+            match result {
+                Ok(data) => Ok(Some(data)),
+                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                Err(e) => Err(e.into()),
+            }
+        })
+    }
+
+    /// 向量相似度检索
+    ///
+    /// # 参数
+    /// - `query_embedding`: 查询向量（384 维）
+    /// - `limit`: 返回结果数量上限
+    ///
+    /// # 返回
+    /// 返回按相似度排序的消息 ID 和相似度分数列表
+    ///
+    /// # 说明
+    /// 使用 sqlite-vec 的 distance 函数计算余弦相似度
+    /// 分数越小表示越相似（距离）
+    pub fn vector_search(
+        &self,
+        query_embedding: &[f32],
+        limit: usize,
+    ) -> Result<Vec<(i64, f64)>> {
+        if query_embedding.len() != 384 {
+            return Err(anyhow::anyhow!(
+                "查询向量维度错误，期望 384，实际 {}",
+                query_embedding.len()
+            ));
+        }
+
+        let embedding_json = serde_json::to_string(query_embedding)
+            .map_err(|e| anyhow::anyhow!("序列化查询向量失败: {}", e))?;
+
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT mem.message_id, distance(me.embedding, ?1) as dist
+                 FROM message_embeddings me
+                 INNER JOIN message_embedding_map mem ON me.rowid = mem.vec_row_id
+                 ORDER BY dist
+                 LIMIT ?2"
+            )?;
+
+            let results = stmt.query_map(params![embedding_json, limit], |row| {
+                let message_id: i64 = row.get(0)?;
+                let distance: f64 = row.get(1)?;
+                Ok((message_id, distance))
+            })?;
+
+            results.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        })
+    }
 }
+

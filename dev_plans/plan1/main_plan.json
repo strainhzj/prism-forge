@@ -4,10 +4,10 @@
   "plan_date": "2025-12-30",
   "global_status": {
     "current_phase": "PHASE_2",
-    "overall_progress": "19.5%",
-    "last_updated": "2025-12-31",
+    "overall_progress": "52.5%",
+    "last_updated": "2026-01-01",
     "blocking_issues": [],
-    "completed_waves": ["WAVE_1", "WAVE_2", "WAVE_3"]
+    "completed_waves": ["WAVE_1", "WAVE_2", "WAVE_3", "WAVE_4"]
   },
   "git_strategy": {
     "main_branch": "master",
@@ -35,7 +35,10 @@
     "T2_3",
     "T2_5",
     "T2B_2",
-    "T2B_3"
+    "T2B_3",
+    "T2_4",
+    "T2_6",
+    "T3_4"
   ],
   "phases": [
     {
@@ -170,7 +173,7 @@
             "T2_2",
             "T1_3"
           ],
-          "status": "pending",
+          "status": "completed",
           "output_verification": "MessageNode.metadata 包含 toolCalls, errors, codeChanges 数组。",
           "estimated_hours": 14
         },
@@ -185,7 +188,7 @@
             "T1_1",
             "T2_3"
           ],
-          "status": "pending",
+          "status": "completed",
           "output_verification": "DB 中 message_embeddings 表有 BLOB 数据，能执行距离查询。",
           "estimated_hours": 16
         },
@@ -215,7 +218,7 @@
           "dependencies": [
             "T1_2"
           ],
-          "status": "pending",
+          "status": "completed",
           "output_verification": "Claude Code 创建新会话后，2秒内前端列表自动更新。",
           "estimated_hours": 14
         },
@@ -375,7 +378,7 @@
           "dependencies": [
             "T2_3"
           ],
-          "status": "pending",
+          "status": "completed",
           "output_verification": "能以三种等级提取日志并导出为文件。",
           "estimated_hours": 12
         },
@@ -957,6 +960,21 @@
         "新增 Tauri 命令：archive_session, unarchive_session, get_archived_sessions, get_active_sessions",
         "数据库扩展：SessionRepository 新增 8 个方法（评分、标签、归档相关）",
         "整体进度更新：19.5% 完成，WAVE_1/2/3 全部完成"
+      ]
+    },
+    {
+      "date": "2026-01-01",
+      "version": "1.6",
+      "changes": [
+        "Wave 4 完成：实现向量嵌入生成、文件实时监控、日志提取引擎",
+        "T2_3: 关键信息提取器（MetadataExtractor），提取工具调用、错误、代码变更、摘要",
+        "T2_4: 集成 FastEmbed 生成向量（EmbeddingGenerator），Windows 使用占位符实现",
+        "T2_6: 文件实时监控（SessionWatcher），使用 notify crate，2秒防抖延迟",
+        "T3_4: 日志提取引擎（ExtractionEngine），支持 L1/L2/L3 三级视图和 Markdown/JSON 导出",
+        "新增文件：embedding/mod.rs, embedding/generator.rs, monitor/watcher.rs",
+        "新增 Tauri 命令：start_file_watcher, extract_session_log, export_session_log",
+        "新增数据库方法：save_message_embedding, save_message_embeddings_batch, get_message_embedding, vector_search",
+        "整体进度更新：52.5% 完成（21/40 任务），WAVE_1/2/3/4 全部完成"
       ]
     }
   ]
