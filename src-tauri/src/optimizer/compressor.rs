@@ -76,7 +76,7 @@ impl ContextCompressor {
         let original_text = raw_messages.iter()
             .map(|m| format!("{}: {}\n", m.role, m.content))
             .collect::<String>();
-        let original_tokens = self.token_counter.count_text(&original_text)?;
+        let original_tokens = self.token_counter.count_tokens(&original_text)?;
 
         // 3. 压缩消息
         let compressed_messages = self.compress_messages(&raw_messages)?;
@@ -85,7 +85,7 @@ impl ContextCompressor {
         let compressed_text = compressed_messages.iter()
             .map(|m| format!("{}: {}\n", m.role, m.content))
             .collect::<String>();
-        let compressed_tokens = self.token_counter.count_text(&compressed_text)?;
+        let compressed_tokens = self.token_counter.count_tokens(&compressed_text)?;
 
         // 5. 计算压缩率
         let reduction_percentage = if original_tokens > 0 {
@@ -132,7 +132,7 @@ impl ContextCompressor {
         // 提取 content
         let content = if let Some(content_arr) = json.get("content").and_then(|v| v.as_array()) {
             // 新格式：content 是数组
-            self.extract_content_from_array(content_arr)?
+            self.extract_content_from_array(content_arr).ok().unwrap_or_default()
         } else {
             // 旧格式：content 是字符串
             json.get("content")
@@ -278,12 +278,13 @@ impl ContextCompressor {
                 _ => {
                     // 普通消息，保留关键信息
                     let compressed_content = self.compress_message_content(&msg.content);
+                    let is_compressed = compressed_content != msg.content;
 
                     compressed.push(CompressedMessage {
                         role: msg.role.clone(),
                         content: compressed_content,
                         message_type: msg.message_type.clone(),
-                        is_compressed: compressed_content != msg.content,
+                        is_compressed,
                     });
                 }
             }
@@ -417,7 +418,7 @@ mod tests {
     #[test]
     fn test_create_compressor() {
         let compressor = ContextCompressor::new().unwrap();
-        assert!(compressor.token_counter.count_text("hello").is_ok());
+        assert!(compressor.token_counter.count_tokens("hello").is_ok());
     }
 
     #[test]

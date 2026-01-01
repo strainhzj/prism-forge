@@ -3,12 +3,12 @@
 //! 整合向量检索、上下文压缩和 LLM 生成，创建增强的提示词优化功能
 
 use anyhow::{Context, Result};
+use crate::embedding::EmbeddingGenerator;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::llm::{LLMClientManager, interface::{Message, MessageRole, ModelParams}};
 use crate::database::{repository::SessionRepository, models::{Session, VectorSearchResult}};
-use crate::embedding::generator::EmbeddingGenerator;
 use crate::tokenizer::TokenCounter;
 use super::compressor::{ContextCompressor, CompressionResult};
 
@@ -99,7 +99,7 @@ impl PromptGenerator {
     /// 创建新的提示词生成器
     pub fn new() -> Result<Self> {
         Ok(Self {
-            repository: SessionRepository::new()?,
+            repository: SessionRepository::from_default_db()?,
             embedding_generator: EmbeddingGenerator::new()?,
             compressor: ContextCompressor::new()?,
             token_counter: TokenCounter::new()?,
@@ -121,7 +121,7 @@ impl PromptGenerator {
     ) -> Result<EnhancedPrompt> {
         // 1. 生成查询向量
         let query_embedding = self.embedding_generator
-            .generate_embedding(&request.goal)
+            .generate_for_message(&request.goal)
             .context("生成查询向量失败")?;
 
         // 2. 检索相关会话
@@ -164,7 +164,7 @@ impl PromptGenerator {
             });
 
         // 7. 计算 Token 统计
-        let compressed_tokens = self.token_counter.count_text(&enhanced_prompt)?;
+        let compressed_tokens = self.token_counter.count_tokens(&enhanced_prompt)?;
         let savings_percentage = if original_tokens > 0 {
             ((original_tokens - compressed_tokens) as f64 / original_tokens as f64) * 100.0
         } else {
@@ -219,11 +219,11 @@ impl PromptGenerator {
         let mut results = Vec::new();
 
         for session_id in session_ids {
-            if let Ok(session) = self.repository.get_session_by_id(session_id) {
+            if let Ok(Some(session)) = self.repository.get_session_by_id(session_id) {
                 results.push(VectorSearchResult {
                     session,
                     similarity_score: 1.0, // 手动指定的会话给予最高相似度
-                    summary: session.summary.unwrap_or_else(|| "手动指定".to_string()),
+                    summary: "手动指定".to_string(),
                 });
             }
         }
@@ -250,7 +250,7 @@ impl PromptGenerator {
             .join("\n---\n");
 
         // 计算原始 Token 数
-        let original_tokens = self.token_counter.count_text(&original_context)?;
+        let original_tokens = self.token_counter.count_tokens(&original_context)?;
 
         // 简化压缩：保留结构但去除冗余
         let compressed = sessions.iter()
@@ -405,7 +405,7 @@ impl PromptGenerator {
 
         let avg_rating: f64 = sessions.iter()
             .filter_map(|s| s.session.rating)
-            .sum::<f32>() as f64 / sessions.len() as f64;
+            .map(|r| r as f64).sum::<f64>() / sessions.len() as f64;
 
         // 综合相似度和评分
         (avg_similarity * 0.7 + (avg_rating / 5.0) * 0.3).min(1.0).max(0.0)

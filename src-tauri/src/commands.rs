@@ -1881,7 +1881,7 @@ pub fn get_meta_template(
 ) -> Result<String, CommandError> {
     use crate::database::repository::SessionRepository;
 
-    let repo = SessionRepository::new()
+    let repo = SessionRepository::from_default_db()
         .map_err(|e| CommandError {
             message: format!("创建仓库失败: {}", e),
         })?;
@@ -1902,7 +1902,7 @@ pub fn update_meta_template(
 ) -> Result<(), CommandError> {
     use crate::database::repository::SessionRepository;
 
-    let repo = SessionRepository::new()
+    let repo = SessionRepository::from_default_db()
         .map_err(|e| CommandError {
             message: format!("创建仓库失败: {}", e),
         })?;
