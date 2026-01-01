@@ -7,7 +7,12 @@
     "overall_progress": "52.5%",
     "last_updated": "2026-01-01",
     "blocking_issues": [],
-    "completed_waves": ["WAVE_1", "WAVE_2", "WAVE_3", "WAVE_4"]
+    "completed_waves": [
+      "WAVE_1",
+      "WAVE_2",
+      "WAVE_3",
+      "WAVE_4"
+    ]
   },
   "git_strategy": {
     "main_branch": "master",
@@ -24,7 +29,7 @@
   ],
   "completed_tasks": [
     "T3_1a",
-      "T3_LLM",
+    "T3_LLM",
     "T2B_1",
     "T1_1",
     "T2_7",
@@ -39,7 +44,8 @@
     "T2B_3",
     "T2_4",
     "T2_6",
-    "T3_4"
+    "T3_4",
+    "T3_1b"
   ],
   "phases": [
     {
@@ -333,7 +339,7 @@
             "T3_1a",
             "T2B_2"
           ],
-          "status": "pending",
+          "status": "completed",
           "output_verification": "5 星会话在相似度稍低时仍能排在前面。",
           "estimated_hours": 10
         },
