@@ -104,7 +104,7 @@
       "assignee": "backend",
       "estimated_hours": 10,
       "priority": "high",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "F3.3",
         "6.1"
