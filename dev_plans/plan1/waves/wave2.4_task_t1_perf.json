@@ -1,0 +1,244 @@
+{
+  "_file_type": "task_definition",
+  "_description": "T1_PERF 任务：性能基准测试 - 启动与扫描（v4.1 增强版）",
+  "_version": "v4.1",
+  "_version_description": "基于 v4.1 验证结果优化，添加缺失的测试用例：文件锁定检测、数据库备份、不兼容处理、超时处理",
+  "task_id": "T1_PERF",
+  "name": "性能基准测试 - 启动与扫描",
+  "wave_id": "WAVE_2",
+  "sub_branch": "feat/phase1-wave2-t1_perf",
+  "assignee": "qa",
+  "estimated_hours": 8,
+  "priority": "medium",
+  "status": "completed",
+  "requirement_ref": ["NF1"],
+  "dependencies": ["T1_2"],
+  "output_artifacts": [
+    "src-tauri/tests/performance.rs",
+    "src-tauri/tests/test_scanner.rs",
+    "src-tauri/tests/test_migrations.rs",
+    "docs/performance_report_phase1.md"
+  ],
+  "implementation_steps": [
+    {
+      "step": 1,
+      "title": "创建性能测试框架",
+      "description": "建立基准测试基础设施",
+      "files": ["src-tauri/tests/performance.rs", "src-tauri/Cargo.toml"],
+      "dev_dependencies": [
+        "criterion = \"0.5\""
+      ],
+      "structure": "// src-tauri/tests/performance.rs\n\n#[cfg(test)]\nmod performance_tests {\n    use super::*;\n    use std::time::Instant;\n\n    // 测试辅助函数\n    fn setup_test_environment() {\n        // 创建测试用的会话文件\n    }\n\n    fn cleanup_test_environment() {\n        // 清理测试文件\n    }\n}",
+      "tools": ["criterion rs for benchmarking"],
+      "verification": "测试框架运行正常",
+      "status": "[ ]"
+    },
+    {
+      "step": 2,
+      "title": "启动时间测试",
+      "description": "测量应用启动到可交互的时间",
+      "files": ["src-tauri/tests/performance.rs"],
+      "test_name": "test_startup_time",
+      "target": "< 3 秒",
+      "method": "从双击到首个 Tauri Command 响应",
+      "implementation": "#[test]\nfn test_startup_time() {\n    let start = Instant::now();\n    \n    // 模拟启动流程\n    // 1. 初始化数据库连接\n    // 2. 加载配置\n    // 3. 执行第一个 Tauri 命令\n    \n    let duration = start.elapsed();\n    assert!(duration.as_secs() < 3, \"启动时间超标: {:?}\", duration);\n}",
+      "verification": "测量结果达标",
+      "status": "[ ]"
+    },
+    {
+      "step": 3,
+      "title": "会话扫描测试",
+      "description": "测量扫描 100 个会话的时间",
+      "files": ["src-tauri/tests/performance.rs"],
+      "test_name": "test_session_scan_time",
+      "target": "< 2 秒",
+      "method": "创建 100 个测试 JSONL 文件并测量扫描时间",
+      "implementation": "use rayon::prelude::*;\n\n#[test]\nfn test_session_scan_time_100() {\n    setup_test_environment();\n    \n    let start = Instant::now();\n    let sessions = scan_session_files().unwrap();\n    let duration = start.elapsed();\n    \n    assert_eq!(sessions.len(), 100, \"应扫描到 100 个会话\");\n    assert!(duration.as_secs() < 2, \"扫描时间超标: {:?}\", duration);\n    \n    cleanup_test_environment();\n}",
+      "verification": "测量结果达标",
+      "status": "[ ]",
+      "_v7_0_addition": {
+        "description": "v7.0 Dry-Run 引擎添加的测试数据准备详细说明",
+        "test_data_preparation": {
+          "description": "准备 100 个测试会话文件的具体步骤",
+          "script_reference": "wave2.7_templates_v6.0.json -> T2_006 setup_test_environment()",
+          "data_distribution": {
+            "small_files": {"percentage": 70, "size": "<1MB", "description": "小型会话文件"},
+            "medium_files": {"percentage": 25, "size": "1-5MB", "description": "中型会话文件"},
+            "large_files": {"percentage": 5, "size": ">5MB", "description": "大型会话文件"}
+          },
+          "integration_note": "在 test_session_scan_time_100 测试开始时调用 setup_test_environment()",
+          "cleanup": "测试完成后调用 cleanup_test_environment() 清理所有 test-project-* 目录"
+        },
+        "_v10_0_improvements": {
+          "description": "v10.0 语义覆盖率修复：添加 1000 会话压力测试",
+          "stress_test": {
+            "test_name": "test_session_scan_time_1000_stress",
+            "purpose": "验证扫描 1000 个会话的性能（压力测试）",
+            "script_reference": "wave2.7_templates_v6.0.json -> T2_006 setup_stress_test_environment()",
+            "implementation": "#[test]\nfn test_session_scan_time_1000_stress() {\n    let created_files = setup_stress_test_environment(1000);\n    let start = Instant::now();\n    let sessions = scan_session_files().unwrap();\n    let duration = start.elapsed();\n    cleanup_stress_test_environment();\n    \n    assert_eq!(\n        sessions.len(),\n        1000,\n        \"应扫描到 1000 个会话，实际: {}\",\n        sessions.len()\n    );\n    \n    // 压力测试允许更宽松的时间限制（预期 < 10 秒）\n    assert!(\n        duration.as_secs() < 10,\n        \"1000 会话扫描时间超标: {:?} (目标 < 10s)\",\n        duration\n    );\n    \n    // 记录性能指标\n    eprintln!(\"1000 会话扫描耗时: {:?}\", duration);\n}",
+            "acceptance_criteria": "扫描 1000 个会话 < 10 秒",
+            "cleanup": "测试完成后调用 cleanup_stress_test_environment() 清理所有 stress-project-* 目录"
+          }
+        }
+      }
+    },
+    {
+      "step": 4,
+      "title": "生成性能报告",
+      "description": "记录测试结果和优化建议",
+      "files": ["docs/performance_report_phase1.md"],
+      "output": "docs/performance_report_phase1.md",
+      "content_template": "# PHASE_1 性能测试报告\n\n## 测试环境\n\n- **操作系统**: Windows 11 / macOS 14 / Ubuntu 22.04\n- **硬件**: CPU / RAM\n- **Rust 版本**: 1.x.x\n- **测试日期**: 2025-12-29\n\n## 测试结果\n\n### 启动时间\n- **目标**: < 3 秒\n- **实际**: X.XX 秒\n- **状态**: ✅ 通过 / ❌ 失败\n\n### 会话扫描时间\n- **目标**: < 2 秒 (100 个会话)\n- **实际**: X.XX 秒\n- **状态**: ✅ 通过 / ❌ 失败\n\n## 性能瓶颈分析\n\n（如果测试失败，分析原因）\n\n## 优化建议\n\n（基于测试结果的改进建议）",
+      "verification": "报告完整且可读",
+      "status": "[ ]"
+    },
+    {
+      "step": 5,
+      "title": "添加会话扫描器专项测试",
+      "description": "测试文件锁定检测功能（Windows 特有）",
+      "files": ["src-tauri/tests/test_scanner.rs"],
+      "test_name": "test_session_lock_detection",
+      "purpose": "验证扫描器能正确检测被锁定的会话文件",
+      "platform": "Windows 优先，Unix 降级方案",
+      "implementation": "#[cfg(test)]\nmod scanner_tests {\n    use super::*;\n    use std::fs::File;\n    use std::path::PathBuf;\n\n    #[test]\n    #[cfg(target_os = \"windows\")]\n    fn test_session_lock_detection_windows() {\n        use std::os::windows::fs::OpenOptionsExt;\n\n        // 创建测试会话文件\n        let test_file = setup_test_session();\n\n        // 以独占模式打开文件（模拟锁定）\n        let _lock = File::options()\n            .read(true)\n            .share_mode(0)  // 不共享\n            .open(&test_file)\n            .expect(\"无法锁定文件\");\n\n        // 检查文件是否被锁定\n        let is_locked = check_file_locked(&test_file)\n            .expect(\"锁定检测失败\");\n\n        assert!(is_locked, \"应检测到文件被锁定\");\n\n        cleanup_test_session(&test_file);\n    }\n\n    #[test]\n    #[cfg(not(target_os = \"windows\"))]\n    fn test_session_lock_detection_fallback() {\n        // Unix 系统使用时间判断\n        let test_file = setup_test_session();\n\n        let is_active = check_session_active_by_time(\n            &test_file,\n            86400  // 24小时阈值\n        ).expect(\"时间检测失败\");\n\n        // 新创建的文件应该是活跃的\n        assert!(is_active, \"新会话应标记为活跃\");\n\n        cleanup_test_session(&test_file);\n    }\n}",
+      "verification": "测试通过，锁定检测正确工作",
+      "status": "[ ]",
+      "_v4_1_addition": true
+    },
+    {
+      "step": 6,
+      "title": "添加数据库备份和回滚测试",
+      "description": "测试数据库迁移失败时的回滚机制",
+      "files": ["src-tauri/tests/test_migrations.rs"],
+      "test_name": "test_database_backup_rollback",
+      "purpose": "验证迁移失败时能正确恢复数据库状态",
+      "implementation": "#[test]\nfn test_migration_rollback_on_failure() {\n    let test_db = setup_test_database();\n    let initial_schema = get_schema_version(&test_db);\n\n    // 模拟迁移失败（如 DROP COLUMN 不支持）\n    let result = run_migration_with_rollback(\n        &test_db,\n        \"invalid_migration\"  // 会失败的迁移\n    );\n\n    assert!(result.is_err(), \"迁移应失败\");\n\n    // 验证数据库已回滚到初始状态\n    let final_schema = get_schema_version(&test_db);\n    assert_eq!(\n        initial_schema, final_schema,\n        \"Schema 版本应回滚到初始值\"\n    );\n\n    // 验证数据完整性\n    let tables = list_tables(&test_db);\n    assert!(tables.contains(\"sessions\"), \"sessions 表应存在\");\n\n    cleanup_test_database(&test_db);\n}",
+      "verification": "回滚机制正确工作",
+      "status": "[ ]",
+      "_v4_1_addition": true
+    },
+    {
+      "step": 7,
+      "title": "添加 SQLite 版本兼容性测试",
+      "description": "测试不同 SQLite 版本的兼容性和降级方案",
+      "files": ["src-tauri/tests/test_migrations.rs"],
+      "test_name": "test_sqlite_version_fallback",
+      "purpose": "验证在旧版本 SQLite 中使用降级方案",
+      "implementation": "#[test]\nfn test_sqlite_version_check() {\n    let conn = establish_connection().unwrap();\n\n    // 获取 SQLite 版本\n    let version = get_sqlite_version(&conn);\n\n    // 检查版本是否支持 DROP COLUMN\n    let supports_drop_column = version >= semver::Version::new(3, 35, 5);\n\n    if supports_drop_column {\n        // 使用现代方案\n        let result = conn.execute(\n            \"ALTER TABLE sessions DROP COLUMN test_column\",\n            []\n        );\n        assert!(result.is_ok(), \"DROP COLUMN 应成功\");\n    } else {\n        // 使用降级方案：重建表\n        let result = fallback_drop_column(&conn, \"sessions\", \"test_column\");\n        assert!(result.is_ok(), \"降级方案应成功\");\n    }\n}",
+      "verification": "版本检测和降级方案正确工作",
+      "status": "[ ]",
+      "_v4_1_addition": true
+    },
+    {
+      "step": 8,
+      "title": "添加性能超时处理测试",
+      "description": "测试扫描超时时的错误处理",
+      "files": ["src-tauri/tests/test_performance.rs"],
+      "test_name": "test_scan_performance_timeout",
+      "purpose": "验证超时机制能正确中断长时间运行的扫描",
+      "implementation": "#[test]\nfn test_scan_timeout_handling() {\n    // 创建大量会话文件（模拟超时场景）\n    setup_large_test_environment(10000);\n\n    // 使用短超时时间\n    let timeout = Duration::from_secs(1);\n    let start = Instant::now();\n\n    let result = scan_sessions_with_timeout(timeout);\n\n    let duration = start.elapsed();\n\n    // 应该在超时时间内返回\n    assert!(\n        duration < timeout + Duration::from_millis(100),\n        \"扫描应在超时后立即返回\"\n    );\n\n    // 应该返回超时错误\n    assert!(matches!(result, Err(ScanError::Timeout)));\n\n    cleanup_large_test_environment();\n}",
+      "verification": "超时机制正确工作",
+      "status": "[ ]",
+      "_v4_1_addition": true
+    }
+  ],
+  "acceptance_criteria": [
+    "AC1: 启动时间 < 3 秒",
+    "AC2: 会话扫描 (100个) < 2 秒",
+    "AC3: 性能报告完整",
+    "AC4: 未达标的指标有优化方案",
+    "AC5 (v4.1 新增): 文件锁定检测测试通过",
+    "AC6 (v4.1 新增): 数据库回滚机制测试通过",
+    "AC7 (v4.1 新增): SQLite 版本兼容性测试通过",
+    "AC8 (v4.1 新增): 超时处理测试通过"
+  ],
+  "testing_checklist": [
+    "TC_PERF_1: 冷启动时间测试",
+    "TC_PERF_2: 热启动时间测试",
+    "TC_PERF_3: 空目录扫描时间",
+    "TC_PERF_4: 100 个会话扫描时间",
+    "TC_PERF_5: 1000 个会话扫描时间（压力测试）",
+    "TC_SCN_1 (v4.1 新增): Windows 文件锁定检测测试",
+    "TC_SCN_2 (v4.1 新增): Unix 时间降级测试",
+    "TC_DB_1 (v4.1 新增): 数据库迁移回滚测试",
+    "TC_DB_2 (v4.1 新增): SQLite 版本兼容性测试",
+    "TC_TIMEOUT_1 (v4.1 新增): 扫描超时处理测试"
+  ],
+  "benchmark_targets": {
+    "startup_time": {
+      "target_ms": 3000,
+      "measurement_method": "从应用启动到首个 Tauri Command 响应",
+      "test_scenarios": ["冷启动", "热启动"]
+    },
+    "session_scan": {
+      "target_ms": 2000,
+      "session_count": 100,
+      "measurement_method": "scan_session_files() 函数执行时间",
+      "test_scenarios": ["空目录", "10 个会话", "100 个会话", "1000 个会话（压力测试）"]
+    }
+  },
+  "additional_tests": {
+    "concurrent_scan": {
+      "description": "测试并发扫描性能",
+      "method": "使用 rayon 并行扫描多个项目目录",
+      "target": "线性加速比（2核 ≈ 2倍，4核 ≈ 4倍）"
+    },
+    "memory_usage": {
+      "description": "测试内存占用",
+      "target": "启动后 < 100MB，扫描 100 个会话 < 200MB"
+    },
+    "lock_detection_windows": {
+      "description": "Windows 文件锁定检测",
+      "purpose": "验证能正确识别被 Claude Code 锁定的会话文件",
+      "method": "CreateFileW with share_mode=0",
+      "target": "100% 准确率"
+    },
+    "rollback_mechanism": {
+      "description": "数据库回滚机制",
+      "purpose": "确保迁移失败时数据安全",
+      "method": "模拟迁移失败并验证数据库状态",
+      "target": "100% 数据完整性"
+    },
+    "version_compatibility": {
+      "description": "SQLite 版本兼容性",
+      "purpose": "支持 SQLite 3.25+ 所有版本",
+      "method": "测试不同版本的行为",
+      "target": "所有版本都能正确执行迁移或降级"
+    },
+    "timeout_handling": {
+      "description": "扫描超时处理",
+      "purpose": "防止长时间运行的扫描阻塞 UI",
+      "method": "设置短超时并验证返回",
+      "target": "超时后立即返回，无资源泄漏"
+    }
+  },
+  "test_data_setup": {
+    "create_test_sessions": {
+      "location": "~/.claude/projects/test-project-*/",
+      "format": "JSONL 文件",
+      "naming": "{UUID}.jsonl",
+      "content": "{\"role\": \"user\", \"content\": \"test message\"}\n"
+    },
+    "cleanup": "测试完成后删除所有 test-project-* 目录"
+  },
+  "report_location": "docs/performance_report_phase1.md",
+  "_v4_1_improvements": {
+    "description": "基于 v4.1 深度验证的改进",
+    "test_coverage_fixes": [
+      "添加会话扫描器文件锁定检测测试（解决 test_coverage 维度问题）",
+      "添加数据库备份和回滚测试",
+      "添加 SQLite 版本兼容性测试",
+      "添加性能超时处理测试"
+    ],
+    "facility_consistency_notes": {
+      "scanner": "会话扫描器模块（scanner.rs）有完整的测试覆盖",
+      "repository": "SessionRepository 的 CRUD 操作已在 Wave 1 测试",
+      "migrations": "数据库迁移模块有回滚和版本兼容性测试"
+    },
+    "validation_notes": [
+      "所有测试文件都可以独立运行",
+      "测试环境隔离，不干扰开发环境",
+      "测试清理逻辑确保无残留文件"
+    ]
+  }
+}

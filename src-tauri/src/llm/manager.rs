@@ -36,7 +36,8 @@ impl LLMClientManager {
 
     /// 从默认数据库创建管理器
     pub fn from_default_db() -> Result<Self> {
-        let repository = ApiProviderRepository::from_default_db()?;
+        let conn = crate::database::init::get_connection_shared()?;
+        let repository = ApiProviderRepository::with_conn(conn);
         Ok(Self::new(repository))
     }
 
@@ -272,7 +273,8 @@ mod tests {
         // 执行迁移
         crate::database::migrations::migrate_v1(&mut conn).unwrap();
 
-        let repo = ApiProviderRepository::new(conn);
+        let conn = std::sync::Arc::new(std::sync::Mutex::new(conn));
+        let repo = ApiProviderRepository::with_conn(conn);
         let _manager = LLMClientManager::new(repo);
     }
 }

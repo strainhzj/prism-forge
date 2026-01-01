@@ -5,28 +5,39 @@
 use anyhow::Result;
 use rusqlite::{Connection, params};
 use chrono::Utc;
+use std::sync::{Arc, Mutex};
 
 use crate::database::models::{ApiProvider, ApiProviderType};
 
 /// API Provider 数据仓库
 pub struct ApiProviderRepository {
-    conn: Connection,
+    conn: Arc<Mutex<Connection>>,
 }
 
-// SQLite Connection 是 Send 但不是 Sync，我们需要手动实现
-// 注意：每个线程应该有自己的连接
 unsafe impl Send for ApiProviderRepository {}
+unsafe impl Sync for ApiProviderRepository {}
 
 impl ApiProviderRepository {
-    /// 创建新的仓库实例
-    pub fn new(conn: Connection) -> Self {
+    /// 使用共享连接创建仓库实例
+    pub fn with_conn(conn: Arc<Mutex<Connection>>) -> Self {
         Self { conn }
     }
 
     /// 从默认数据库路径创建仓库
     pub fn from_default_db() -> Result<Self> {
-        let conn = crate::database::migrations::get_connection()?;
-        Ok(Self::new(conn))
+        let conn = crate::database::init::get_connection_shared()?;
+        Ok(Self::with_conn(conn))
+    }
+
+    /// 辅助方法：获取连接锁
+    fn with_conn_inner<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&rusqlite::Connection) -> Result<R>,
+    {
+        let conn = self.conn.lock().map_err(|e| {
+            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
+        })?;
+        f(&conn)
     }
 
     /// 创建新的 API 提供商
@@ -53,27 +64,34 @@ impl ApiProviderRepository {
         let now = Utc::now().to_rfc3339();
         let provider_type_str = serde_json::to_string(&provider.provider_type)?;
 
-        self.conn.execute(
-            "INSERT INTO api_providers (
-                provider_type, name, base_url, api_key_ref,
-                model, config_json, temperature, max_tokens, is_active, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-            params![
-                provider_type_str,
-                provider.name,
-                provider.base_url,
-                provider.api_key_ref,
-                provider.model,
-                provider.config_json,
-                provider.temperature,
-                provider.max_tokens,
-                if provider.is_active { 1 } else { 0 },
-                now,
-                now,
-            ],
-        )?;
+        self.with_conn_inner(|conn| {
+            conn.execute(
+                "INSERT INTO api_providers (
+                    provider_type, name, base_url, api_key_ref,
+                    model, config_json, temperature, max_tokens, is_active, created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![
+                    provider_type_str,
+                    provider.name,
+                    provider.base_url,
+                    provider.api_key_ref,
+                    provider.model,
+                    provider.config_json,
+                    provider.temperature,
+                    provider.max_tokens,
+                    if provider.is_active { 1 } else { 0 },
+                    now,
+                    now,
+                ],
+            )?;
+            Ok(())
+        })?;
 
-        provider.id = Some(self.conn.last_insert_rowid());
+        let id = self.with_conn_inner(|conn| {
+            Ok(conn.last_insert_rowid())
+        })?;
+
+        provider.id = Some(id);
         Ok(provider)
     }
 
@@ -82,33 +100,35 @@ impl ApiProviderRepository {
     /// # 返回
     /// 返回所有提供商的列表，按创建时间倒序排列
     pub fn get_all_providers(&self) -> Result<Vec<ApiProvider>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, provider_type, name, base_url, api_key_ref,
-                    model, config_json, temperature, max_tokens, is_active, created_at, updated_at
-             FROM api_providers
-             ORDER BY created_at DESC"
-        )?;
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, provider_type, name, base_url, api_key_ref,
+                        model, config_json, temperature, max_tokens, is_active, created_at, updated_at
+                 FROM api_providers
+                 ORDER BY created_at DESC"
+            )?;
 
-        let providers = stmt.query_map([], |row| {
-            let provider_type_str: String = row.get(1)?;
-            let provider_type: ApiProviderType = serde_json::from_str(&provider_type_str)
-                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+            let providers = stmt.query_map([], |row| {
+                let provider_type_str: String = row.get(1)?;
+                let provider_type: ApiProviderType = serde_json::from_str(&provider_type_str)
+                    .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
 
-            Ok(ApiProvider {
-                id: Some(row.get(0)?),
-                provider_type,
-                name: row.get(2)?,
-                base_url: row.get(3)?,
-                api_key_ref: row.get(4)?,
-                model: row.get(5)?,
-                config_json: row.get(6)?,
-                temperature: row.get(7)?,
-                max_tokens: row.get(8)?,
-                is_active: row.get::<_, i32>(9)? == 1,
-            })
-        })?;
+                Ok(ApiProvider {
+                    id: Some(row.get(0)?),
+                    provider_type,
+                    name: row.get(2)?,
+                    base_url: row.get(3)?,
+                    api_key_ref: row.get(4)?,
+                    model: row.get(5)?,
+                    config_json: row.get(6)?,
+                    temperature: row.get(7)?,
+                    max_tokens: row.get(8)?,
+                    is_active: row.get::<_, i32>(9)? == 1,
+                })
+            })?;
 
-        providers.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+            providers.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        })
     }
 
     /// 根据ID获取提供商
@@ -116,35 +136,37 @@ impl ApiProviderRepository {
     /// # 参数
     /// - `id`: 提供商 ID
     pub fn get_provider_by_id(&self, id: i64) -> Result<Option<ApiProvider>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, provider_type, name, base_url, api_key_ref,
-                    model, config_json, temperature, max_tokens, is_active, created_at, updated_at
-             FROM api_providers
-             WHERE id = ?1"
-        )?;
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, provider_type, name, base_url, api_key_ref,
+                        model, config_json, temperature, max_tokens, is_active, created_at, updated_at
+                 FROM api_providers
+                 WHERE id = ?1"
+            )?;
 
-        let mut rows = stmt.query(params![id])?;
+            let mut rows = stmt.query(params![id])?;
 
-        if let Some(row) = rows.next()? {
-            let provider_type_str: String = row.get(1)?;
-            let provider_type: ApiProviderType = serde_json::from_str(&provider_type_str)
-                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+            if let Some(row) = rows.next()? {
+                let provider_type_str: String = row.get(1)?;
+                let provider_type: ApiProviderType = serde_json::from_str(&provider_type_str)
+                    .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
 
-            Ok(Some(ApiProvider {
-                id: Some(row.get(0)?),
-                provider_type,
-                name: row.get(2)?,
-                base_url: row.get(3)?,
-                api_key_ref: row.get(4)?,
-                model: row.get(5)?,
-                config_json: row.get(6)?,
-                temperature: row.get(7)?,
-                max_tokens: row.get(8)?,
-                is_active: row.get::<_, i32>(9)? == 1,
-            }))
-        } else {
-            Ok(None)
-        }
+                Ok(Some(ApiProvider {
+                    id: Some(row.get(0)?),
+                    provider_type,
+                    name: row.get(2)?,
+                    base_url: row.get(3)?,
+                    api_key_ref: row.get(4)?,
+                    model: row.get(5)?,
+                    config_json: row.get(6)?,
+                    temperature: row.get(7)?,
+                    max_tokens: row.get(8)?,
+                    is_active: row.get::<_, i32>(9)? == 1,
+                }))
+            } else {
+                Ok(None)
+            }
+        })
     }
 
     /// 获取当前活跃的提供商
@@ -152,36 +174,38 @@ impl ApiProviderRepository {
     /// # 返回
     /// 返回活跃的提供商，如果没有则返回 None
     pub fn get_active_provider(&self) -> Result<Option<ApiProvider>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, provider_type, name, base_url, api_key_ref,
-                    model, config_json, temperature, max_tokens, is_active, created_at, updated_at
-             FROM api_providers
-             WHERE is_active = 1
-             LIMIT 1"
-        )?;
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, provider_type, name, base_url, api_key_ref,
+                        model, config_json, temperature, max_tokens, is_active, created_at, updated_at
+                 FROM api_providers
+                 WHERE is_active = 1
+                 LIMIT 1"
+            )?;
 
-        let mut rows = stmt.query([])?;
+            let mut rows = stmt.query([])?;
 
-        if let Some(row) = rows.next()? {
-            let provider_type_str: String = row.get(1)?;
-            let provider_type: ApiProviderType = serde_json::from_str(&provider_type_str)
-                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+            if let Some(row) = rows.next()? {
+                let provider_type_str: String = row.get(1)?;
+                let provider_type: ApiProviderType = serde_json::from_str(&provider_type_str)
+                    .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
 
-            Ok(Some(ApiProvider {
-                id: Some(row.get(0)?),
-                provider_type,
-                name: row.get(2)?,
-                base_url: row.get(3)?,
-                api_key_ref: row.get(4)?,
-                model: row.get(5)?,
-                config_json: row.get(6)?,
-                temperature: row.get(7)?,
-                max_tokens: row.get(8)?,
-                is_active: row.get::<_, i32>(9)? == 1,
-            }))
-        } else {
-            Ok(None)
-        }
+                Ok(Some(ApiProvider {
+                    id: Some(row.get(0)?),
+                    provider_type,
+                    name: row.get(2)?,
+                    base_url: row.get(3)?,
+                    api_key_ref: row.get(4)?,
+                    model: row.get(5)?,
+                    config_json: row.get(6)?,
+                    temperature: row.get(7)?,
+                    max_tokens: row.get(8)?,
+                    is_active: row.get::<_, i32>(9)? == 1,
+                }))
+            } else {
+                Ok(None)
+            }
+        })
     }
 
     /// 更新提供商
@@ -196,29 +220,31 @@ impl ApiProviderRepository {
         let now = Utc::now().to_rfc3339();
         let provider_type_str = serde_json::to_string(&provider.provider_type)?;
 
-        let rows = self.conn.execute(
-            "UPDATE api_providers
-             SET provider_type = ?1, name = ?2, base_url = ?3,
-                 api_key_ref = ?4, model = ?5, config_json = ?6,
-                 temperature = ?7, max_tokens = ?8, is_active = ?9,
-                 updated_at = ?10
-             WHERE id = ?11",
-            params![
-                provider_type_str,
-                provider.name,
-                provider.base_url,
-                provider.api_key_ref,
-                provider.model,
-                provider.config_json,
-                provider.temperature,
-                provider.max_tokens,
-                if provider.is_active { 1 } else { 0 },
-                now,
-                id,
-            ],
-        )?;
+        self.with_conn_inner(|conn| {
+            let rows = conn.execute(
+                "UPDATE api_providers
+                 SET provider_type = ?1, name = ?2, base_url = ?3,
+                     api_key_ref = ?4, model = ?5, config_json = ?6,
+                     temperature = ?7, max_tokens = ?8, is_active = ?9,
+                     updated_at = ?10
+                 WHERE id = ?11",
+                params![
+                    provider_type_str,
+                    provider.name,
+                    provider.base_url,
+                    provider.api_key_ref,
+                    provider.model,
+                    provider.config_json,
+                    provider.temperature,
+                    provider.max_tokens,
+                    if provider.is_active { 1 } else { 0 },
+                    now,
+                    id,
+                ],
+            )?;
 
-        Ok(rows)
+            Ok(rows)
+        })
     }
 
     /// 删除提供商
@@ -229,12 +255,14 @@ impl ApiProviderRepository {
     /// # 返回
     /// 返回删除的行数，如果为 0 表示没有找到对应的提供商
     pub fn delete_provider(&self, id: i64) -> Result<usize> {
-        let rows = self.conn.execute(
-            "DELETE FROM api_providers WHERE id = ?1",
-            params![id],
-        )?;
+        self.with_conn_inner(|conn| {
+            let rows = conn.execute(
+                "DELETE FROM api_providers WHERE id = ?1",
+                params![id],
+            )?;
 
-        Ok(rows)
+            Ok(rows)
+        })
     }
 
     /// 设置活跃提供商
@@ -248,14 +276,16 @@ impl ApiProviderRepository {
     pub fn set_active_provider(&self, id: i64) -> Result<usize> {
         let now = Utc::now().to_rfc3339();
 
-        let rows = self.conn.execute(
-            "UPDATE api_providers
-             SET is_active = 1, updated_at = ?1
-             WHERE id = ?2",
-            params![now, id],
-        )?;
+        self.with_conn_inner(|conn| {
+            let rows = conn.execute(
+                "UPDATE api_providers
+                 SET is_active = 1, updated_at = ?1
+                 WHERE id = ?2",
+                params![now, id],
+            )?;
 
-        Ok(rows)
+            Ok(rows)
+        })
     }
 
     /// 根据 provider_type 获取提供商列表
@@ -265,44 +295,48 @@ impl ApiProviderRepository {
     pub fn get_providers_by_type(&self, provider_type: ApiProviderType) -> Result<Vec<ApiProvider>> {
         let provider_type_str = serde_json::to_string(&provider_type)?;
 
-        let mut stmt = self.conn.prepare(
-            "SELECT id, provider_type, name, base_url, api_key_ref,
-                    model, config_json, temperature, max_tokens, is_active, created_at, updated_at
-             FROM api_providers
-             WHERE provider_type = ?1
-             ORDER BY created_at DESC"
-        )?;
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, provider_type, name, base_url, api_key_ref,
+                        model, config_json, temperature, max_tokens, is_active, created_at, updated_at
+                 FROM api_providers
+                 WHERE provider_type = ?1
+                 ORDER BY created_at DESC"
+            )?;
 
-        let providers = stmt.query_map(params![provider_type_str], |row| {
-            let provider_type_str: String = row.get(1)?;
-            let provider_type: ApiProviderType = serde_json::from_str(&provider_type_str)
-                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+            let providers = stmt.query_map(params![provider_type_str], |row| {
+                let provider_type_str: String = row.get(1)?;
+                let provider_type: ApiProviderType = serde_json::from_str(&provider_type_str)
+                    .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
 
-            Ok(ApiProvider {
-                id: Some(row.get(0)?),
-                provider_type,
-                name: row.get(2)?,
-                base_url: row.get(3)?,
-                api_key_ref: row.get(4)?,
-                model: row.get(5)?,
-                config_json: row.get(6)?,
-                temperature: row.get(7)?,
-                max_tokens: row.get(8)?,
-                is_active: row.get::<_, i32>(9)? == 1,
-            })
-        })?;
+                Ok(ApiProvider {
+                    id: Some(row.get(0)?),
+                    provider_type,
+                    name: row.get(2)?,
+                    base_url: row.get(3)?,
+                    api_key_ref: row.get(4)?,
+                    model: row.get(5)?,
+                    config_json: row.get(6)?,
+                    temperature: row.get(7)?,
+                    max_tokens: row.get(8)?,
+                    is_active: row.get::<_, i32>(9)? == 1,
+                })
+            })?;
 
-        providers.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+            providers.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        })
     }
 
     /// 统计提供商数量
     pub fn count_providers(&self) -> Result<i64> {
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM api_providers",
-            [],
-            |row| row.get(0),
-        )?;
-        Ok(count)
+        self.with_conn_inner(|conn| {
+            let count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM api_providers",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(count)
+        })
     }
 }
 
@@ -310,20 +344,22 @@ impl ApiProviderRepository {
 mod tests {
     use super::*;
     use crate::database::migrations;
+    use std::sync::{Arc, Mutex};
 
-    fn setup_test_db() -> Connection {
+    fn setup_test_db() -> Arc<Mutex<Connection>> {
         let mut conn = Connection::open_in_memory().unwrap();
         conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
         // 执行迁移
         migrations::migrate_v1(&mut conn).unwrap();
         migrations::migrate_v2(&mut conn).unwrap();
-        conn
+        migrations::migrate_v3(&mut conn).unwrap();
+        Arc::new(Mutex::new(conn))
     }
 
     #[test]
     fn test_create_and_get_provider() {
         let conn = setup_test_db();
-        let repo = ApiProviderRepository::new(conn);
+        let repo = ApiProviderRepository::with_conn(conn);
 
         let provider = ApiProvider::new(
             ApiProviderType::Ollama,
@@ -344,7 +380,7 @@ mod tests {
     #[test]
     fn test_get_all_providers() {
         let conn = setup_test_db();
-        let repo = ApiProviderRepository::new(conn);
+        let repo = ApiProviderRepository::with_conn(conn);
 
         // 创建多个提供商
         for i in 1..=3 {
@@ -363,7 +399,7 @@ mod tests {
     #[test]
     fn test_update_provider() {
         let conn = setup_test_db();
-        let repo = ApiProviderRepository::new(conn);
+        let repo = ApiProviderRepository::with_conn(conn);
 
         let mut provider = ApiProvider::new(
             ApiProviderType::Ollama,
@@ -383,7 +419,7 @@ mod tests {
     #[test]
     fn test_delete_provider() {
         let conn = setup_test_db();
-        let repo = ApiProviderRepository::new(conn);
+        let repo = ApiProviderRepository::with_conn(conn);
 
         let provider = ApiProvider::new(
             ApiProviderType::Ollama,
@@ -402,7 +438,7 @@ mod tests {
     #[test]
     fn test_active_provider() {
         let conn = setup_test_db();
-        let repo = ApiProviderRepository::new(conn);
+        let repo = ApiProviderRepository::with_conn(conn);
 
         // 创建第一个提供商
         let mut provider1 = ApiProvider::new(
@@ -443,13 +479,15 @@ mod property_tests {
     use super::*;
     use crate::database::migrations;
     use proptest::prelude::*;
+    use std::sync::{Arc, Mutex};
 
-    fn setup_test_db() -> Connection {
+    fn setup_test_db() -> Arc<Mutex<Connection>> {
         let mut conn = Connection::open_in_memory().unwrap();
         conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
         migrations::migrate_v1(&mut conn).unwrap();
         migrations::migrate_v2(&mut conn).unwrap();
-        conn
+        migrations::migrate_v3(&mut conn).unwrap();
+        Arc::new(Mutex::new(conn))
     }
 
     fn arb_provider_type() -> impl Strategy<Value = ApiProviderType> {
@@ -481,7 +519,7 @@ mod property_tests {
             model in arb_model(),
         ) {
             let conn = setup_test_db();
-            let repo = ApiProviderRepository::new(conn);
+            let repo = ApiProviderRepository::with_conn(conn);
 
             let mut provider = ApiProvider::new(
                 provider_type,
@@ -500,5 +538,379 @@ mod property_tests {
             // Verify model is preserved
             prop_assert_eq!(retrieved.model, model);
         }
+    }
+}
+
+/// 获取活跃会话判断阈值
+///
+/// # 返回
+/// 返回 active_threshold 配置值（秒），默认 86400（24小时）
+pub fn get_active_threshold(conn: &Connection) -> Result<u64> {
+    conn.query_row(
+        "SELECT active_threshold FROM settings WHERE id = 1",
+        [],
+        |row| row.get(0),
+    )
+    .map_err(|e| anyhow::anyhow!("获取活跃阈值失败: {}", e))
+}
+
+/// 更新活跃会话判断阈值
+///
+/// # 参数
+/// - `conn`: 数据库连接
+/// - `value`: 新的阈值（秒）
+pub fn update_active_threshold(conn: &Connection, value: u64) -> Result<()> {
+    conn.execute(
+        "UPDATE settings SET active_threshold = ?1 WHERE id = 1",
+        params![value],
+    )
+    .map_err(|e| anyhow::anyhow!("更新活跃阈值失败: {}", e))?;
+    Ok(())
+}
+
+/// Session 数据仓库
+///
+/// 提供 sessions 表的 CRUD 操作
+pub struct SessionRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+unsafe impl Send for SessionRepository {}
+unsafe impl Sync for SessionRepository {}
+
+impl SessionRepository {
+    /// 使用共享连接创建仓库实例
+    pub fn with_conn(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
+    }
+
+    /// 从默认数据库路径创建仓库
+    pub fn from_default_db() -> Result<Self> {
+        let conn = crate::database::init::get_connection_shared()?;
+        Ok(Self::with_conn(conn))
+    }
+
+    /// 辅助方法：获取连接锁
+    fn with_conn_inner<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&rusqlite::Connection) -> Result<R>,
+    {
+        let conn = self.conn.lock().map_err(|e| {
+            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
+        })?;
+        f(&conn)
+    }
+
+    /// 插入或更新会话
+    ///
+    /// # 参数
+    /// - `session_id`: 会话唯一标识
+    /// - `project_path`: 项目路径
+    /// - `project_name`: 项目名称
+    /// - `file_path`: 文件路径
+    /// - `is_active`: 是否活跃
+    ///
+    /// # 返回
+    /// 返回插入/更新的行数
+    pub fn upsert_session(
+        &self,
+        session_id: &str,
+        project_path: &str,
+        project_name: &str,
+        file_path: &str,
+        is_active: bool,
+    ) -> Result<usize> {
+        let now = Utc::now().to_rfc3339();
+
+        self.with_conn_inner(|conn| {
+            // 尝试更新
+            let updated = conn.execute(
+                "UPDATE sessions SET
+                    project_path = ?1,
+                    project_name = ?2,
+                    file_path = ?3,
+                    is_active = ?4,
+                    updated_at = ?5
+                 WHERE session_id = ?6",
+                params![
+                    project_path,
+                    project_name,
+                    file_path,
+                    if is_active { 1 } else { 0 },
+                    now,
+                    session_id,
+                ],
+            )?;
+
+            if updated > 0 {
+                return Ok(updated);
+            }
+
+            // 不存在则插入
+            let inserted = conn.execute(
+                "INSERT INTO sessions (
+                    session_id, project_path, project_name, file_path,
+                    is_active, created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    session_id,
+                    project_path,
+                    project_name,
+                    file_path,
+                    if is_active { 1 } else { 0 },
+                    now,
+                    now,
+                ],
+            )?;
+
+            Ok(inserted)
+        })
+    }
+
+    /// 获取所有会话
+    pub fn get_all_sessions(&self) -> Result<Vec<crate::database::models::Session>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, project_path, project_name, file_path,
+                        rating, tags, is_archived, is_active, created_at, updated_at
+                 FROM sessions
+                 ORDER BY updated_at DESC"
+            )?;
+
+            let sessions = stmt.query_map([], |row| {
+                Ok(crate::database::models::Session {
+                    id: Some(row.get(0)?),
+                    session_id: row.get(1)?,
+                    project_path: row.get(2)?,
+                    project_name: row.get(3)?,
+                    file_path: row.get(4)?,
+                    rating: row.get(5)?,
+                    tags: row.get(6)?,
+                    is_archived: row.get::<_, i32>(7)? == 1,
+                    is_active: row.get::<_, i32>(8)? == 1,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                })
+            })?;
+
+            sessions.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        })
+    }
+
+    /// 设置会话评分
+    ///
+    /// # 参数
+    /// - `session_id`: 会话唯一标识
+    /// - `rating`: 评分值 (1-5)，None 表示清除评分
+    ///
+    /// # 返回
+    /// 返回更新的行数
+    pub fn set_session_rating(&self, session_id: &str, rating: Option<i32>) -> Result<usize> {
+        // 验证评分范围
+        if let Some(r) = rating {
+            if r < 1 || r > 5 {
+                return Err(anyhow::anyhow!("评分必须在 1-5 之间，当前值: {}", r));
+            }
+        }
+
+        let now = Utc::now().to_rfc3339();
+
+        self.with_conn_inner(|conn| {
+            conn.execute(
+                "UPDATE sessions
+                 SET rating = ?1, updated_at = ?2
+                 WHERE session_id = ?3",
+                params![rating, now, session_id],
+            )
+            .map_err(|e| anyhow::anyhow!("更新会话评分失败: {}", e))
+        })
+    }
+
+    /// 设置会话标签
+    ///
+    /// # 参数
+    /// - `session_id`: 会话唯一标识
+    /// - `tags`: 标签数组，空数组表示清除所有标签
+    ///
+    /// # 返回
+    /// 返回更新的行数
+    pub fn set_session_tags(&self, session_id: &str, tags: Vec<String>) -> Result<usize> {
+        // 将标签数组序列化为 JSON 字符串
+        let tags_json = serde_json::to_string(&tags)
+            .unwrap_or_else(|_| "[]".to_string());
+
+        let now = Utc::now().to_rfc3339();
+
+        self.with_conn_inner(|conn| {
+            conn.execute(
+                "UPDATE sessions
+                 SET tags = ?1, updated_at = ?2
+                 WHERE session_id = ?3",
+                params![tags_json, now, session_id],
+            )
+            .map_err(|e| anyhow::anyhow!("更新会话标签失败: {}", e))
+        })
+    }
+
+    /// 获取会话评分
+    ///
+    /// # 参数
+    /// - `session_id`: 会话唯一标识
+    ///
+    /// # 返回
+    /// 返回评分值 (1-5)，None 表示未评分
+    pub fn get_session_rating(&self, session_id: &str) -> Result<Option<i32>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT rating FROM sessions WHERE session_id = ?1"
+            )?;
+
+            let rating = stmt.query_row(params![session_id], |row| {
+                row.get(0)
+            })?;
+
+            Ok(rating)
+        })
+    }
+
+    /// 获取会话标签
+    ///
+    /// # 参数
+    /// - `session_id`: 会话唯一标识
+    ///
+    /// # 返回
+    /// 返回标签数组
+    pub fn get_session_tags(&self, session_id: &str) -> Result<Vec<String>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT tags FROM sessions WHERE session_id = ?1"
+            )?;
+
+            let tags_json: String = stmt.query_row(params![session_id], |row| {
+                row.get(0)
+            })?;
+
+            // 解析 JSON 数组
+            if tags_json.is_empty() || tags_json == "[]" {
+                return Ok(Vec::new());
+            }
+
+            serde_json::from_str(&tags_json)
+                .map_err(|e| anyhow::anyhow!("解析标签失败: {}", e))
+        })
+    }
+
+    /// 归档会话
+    ///
+    /// 将会话标记为已归档，归档后的会话不会在默认列表中显示
+    ///
+    /// # 参数
+    /// - `session_id`: 会话唯一标识
+    ///
+    /// # 返回
+    /// 返回更新的行数
+    pub fn archive_session(&self, session_id: &str) -> Result<usize> {
+        let now = Utc::now().to_rfc3339();
+
+        self.with_conn_inner(|conn| {
+            conn.execute(
+                "UPDATE sessions
+                 SET is_archived = 1, updated_at = ?1
+                 WHERE session_id = ?2",
+                params![now, session_id],
+            )
+            .map_err(|e| anyhow::anyhow!("归档会话失败: {}", e))
+        })
+    }
+
+    /// 取消归档会话
+    ///
+    /// 将会话标记为未归档，恢复到默认列表
+    ///
+    /// # 参数
+    /// - `session_id`: 会话唯一标识
+    ///
+    /// # 返回
+    /// 返回更新的行数
+    pub fn unarchive_session(&self, session_id: &str) -> Result<usize> {
+        let now = Utc::now().to_rfc3339();
+
+        self.with_conn_inner(|conn| {
+            conn.execute(
+                "UPDATE sessions
+                 SET is_archived = 0, updated_at = ?1
+                 WHERE session_id = ?2",
+                params![now, session_id],
+            )
+            .map_err(|e| anyhow::anyhow!("取消归档会话失败: {}", e))
+        })
+    }
+
+    /// 获取已归档的会话列表
+    ///
+    /// # 返回
+    /// 返回所有已归档的会话，按更新时间倒序排列
+    pub fn get_archived_sessions(&self) -> Result<Vec<crate::database::models::Session>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, project_path, project_name, file_path,
+                        rating, tags, is_archived, is_active, created_at, updated_at
+                 FROM sessions
+                 WHERE is_archived = 1
+                 ORDER BY updated_at DESC"
+            )?;
+
+            let sessions = stmt.query_map([], |row| {
+                Ok(crate::database::models::Session {
+                    id: Some(row.get(0)?),
+                    session_id: row.get(1)?,
+                    project_path: row.get(2)?,
+                    project_name: row.get(3)?,
+                    file_path: row.get(4)?,
+                    rating: row.get(5)?,
+                    tags: row.get(6)?,
+                    is_archived: row.get::<_, i32>(7)? == 1,
+                    is_active: row.get::<_, i32>(8)? == 1,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                })
+            })?;
+
+            sessions.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        })
+    }
+
+    /// 获取未归档的活跃会话列表
+    ///
+    /// # 返回
+    /// 返回所有未归档的会话，按更新时间倒序排列
+    pub fn get_active_sessions(&self) -> Result<Vec<crate::database::models::Session>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, project_path, project_name, file_path,
+                        rating, tags, is_archived, is_active, created_at, updated_at
+                 FROM sessions
+                 WHERE is_archived = 0
+                 ORDER BY updated_at DESC"
+            )?;
+
+            let sessions = stmt.query_map([], |row| {
+                Ok(crate::database::models::Session {
+                    id: Some(row.get(0)?),
+                    session_id: row.get(1)?,
+                    project_path: row.get(2)?,
+                    project_name: row.get(3)?,
+                    file_path: row.get(4)?,
+                    rating: row.get(5)?,
+                    tags: row.get(6)?,
+                    is_archived: row.get::<_, i32>(7)? == 1,
+                    is_active: row.get::<_, i32>(8)? == 1,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                })
+            })?;
+
+            sessions.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        })
     }
 }

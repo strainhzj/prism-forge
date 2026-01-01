@@ -1,0 +1,36 @@
+{
+  "_file_type": "wave_metadata",
+  "_description": "Wave 3 元数据：项目信息、版本历史、Agent 指令",
+  "_version": "v1.0",
+  "wave_id": "WAVE_3",
+  "version_history": {
+    "v1.0": "初始版本 - 实现解析引擎与会话资产管理"
+  },
+  "requirement_definitions": {
+    "F2.1": "实现 JSONL 流式解析器，支持增量读取和未完成行缓冲",
+    "F2.2": "构建消息树结构，基于 parent_uuid 重构嵌套关系",
+    "F2.3": "提取关键信息：工具调用序列、错误消息、代码变更",
+    "F2.4": "生成会话摘要，用于列表展示",
+    "NF2": "支持 Windows FileShare 模式并发读取被占用的文件",
+    "F7.1": "按项目路径聚合会话，支持多项目管理",
+    "F7.2": "实现智能上下文切换，点击项目时自动加载最近活跃会话",
+    "F7.3": "实现评分（1-5 星）与标签系统",
+    "F7.4": "实现归档管理功能，归档会话不在主列表显示"
+  },
+  "agent_instructions": {
+    "execution_order": [
+      "1. 阅读 wave3.1_metadata.json 了解需求定义",
+      "2. 并行执行 GROUP_A_PARSER 和 GROUP_B_PHASE2B",
+      "3. 各组内按 sequential_tasks 顺序执行",
+      "4. 每个任务完成后验证 acceptance_criteria"
+    ],
+    "conflict_resolution": {
+      "commands_rs": "多个任务需要修改 commands.rs，按 merge_order 顺序合并"
+    },
+    "verification_priority": [
+      "CP_WAVE3_PARSE: 解析功能验证",
+      "CP_WAVE3_EXTRACT: 信息提取验证",
+      "CP_WAVE3_PROJECTS: 项目聚合验证"
+    ]
+  }
+}

@@ -9,6 +9,12 @@ mod llm;
 mod commands;
 // Optimizer 模块
 mod optimizer;
+// Token 计数器模块
+mod tokenizer;
+// 监控模块
+mod monitor;
+// 解析器模块
+mod parser;
 
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -115,6 +121,7 @@ fn main() {
             cmd_delete_provider,
             cmd_set_active_provider,
             cmd_test_provider_connection,
+            count_prompt_tokens,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

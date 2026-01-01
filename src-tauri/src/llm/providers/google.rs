@@ -613,6 +613,7 @@ mod tests {
             "test-project".to_string(),
             "us-central1".to_string(),
             None,
+            None,
         );
 
         let url = provider.get_endpoint_url("gemini-2.5-flash-lite", false);

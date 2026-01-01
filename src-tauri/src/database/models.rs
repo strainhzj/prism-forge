@@ -317,3 +317,307 @@ mod tests {
         assert!(provider.model.is_none());
     }
 }
+
+// ============================================================================
+// Wave 1: 新增数据模型 (T1_1 任务)
+// ============================================================================
+
+/// 会话元数据模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Session {
+    /// 主键 ID
+    pub id: Option<i64>,
+
+    /// Claude Code 会话唯一标识 (UUID格式)
+    #[serde(rename = "session_id")]
+    pub session_id: String,
+
+    /// 项目路径
+    #[serde(rename = "project_path")]
+    pub project_path: String,
+
+    /// 项目名称 (从路径提取最后一段)
+    #[serde(rename = "project_name")]
+    pub project_name: String,
+
+    /// 会话 JSONL 文件完整路径
+    #[serde(rename = "file_path")]
+    pub file_path: String,
+
+    /// 用户评分 (1-5, NULL 表示未评分)
+    pub rating: Option<i32>,
+
+    /// 标签数组 (JSON Array 字符串)
+    pub tags: String,
+
+    /// 是否归档
+    #[serde(rename = "is_archived")]
+    pub is_archived: bool,
+
+    /// 是否活跃 (触发器确保唯一性)
+    #[serde(rename = "is_active")]
+    pub is_active: bool,
+
+    /// 会话创建时间 (RFC3339)
+    #[serde(rename = "created_at")]
+    pub created_at: String,
+
+    /// 最后更新时间 (RFC3339)
+    #[serde(rename = "updated_at")]
+    pub updated_at: String,
+}
+
+impl Session {
+    /// 获取标签数组
+    pub fn get_tags(&self) -> Result<Vec<String>> {
+        if self.tags.is_empty() || self.tags == "[]" {
+            return Ok(Vec::new());
+        }
+        serde_json::from_str(&self.tags).map_err(|e| anyhow::anyhow!("解析 tags 失败: {}", e))
+    }
+
+    /// 设置标签数组
+    pub fn set_tags(&mut self, tags: Vec<String>) -> Result<()> {
+        self.tags = serde_json::to_string(&tags)
+            .unwrap_or_else(|_| "[]".to_string());
+        Ok(())
+    }
+}
+
+/// 消息元数据模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Message {
+    /// 主键 ID
+    pub id: Option<i64>,
+
+    /// 所属会话 ID
+    #[serde(rename = "session_id")]
+    pub session_id: String,
+
+    /// 消息唯一标识 (从 JSONL 提取)
+    pub uuid: String,
+
+    /// 父消息 UUID (用于构建消息树)
+    #[serde(rename = "parent_uuid")]
+    pub parent_uuid: Option<String>,
+
+    /// 消息类型
+    #[serde(rename = "type")]
+    pub msg_type: String,
+
+    /// 消息时间戳 (RFC3339)
+    pub timestamp: String,
+
+    /// 在 JSONL 文件中的字节偏移量
+    pub offset: i64,
+
+    /// 消息内容的字节长度
+    pub length: i64,
+
+    /// 消息摘要 (用于列表展示)
+    pub summary: Option<String>,
+
+    /// 父消息在数组中的索引
+    #[serde(rename = "parent_idx")]
+    pub parent_idx: Option<i32>,
+
+    /// 记录创建时间 (RFC3339)
+    #[serde(rename = "created_at")]
+    pub created_at: String,
+}
+
+/// 消息向量嵌入模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MessageEmbedding {
+    /// 关联的消息 ID
+    #[serde(rename = "message_id")]
+    pub message_id: i64,
+
+    /// 384维向量 (JSON 序列化的 Vec<f32>)
+    pub embedding: String,
+
+    /// 消息摘要文本 (用于语义搜索)
+    pub summary: String,
+
+    /// 向量生成时间
+    #[serde(rename = "created_at")]
+    pub created_at: String,
+}
+
+impl MessageEmbedding {
+    /// 获取向量数组
+    pub fn get_embedding(&self) -> Result<Vec<f32>> {
+        serde_json::from_str(&self.embedding)
+            .map_err(|e| anyhow::anyhow!("解析 embedding 失败: {}", e))
+    }
+
+    /// 设置向量数组
+    pub fn set_embedding(&mut self, embedding: Vec<f32>) -> Result<()> {
+        self.embedding = serde_json::to_string(&embedding)
+            .map_err(|e| anyhow::anyhow!("序列化 embedding 失败: {}", e))?;
+        Ok(())
+    }
+}
+
+/// 保存的提示词模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedPrompt {
+    /// 主键 ID
+    pub id: Option<i64>,
+
+    /// 关联的会话 ID (可为空，表示全局提示词)
+    #[serde(rename = "session_id")]
+    pub session_id: Option<String>,
+
+    /// 分类
+    pub category: String,
+
+    /// 提示词标题
+    pub title: String,
+
+    /// 提示词内容
+    pub content: String,
+
+    /// 用户评分 (1-5)
+    pub rating: Option<i32>,
+
+    /// 使用次数
+    #[serde(rename = "usage_count")]
+    pub usage_count: i32,
+
+    /// Token 数量
+    pub tokens: Option<i32>,
+
+    /// 创建时间
+    #[serde(rename = "created_at")]
+    pub created_at: String,
+}
+
+/// 元提示词模板模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetaTemplate {
+    /// 主键 ID
+    pub id: Option<i64>,
+
+    /// 模板唯一标识
+    pub key: String,
+
+    /// 模板名称
+    pub name: String,
+
+    /// 模板内容 (支持变量占位符)
+    pub content: String,
+
+    /// 模板描述
+    pub description: Option<String>,
+
+    /// 是否启用
+    #[serde(rename = "is_active")]
+    pub is_active: bool,
+
+    /// 最后更新时间
+    #[serde(rename = "updated_at")]
+    pub updated_at: String,
+}
+
+/// Token 统计信息
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenStats {
+    /// Token 数量
+    pub count: usize,
+
+    /// 估算费用 (USD)
+    #[serde(rename = "estimated_cost")]
+    pub estimated_cost: f64,
+}
+
+/// 时间戳验证函数
+///
+/// 验证时间戳字符串是否为有效的 RFC3339 格式
+pub fn validate_timestamp(timestamp: &str) -> Result<()> {
+    if timestamp.is_empty() {
+        return Err(anyhow::anyhow!("时间戳不能为空"));
+    }
+
+    // 尝试解析为 RFC3339 格式
+    chrono::DateTime::parse_from_rfc3339(timestamp)
+        .map_err(|e| anyhow::anyhow!("无效的 RFC3339 时间戳: {}", e))?;
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests_wave1 {
+    use super::*;
+
+    #[test]
+    fn test_session_tags_operations() {
+        let mut session = Session {
+            id: None,
+            session_id: "test-uuid".to_string(),
+            project_path: "/path/to/project".to_string(),
+            project_name: "project".to_string(),
+            file_path: "/path/to/session.jsonl".to_string(),
+            rating: None,
+            tags: "[]".to_string(),
+            is_archived: false,
+            is_active: true,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
+        };
+
+        // 测试空标签
+        assert_eq!(session.get_tags().unwrap().len(), 0);
+
+        // 测试设置标签
+        session.set_tags(vec!["bugfix".to_string(), "ui".to_string()]).unwrap();
+        assert_eq!(session.get_tags().unwrap(), vec!["bugfix", "ui"]);
+    }
+
+    #[test]
+    fn test_embedding_vector_operations() {
+        let mut embedding = MessageEmbedding {
+            message_id: 1,
+            embedding: "[]".to_string(),
+            summary: "test summary".to_string(),
+            created_at: chrono::Utc::now().to_rfc3339(),
+        };
+
+        // 测试空向量
+        assert_eq!(embedding.get_embedding().unwrap().len(), 0);
+
+        // 测试设置向量
+        embedding.set_embedding(vec![0.1, 0.2, 0.3]).unwrap();
+        assert_eq!(embedding.get_embedding().unwrap(), vec![0.1, 0.2, 0.3]);
+    }
+
+    #[test]
+    fn test_validate_timestamp_valid() {
+        let timestamp = chrono::Utc::now().to_rfc3339();
+        assert!(validate_timestamp(&timestamp).is_ok());
+    }
+
+    #[test]
+    fn test_validate_timestamp_invalid() {
+        assert!(validate_timestamp("").is_err());
+        assert!(validate_timestamp("invalid-timestamp").is_err());
+    }
+
+    #[test]
+    fn test_token_stats_serialization() {
+        let stats = TokenStats {
+            count: 1000,
+            estimated_cost: 0.002,
+        };
+
+        let json = serde_json::to_string(&stats).unwrap();
+        assert!(json.contains("\"count\":1000"));
+        assert!(json.contains("\"estimatedCost\":0.002"));
+    }
+}

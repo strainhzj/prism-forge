@@ -1,0 +1,287 @@
+{
+  "_file_type": "strategy_guide",
+  "_description": "Wave 2 策略指南：Git 策略、风险缓解、交付物",
+  "_version": "v3.0",
+  "_version_description": "基于 13 维检查规则优化（v3.0），添加并发冲突分析和完整的分支策略",
+  "_v3_analysis": {
+    "concurrency_analysis": {
+      "rule_8": "并发冲突检测",
+      "file_conflicts": [
+        {
+          "file": "src-tauri/src/database/models.rs",
+          "tasks": ["T1_2", "T1_3"],
+          "conflict_type": "T1_3 更新 Session 结构体，T1_2 引用该结构体",
+          "resolution": "建议先执行 T1_3 完成模型定义，再执行 T1_2"
+        }
+      ],
+      "recommended_execution_order": [
+        "1. T1_3（扩展数据库模型）优先",
+        "2. T1_2（会话扫描器）依赖 T1_3 的模型更新",
+        "3. T1_PERF（性能测试）依赖 T1_2 完成"
+      ],
+      "parallel_opportunities": [
+        "T1_2 和 T1_3 理论上可以并行，但需要协调 models.rs 的修改",
+        "如果并行：T1_2 使用临时结构体，待 T1_3 完成后合并",
+        "建议：串行执行更安全，节省协调成本"
+      ]
+    }
+  },
+  "git_strategy": {
+    "workflow": "sequential_with_sub_branches",
+    "description": "顺序执行三个任务，每个任务使用独立的子分支",
+    "steps": [
+      "1. 从 feat/phase1-wave1 创建 feat/phase1-wave2 主分支",
+      "2. 按顺序创建子分支（T1_2 -> T1_3 -> T1_PERF）",
+      "3. 每个子分支完成后合并到 feat/phase1-wave2",
+      "4. 所有任务完成后合并 feat/phase1-wave2 到 master"
+    ],
+    "branch_structure": {
+      "master": "主分支",
+      "feat/phase1-wave1": "第一波主分支（已合并）",
+      "feat/phase1-wave2": "本波主分支",
+      "feat/phase1-wave2-t1_2": "T1_2 任务子分支",
+      "feat/phase1-wave2-t1_3": "T1_3 任务子分支",
+      "feat/phase1-wave2-t1_perf": "T1_PERF 任务子分支"
+    },
+    "branch_setup_commands": {
+      "phase_0_preparation": {
+        "title": "阶段 0：准备工作",
+        "steps": [
+          {
+            "step": 0,
+            "action": "确认当前分支",
+            "command": "git branch --show-current",
+            "expected_output": "master"
+          },
+          {
+            "step": 1,
+            "action": "拉取最新代码",
+            "command": "git pull origin master"
+          },
+          {
+            "step": 2,
+            "action": "确认工作区干净",
+            "command": "git status"
+          }
+        ]
+      },
+      "phase_1_create_wave_branch": {
+        "title": "阶段 1：创建 Wave 2 主分支",
+        "steps": [
+          {
+            "step": 3,
+            "action": "创建 Wave 2 主分支",
+            "command": "git checkout -b feat/phase1-wave2"
+          },
+          {
+            "step": 4,
+            "action": "推送主分支到远程",
+            "command": "git push -u origin feat/phase1-wave2"
+          }
+        ]
+      },
+      "phase_2_create_t1_2_branch": {
+        "title": "阶段 2：创建 T1_2 任务分支",
+        "steps": [
+          {
+            "step": 5,
+            "action": "创建 T1_2 任务分支",
+            "command": "git checkout -b feat/phase1-wave2-t1_2"
+          },
+          {
+            "step": 6,
+            "action": "开始 T1_2 开发",
+            "command": "# 参考 wave2.2_task_t1_2.json 执行任务"
+          }
+        ]
+      },
+      "phase_3_merge_t1_2": {
+        "title": "阶段 3：合并 T1_2 分支",
+        "steps": [
+          {
+            "step": 7,
+            "action": "切换到 Wave 主分支",
+            "command": "git checkout feat/phase1-wave2"
+          },
+          {
+            "step": 8,
+            "action": "合并 T1_2 分支",
+            "command": "git merge --no-ff feat/phase1-wave2-t1_2 -m \"Merge T1_2: 实现会话扫描器\""
+          },
+          {
+            "step": 9,
+            "action": "运行测试",
+            "command": "cargo test --all && cargo clippy"
+          }
+        ]
+      },
+      "phase_4_create_t1_3_branch": {
+        "title": "阶段 4：创建 T1_3 任务分支",
+        "steps": [
+          {
+            "step": 10,
+            "action": "创建 T1_3 任务分支",
+            "command": "git checkout -b feat/phase1-wave2-t1_3"
+          },
+          {
+            "step": 11,
+            "action": "开始 T1_3 开发",
+            "command": "# 参考 wave2.3_task_t1_3.json 执行任务"
+          }
+        ]
+      },
+      "phase_5_merge_t1_3": {
+        "title": "阶段 5：合并 T1_3 分支",
+        "steps": [
+          {
+            "step": 12,
+            "action": "切换到 Wave 主分支",
+            "command": "git checkout feat/phase1-wave2"
+          },
+          {
+            "step": 13,
+            "action": "合并 T1_3 分支",
+            "command": "git merge --no-ff feat/phase1-wave2-t1_3 -m \"Merge T1_3: 扩展数据库表结构\""
+          },
+          {
+            "step": 14,
+            "action": "运行测试",
+            "command": "cargo test --all && cargo clippy"
+          }
+        ]
+      },
+      "phase_6_create_t1_perf_branch": {
+        "title": "阶段 6：创建 T1_PERF 任务分支",
+        "steps": [
+          {
+            "step": 15,
+            "action": "创建 T1_PERF 任务分支",
+            "command": "git checkout -b feat/phase1-wave2-t1_perf"
+          },
+          {
+            "step": 16,
+            "action": "开始 T1_PERF 开发",
+            "command": "# 参考 wave2.4_task_t1_perf.json 执行任务"
+          }
+        ]
+      },
+      "phase_7_merge_t1_perf": {
+        "title": "阶段 7：合并 T1_PERF 分支",
+        "steps": [
+          {
+            "step": 17,
+            "action": "切换到 Wave 主分支",
+            "command": "git checkout feat/phase1-wave2"
+          },
+          {
+            "step": 18,
+            "action": "合并 T1_PERF 分支",
+            "command": "git merge --no-ff feat/phase1-wave2-t1_perf -m \"Merge T1_PERF: 性能基准测试\""
+          },
+          {
+            "step": 19,
+            "action": "运行测试",
+            "command": "cargo test --all && cargo clippy"
+          }
+        ]
+      },
+      "phase_8_final_merge": {
+        "title": "阶段 8：最终合并到 master",
+        "steps": [
+          {
+            "step": 20,
+            "action": "切换到 master 分支",
+            "command": "git checkout master"
+          },
+          {
+            "step": 21,
+            "action": "合并 Wave 2 主分支",
+            "command": "git merge --no-ff feat/phase1-wave2 -m \"[WAVE_2] 完成 PHASE_1 核心任务\""
+          },
+          {
+            "step": 22,
+            "action": "推送合并结果",
+            "command": "git push origin master"
+          },
+          {
+            "step": 23,
+            "action": "清理临时分支",
+            "command": "git branch -d feat/phase1-wave2 feat/phase1-wave2-t1_2 feat/phase1-wave2-t1_3 feat/phase1-wave2-t1_perf"
+          }
+        ]
+      }
+    },
+    "commit_message_template": {
+      "t1_2_commits": [
+        "[T1_2] deps: 添加 dirs, glob, rayon 依赖",
+        "[T1_2] feat: 创建 monitor 模块基础结构",
+        "[T1_2] feat: 实现会话文件扫描功能",
+        "[T1_2] feat: 实现活跃会话检测（Windows 锁定检测 + 时间判断）",
+        "[T1_2] feat: 实现 SessionRepository.upsert_session 方法",
+        "[T1_2] feat: 添加 scan_sessions Tauri 命令",
+        "[T1_2] perf: 优化扫描性能（并行扫描、缓存、增量扫描）"
+      ],
+      "t1_3_commits": [
+        "[T1_3] feat: 实现 migrate_v9（扩展 sessions 表）",
+        "[T1_3] feat: 实现 migrate_v10（创建 saved_prompts 表）",
+        "[T1_3] feat: 实现 migrate_v11（创建 meta_templates 表）",
+        "[T1_3] refactor: 更新 Session 模型（rating, tags, is_archived）",
+        "[T1_3] feat: 添加 tags 辅助方法（get_tags, set_tags）"
+      ],
+      "t1_perf_commits": [
+        "[T1_PERF] test: 创建性能测试框架",
+        "[T1_PERF] test: 实现启动时间测试",
+        "[T1_PERF] test: 实现会话扫描性能测试",
+        "[T1_PERF] docs: 生成性能测试报告"
+      ]
+    }
+  },
+  "deliverables": [
+    "可工作的会话扫描器（monitor 模块）",
+    "完整的数据库表结构（sessions 扩展 + saved_prompts + meta_templates）",
+    "性能测试报告（docs/performance_report_phase1.md）",
+    "会话扫描 API 文档",
+    "所有单元测试通过（覆盖率 > 80%）"
+  ],
+  "risks_and_mitigations": [
+    {
+      "risk": "~/.claude/projects/ 目录不存在",
+      "probability": "low",
+      "impact": "medium",
+      "mitigation": "返回空列表而非报错，在 UI 中提示用户"
+    },
+    {
+      "risk": "Windows 文件锁定检测失败",
+      "probability": "medium",
+      "impact": "low",
+      "mitigation": "降级到基于时间的判断逻辑（24小时内）"
+    },
+    {
+      "risk": "扫描性能不达标",
+      "probability": "low",
+      "impact": "medium",
+      "mitigation": "使用 rayon 并行扫描，缓存结果，增量扫描"
+    },
+    {
+      "risk": "损坏的 JSONL 文件导致扫描失败",
+      "probability": "medium",
+      "impact": "low",
+      "mitigation": "使用 ? 操作符捕获错误，跳过损坏文件，记录到日志"
+    },
+    {
+      "risk": "数据库迁移失败（ALTER TABLE）",
+      "probability": "low",
+      "impact": "high",
+      "mitigation": "迁移前备份数据库，使用事务回滚，提供手动回滚指南"
+    }
+  ],
+  "success_criteria": [
+    "会话扫描器能正确扫描 ~/.claude/projects/ 目录",
+    "返回所有会话的元数据列表",
+    "活跃会话检测正确工作",
+    "数据库表扩展成功（v9-v11 迁移）",
+    "性能达标：启动 < 3s，扫描 100 个会话 < 2s",
+    "所有验证检查点通过",
+    "main_plan.json 状态已同步更新"
+  ]
+}

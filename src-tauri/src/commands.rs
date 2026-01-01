@@ -5,11 +5,286 @@
 use tauri::State;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
+use std::time::Instant;
+use std::fs;
+use std::path::PathBuf;
 
 use crate::llm::LLMClientManager;
 use crate::llm::interface::TestConnectionResult;
 use crate::database::{ApiProvider, ApiProviderType, ApiProviderRepository};
 use crate::llm::security::ApiKeyStorage;
+use crate::tokenizer::{TokenCounter, TokenEncodingType};
+use crate::parser::{jsonl::JsonlParser, tree::{MessageTreeBuilder, ConversationTree}};
+
+// ==================== 性能基准测试模块（内联） ====================
+
+/// 性能测试结果
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BenchmarkResult {
+    /// 测试名称
+    pub name: String,
+    /// 耗时（毫秒）
+    pub duration_ms: f64,
+    /// 是否通过阈值
+    pub passed: bool,
+    /// 阈值（毫秒）
+    pub threshold_ms: f64,
+    /// 详细信息
+    pub details: String,
+}
+
+/// 性能测试报告
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BenchmarkReport {
+    /// 测试时间戳
+    pub timestamp: String,
+    /// 测试结果列表
+    pub results: Vec<BenchmarkResult>,
+    /// 总体是否通过
+    pub overall_passed: bool,
+}
+
+impl BenchmarkReport {
+    /// 生成 Markdown 格式的报告
+    pub fn to_markdown(&self) -> String {
+        let mut md = format!("# 性能基准测试报告\n\n");
+        md.push_str(&format!("**测试时间**: {}\n\n", self.timestamp));
+        md.push_str(&format!("**总体结果**: {}\n\n",
+            if self.overall_passed { "✅ 通过" } else { "❌ 失败" }));
+
+        md.push_str("## 测试结果详情\n\n");
+        md.push_str("| 测试名称 | 耗时 (ms) | 阈值 (ms) | 结果 | 详情 |\n");
+        md.push_str("|---------|----------|----------|------|------|\n");
+
+        for result in &self.results {
+            let status = if result.passed { "✅ 通过" } else { "❌ 失败" };
+            md.push_str(&format!(
+                "| {} | {:.2} | {:.2} | {} | {} |\n",
+                result.name, result.duration_ms, result.threshold_ms, status, result.details
+            ));
+        }
+
+        // 添加总结
+        let total_time: f64 = self.results.iter().map(|r| r.duration_ms).sum();
+        md.push_str(&format!("\n**总耗时**: {:.2} ms\n", total_time));
+
+        // 添加建议
+        md.push_str("\n## 性能优化建议\n\n");
+        for result in &self.results {
+            if !result.passed {
+                md.push_str(&format!("### {} 未达标\n", result.name));
+                md.push_str(&format!("- 当前耗时: {:.2} ms\n", result.duration_ms));
+                md.push_str(&format!("- 目标阈值: {:.2} ms\n", result.threshold_ms));
+                md.push_str(&format!("- 差距: {:.2} ms\n", result.duration_ms - result.threshold_ms));
+                md.push_str(&get_optimization_suggestion(&result.name));
+                md.push_str("\n");
+            }
+        }
+
+        md
+    }
+
+    /// 生成 JSON 格式的报告
+    pub fn to_json(&self) -> anyhow::Result<String> {
+        Ok(serde_json::to_string_pretty(self)?)
+    }
+}
+
+/// 获取优化建议
+fn get_optimization_suggestion(test_name: &str) -> String {
+    match test_name {
+        "应用启动时间" => {
+            String::from(
+                "**优化建议**:\n\
+                - 检查数据库连接池配置\n\
+                - 考虑延迟加载非关键模块\n\
+                - 使用异步初始化避免阻塞主线程\n\
+                - 检查是否有冗余的文件 I/O 操作\n"
+            )
+        }
+        "会话扫描时间" => {
+            String::from(
+                "**优化建议**:\n\
+                - 使用并行扫描处理多个项目目录\n\
+                - 增加文件扫描缓存\n\
+                - 优化 glob 模式匹配\n\
+                - 考虑增量扫描策略（仅扫描变更文件）\n"
+            )
+        }
+        "数据库查询性能" => {
+            String::from(
+                "**优化建议**:\n\
+                - 添加适当的索引\n\
+                - 使用查询预编译语句\n\
+                - 考虑使用连接池\n\
+                - 优化复杂查询的 SQL 结构\n"
+            )
+        }
+        _ => String::from("**暂无具体建议**\n")
+    }
+}
+
+/// 测试应用启动时间
+fn benchmark_startup_time() -> BenchmarkResult {
+    let name = String::from("应用启动时间");
+    let threshold_ms = 3000.0;
+
+    let start = Instant::now();
+
+    // 1. 测试数据库初始化时间
+    let db_start = Instant::now();
+    let db_result = crate::database::init::get_connection_shared();
+    let db_duration = db_start.elapsed();
+
+    let details = if let Err(e) = db_result {
+        format!("数据库初始化失败: {}", e)
+    } else {
+        format!("数据库初始化耗时: {:.2} ms", db_duration.as_millis())
+    };
+
+    let duration = start.elapsed();
+    let duration_ms = duration.as_secs_f64() * 1000.0;
+    let passed = duration_ms < threshold_ms;
+
+    BenchmarkResult {
+        name,
+        duration_ms,
+        passed,
+        threshold_ms,
+        details,
+    }
+}
+
+/// 测试会话扫描时间
+fn benchmark_scan_sessions() -> BenchmarkResult {
+    let name = String::from("会话扫描时间");
+    let threshold_ms = 2000.0;
+
+    let start = Instant::now();
+
+    // 执行会话扫描
+    let scan_result = crate::monitor::scanner::scan_session_files();
+    let duration = start.elapsed();
+
+    let (details, passed) = match scan_result {
+        Ok(sessions) => {
+            let count = sessions.len();
+            let duration_ms = duration.as_secs_f64() * 1000.0;
+
+            // 根据会话数量调整阈值
+            let expected_ms = (count as f64 / 100.0) * threshold_ms;
+            let passed = duration_ms < expected_ms;
+
+            let details = format!(
+                "扫描 {} 个会话，耗时 {:.2} ms（目标阈值: {:.2} ms）",
+                count,
+                duration_ms,
+                expected_ms
+            );
+
+            (details, passed)
+        }
+        Err(e) => {
+            let details = format!("扫描失败: {}", e);
+            (details, false)
+        }
+    };
+
+    let duration_ms = duration.as_secs_f64() * 1000.0;
+
+    BenchmarkResult {
+        name,
+        duration_ms,
+        passed,
+        threshold_ms,
+        details,
+    }
+}
+
+/// 测试数据库查询性能
+fn benchmark_database_queries() -> BenchmarkResult {
+    let name = String::from("数据库查询性能");
+    let threshold_ms = 100.0;
+
+    let start = Instant::now();
+
+    let query_result = (|| -> anyhow::Result<String> {
+        let conn = crate::database::init::get_connection_shared()?;
+        let guard = conn.lock().map_err(|e| anyhow::anyhow!("获取锁失败: {}", e))?;
+
+        // 测试查询性能
+        let query_start = Instant::now();
+        let _version: String = guard.query_row("SELECT sqlite_version()", [], |row| row.get(0))?;
+        let query_duration = query_start.elapsed();
+
+        Ok(format!("SQLite 版本查询耗时: {:.2} ms", query_duration.as_millis()))
+    })();
+
+    let duration = start.elapsed();
+    let duration_ms = duration.as_secs_f64() * 1000.0;
+    let passed = duration_ms < threshold_ms;
+
+    let details = match query_result {
+        Ok(msg) => msg,
+        Err(e) => format!("查询失败: {}", e),
+    };
+
+    BenchmarkResult {
+        name,
+        duration_ms,
+        passed,
+        threshold_ms,
+        details,
+    }
+}
+
+/// 运行所有性能测试
+fn run_all_benchmarks_internal() -> BenchmarkReport {
+    let timestamp = chrono::Utc::now().to_rfc3339();
+
+    let mut results = Vec::new();
+
+    // 测试 1: 应用启动时间
+    println!("🚀 测试 1/3: 应用启动时间...");
+    results.push(benchmark_startup_time());
+
+    // 测试 2: 会话扫描时间
+    println!("🔍 测试 2/3: 会话扫描时间...");
+    results.push(benchmark_scan_sessions());
+
+    // 测试 3: 数据库查询性能
+    println!("💾 测试 3/3: 数据库查询性能...");
+    results.push(benchmark_database_queries());
+
+    // 计算总体结果
+    let overall_passed = results.iter().all(|r| r.passed);
+
+    BenchmarkReport {
+        timestamp,
+        results,
+        overall_passed,
+    }
+}
+
+/// 保存性能测试报告到文件
+fn save_benchmark_report_internal(report: &BenchmarkReport, output_path: &PathBuf) -> anyhow::Result<()> {
+    // 创建输出目录
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    // 保存 Markdown 报告
+    let md_path = output_path.with_extension("md");
+    fs::write(&md_path, report.to_markdown())?;
+    println!("✅ Markdown 报告已保存到: {:?}", md_path);
+
+    // 保存 JSON 报告
+    let json_path = output_path.with_extension("json");
+    fs::write(&json_path, report.to_json()?)?;
+    println!("✅ JSON 报告已保存到: {:?}", json_path);
+
+    Ok(())
+}
 
 /// 创建/更新提供商的请求参数
 #[derive(Debug, Deserialize)]
@@ -183,7 +458,8 @@ pub async fn cmd_save_provider(
     _manager: State<'_, LLMClientManager>,
     request: SaveProviderRequest,
 ) -> std::result::Result<ApiProvider, CommandError> {
-    let repo = ApiProviderRepository::from_default_db()?;
+    let conn = crate::database::init::get_connection_shared()?;
+    let repo = ApiProviderRepository::with_conn(conn);
 
     // 创建或更新提供商
     let mut provider = if let Some(id) = request.id {
@@ -291,7 +567,8 @@ pub fn cmd_delete_provider(
     ApiKeyStorage::delete_api_key(id)?;
 
     // 从数据库删除提供商
-    let repo = ApiProviderRepository::from_default_db()?;
+    let conn = crate::database::init::get_connection_shared()?;
+    let repo = ApiProviderRepository::with_conn(conn);
     repo.delete_provider(id)?;
 
     Ok(())
@@ -328,3 +605,728 @@ pub async fn cmd_test_provider_connection(
     let result = manager.test_provider(id).await?;
     Ok(result)
 }
+
+// ==================== Token 计数器命令 ====================
+
+/// Token 计数请求参数
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CountTokensRequest {
+    /// 要计算的文本内容
+    pub text: String,
+
+    /// 模型名称（可选，用于自动选择编码类型）
+    pub model: Option<String>,
+
+    /// 手动指定编码类型（优先级高于 model）
+    pub encoding_type: Option<String>,
+}
+
+/// Token 计数响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CountTokensResponse {
+    /// Token 数量
+    pub token_count: usize,
+
+    /// 使用的编码类型
+    pub encoding_type: String,
+
+    /// 模型名称（如果提供）
+    pub model: Option<String>,
+}
+
+/// 计算文本的 Token 数量
+///
+/// # 功能
+/// 使用 tiktoken-rs 库准确计算文本的 Token 数量，支持多种 LLM 模型的编码方式
+///
+/// # 参数
+/// * `text` - 要计算的文本内容
+/// * `model` - 模型名称（可选，用于自动选择编码类型，如 "gpt-4"、"gpt-3.5-turbo"）
+/// * `encoding_type` - 手动指定编码类型（可选，优先级高于 model）
+///   - "cl100k_base": GPT-4, GPT-3.5-Turbo（最新版本）
+///   - "p50k_base": GPT-3.5-Turbo（旧版本）
+///   - "r50k_base": GPT-2 系列, GPT-3 davinci 系列
+///   - "gpt2": 旧版 GPT-3
+///
+/// # 返回
+/// 返回 Token 数量和使用的编码类型信息
+///
+/// # 示例
+/// ```javascript
+/// // 前端调用示例
+/// const result = await invoke('count_prompt_tokens', {
+///   text: 'Hello, world!',
+///   model: 'gpt-4'
+/// });
+/// console.log(result.tokenCount); // 4
+/// ```
+#[tauri::command]
+pub fn count_prompt_tokens(
+    request: CountTokensRequest,
+) -> std::result::Result<CountTokensResponse, CommandError> {
+    // 创建 Token 计数器
+    let counter = if let Some(encoding) = request.encoding_type {
+        // 优先使用手动指定的编码类型
+        let encoding_type = match encoding.to_lowercase().as_str() {
+            "cl100k_base" => TokenEncodingType::Cl100kBase,
+            "p50k_base" => TokenEncodingType::P50kBase,
+            "r50k_base" => TokenEncodingType::R50kBase,
+            "gpt2" => TokenEncodingType::Gpt2,
+            _ => {
+                return Err(CommandError {
+                    message: format!("不支持的编码类型: {}", encoding),
+                });
+            }
+        };
+        TokenCounter::with_encoding(encoding_type)?
+    } else if let Some(model) = &request.model {
+        // 使用模型名称自动选择编码类型
+        TokenCounter::from_model(model)?
+    } else {
+        // 默认使用 cl100k_base（GPT-4 / GPT-3.5-Turbo 最新版本）
+        TokenCounter::new()?
+    };
+
+    // 计算 Token 数量
+    let token_count = counter.count_tokens(&request.text)?;
+
+    // 获取编码类型名称
+    let encoding_type_name = counter.encoding_type().encoding_name().to_string();
+
+    Ok(CountTokensResponse {
+        token_count,
+        encoding_type: encoding_type_name,
+        model: request.model,
+    })
+}
+
+
+/// 扫描会话响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMeta {
+    pub session_id: String,
+    pub project_path: String,
+    pub project_name: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub message_count: usize,
+    pub is_active: bool,
+}
+
+/// 扫描 Claude Code 会话文件
+///
+/// 扫描 ~/.claude/projects/ 目录，查找所有会话文件并提取元数据
+#[tauri::command]
+pub async fn scan_sessions(
+    _manager: State<'_, LLMClientManager>,
+) -> std::result::Result<Vec<SessionMeta>, CommandError> {
+    use crate::monitor::scanner;
+    use crate::database::repository::SessionRepository;
+
+    // 扫描会话文件
+    let sessions_metadata = scanner::scan_session_files()
+        .map_err(|e| CommandError {
+            message: format!("扫描会话失败: {}", e),
+        })?;
+
+    // 获取数据库连接并创建 SessionRepository
+    let conn = crate::database::init::get_connection_shared()
+        .map_err(|e| CommandError {
+            message: format!("获取数据库连接失败: {}", e),
+        })?;
+    let session_repo = SessionRepository::with_conn(conn);
+
+    // 将扫描结果存入数据库
+    for metadata in &sessions_metadata {
+        let file_path = metadata.file_path.to_string_lossy().to_string();
+        let _ = session_repo.upsert_session(
+            &metadata.session_id,
+            &metadata.project_path,
+            &metadata.project_name,
+            &file_path,
+            metadata.is_active,
+        );
+    }
+
+    // 转换为返回格式
+    let result: Vec<SessionMeta> = sessions_metadata
+        .into_iter()
+        .map(|m| SessionMeta {
+            session_id: m.session_id,
+            project_path: m.project_path,
+            project_name: m.project_name,
+            created_at: m.created_at,
+            updated_at: m.updated_at,
+            message_count: m.message_count,
+            is_active: m.is_active,
+        })
+        .collect();
+
+    Ok(result)
+}
+
+
+// ==================== 性能基准测试命令 ====================
+
+/// 性能测试结果响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BenchmarkResultResponse {
+    /// 测试名称
+    pub name: String,
+    /// 耗时（毫秒）
+    pub duration_ms: f64,
+    /// 是否通过阈值
+    pub passed: bool,
+    /// 阈值（毫秒）
+    pub threshold_ms: f64,
+    /// 详细信息
+    pub details: String,
+}
+
+/// 性能测试报告响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BenchmarkReportResponse {
+    /// 测试时间戳
+    pub timestamp: String,
+    /// 测试结果列表
+    pub results: Vec<BenchmarkResultResponse>,
+    /// 总体是否通过
+    pub overall_passed: bool,
+    /// Markdown 格式的报告
+    pub markdown_report: String,
+}
+
+impl From<BenchmarkResult> for BenchmarkResultResponse {
+    fn from(result: BenchmarkResult) -> Self {
+        Self {
+            name: result.name,
+            duration_ms: result.duration_ms,
+            passed: result.passed,
+            threshold_ms: result.threshold_ms,
+            details: result.details,
+        }
+    }
+}
+
+impl From<BenchmarkReport> for BenchmarkReportResponse {
+    fn from(mut report: BenchmarkReport) -> Self {
+        // 先生成 markdown 报告，避免所有权移动
+        let markdown = report.to_markdown();
+        Self {
+            timestamp: report.timestamp,
+            results: report.results.into_iter().map(Into::into).collect(),
+            overall_passed: report.overall_passed,
+            markdown_report: markdown,
+        }
+    }
+}
+
+/// 运行性能基准测试
+///
+/// 执行以下测试：
+/// - 应用启动时间 (< 3000ms)
+/// - 会话扫描时间 (< 2000ms for 100 sessions)
+/// - 数据库查询性能 (< 100ms)
+///
+/// # 返回
+/// 返回完整的性能测试报告
+#[tauri::command]
+pub fn run_benchmarks(
+    _manager: State<'_, LLMClientManager>,
+) -> std::result::Result<BenchmarkReportResponse, CommandError> {
+    // 运行所有性能测试
+    let report = run_all_benchmarks_internal();
+
+    // 打印报告到控制台
+    println!("\n{}", report.to_markdown());
+
+    // 保存报告到文件
+    let output_dir = std::path::PathBuf::from("dev_plans/plan1/logs");
+    let output_path = output_dir.join(format!(
+        "benchmark_report_{}.json",
+        chrono::Utc::now().format("%Y%m%d_%H%M%S")
+    ));
+
+    if let Err(e) = save_benchmark_report_internal(&report, &output_path) {
+        eprintln!("警告: 保存性能测试报告失败: {}", e);
+    }
+
+    Ok(report.into())
+}
+
+
+// ==================== 消息树解析命令 ====================
+
+/// 解析会话文件响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParseSessionResponse {
+    /// 会话 ID
+    pub session_id: String,
+
+    /// 消息树
+    pub tree: ConversationTree,
+
+    /// 解析耗时（毫秒）
+    pub parse_duration_ms: f64,
+
+    /// 消息总数
+    pub message_count: usize,
+
+    /// 最大深度
+    pub max_depth: usize,
+}
+
+/// 解析会话文件并构建消息树
+///
+/// # 功能
+/// 从 Claude Code 的 JSONL 会话文件解析消息内容，并基于 parentUuid 字段构建嵌套的消息树结构。
+///
+/// # 参数
+/// * `file_path` - JSONL 会话文件的完整路径
+///
+/// # 返回
+/// 返回完整的消息树结构，包含所有消息的嵌套关系
+///
+/// # 算法特点
+/// - **迭代算法**：使用迭代而非递归构建树，避免深层嵌套导致栈溢出
+/// - **根节点识别**：自动识别 User 消息作为根节点
+/// - **深度计算**：自动计算每个节点的树深度
+///
+/// # 示例
+/// ```javascript
+/// // 前端调用示例
+/// const result = await invoke('parse_session_tree', {
+///   filePath: 'C:/Users/xxx/.claude/projects/xxx/sessions/xxx.jsonl'
+/// });
+/// console.log(result.tree.roots[0].children); // 访问子消息
+/// ```
+#[tauri::command]
+pub async fn parse_session_tree(
+    file_path: String,
+) -> std::result::Result<ParseSessionResponse, CommandError> {
+    let path = PathBuf::from(&file_path);
+
+    // 验证文件存在
+    if !path.exists() {
+        return Err(CommandError {
+            message: format!("文件不存在: {}", file_path),
+        });
+    }
+
+    let start = std::time::Instant::now();
+
+    // 创建 JSONL 解析器并解析所有条目
+    let mut parser = JsonlParser::new(path)
+        .map_err(|e| CommandError {
+            message: format!("创建 JSONL 解析器失败: {}", e),
+        })?;
+
+    let entries = parser.parse_all()
+        .map_err(|e| CommandError {
+            message: format!("解析 JSONL 文件失败: {}", e),
+        })?;
+
+    // 构建消息树
+    let tree = MessageTreeBuilder::build_from_entries(&entries)
+        .map_err(|e| CommandError {
+            message: format!("构建消息树失败: {}", e),
+        })?;
+
+    let duration = start.elapsed();
+
+    // 提取会话 ID（从文件路径或第一条消息）
+    let session_id = extract_session_id(&file_path);
+
+    let message_count = tree.total_count;
+    let max_depth = tree.max_depth;
+
+    Ok(ParseSessionResponse {
+        session_id,
+        tree,
+        parse_duration_ms: duration.as_secs_f64() * 1000.0,
+        message_count,
+        max_depth,
+    })
+}
+
+/// 从文件路径提取会话 ID
+fn extract_session_id(file_path: &str) -> String {
+    // 尝试从文件路径中提取 UUID
+    if let Some(filename) = PathBuf::from(file_path).file_stem() {
+        if let Some(name) = filename.to_str() {
+            // 如果文件名看起来像 UUID，直接使用
+            if name.len() == 36 && name.chars().filter(|&c| c == '-').count() == 4 {
+                return name.to_string();
+            }
+        }
+    }
+
+    // 否则使用文件名作为 ID
+    PathBuf::from(file_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+// ==================== 会话评分与标签命令 ====================
+
+/// 设置会话评分请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetSessionRatingRequest {
+    /// 会话 ID
+    pub session_id: String,
+    /// 评分 (1-5)，null 表示清除评分
+    pub rating: Option<i32>,
+}
+
+/// 设置会话标签请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SetSessionTagsRequest {
+    /// 会话 ID
+    pub session_id: String,
+    /// 标签数组
+    pub tags: Vec<String>,
+}
+
+/// 会话评分和标签响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionMetadataResponse {
+    /// 是否成功
+    pub success: bool,
+    /// 更新的行数
+    pub rows_affected: usize,
+    /// 消息
+    pub message: String,
+}
+
+/// 设置会话评分
+///
+/// 为会话设置 1-5 星评分，或清除评分。
+///
+/// # 参数
+/// - `request`: 包含 session_id 和 rating (1-5 或 null) 的请求
+///
+/// # 返回
+/// 返回操作结果
+///
+/// # 示例
+/// ```javascript
+/// // 设置 5 星评分
+/// await invoke('set_session_rating', {
+///   sessionId: 'uuid-xxx',
+///   rating: 5
+/// });
+///
+/// // 清除评分
+/// await invoke('set_session_rating', {
+///   sessionId: 'uuid-xxx',
+///   rating: null
+/// });
+/// ```
+#[tauri::command]
+pub async fn set_session_rating(
+    request: SetSessionRatingRequest,
+) -> std::result::Result<SessionMetadataResponse, CommandError> {
+    let conn = crate::database::init::get_connection_shared()
+        .map_err(|e| CommandError {
+            message: format!("获取数据库连接失败: {}", e),
+        })?;
+
+    let repo = crate::database::repository::SessionRepository::with_conn(conn);
+
+    let rows_affected = repo.set_session_rating(&request.session_id, request.rating)
+        .map_err(|e| CommandError {
+            message: format!("设置会话评分失败: {}", e),
+        })?;
+
+    let message = if rows_affected > 0 {
+        format!("会话评分已{}", request.rating.map(|r| format!("更新为 {} 星", r)).unwrap_or_else(|| "清除".to_string()))
+    } else {
+        "会话不存在".to_string()
+    };
+
+    Ok(SessionMetadataResponse {
+        success: rows_affected > 0,
+        rows_affected,
+        message,
+    })
+}
+
+/// 设置会话标签
+///
+/// 为会话设置标签数组，或清空标签。
+///
+/// # 参数
+/// - `request`: 包含 session_id 和 tags (字符串数组) 的请求
+///
+/// # 返回
+/// 返回操作结果
+///
+/// # 示例
+/// ```javascript
+/// // 设置标签
+/// await invoke('set_session_tags', {
+///   sessionId: 'uuid-xxx',
+///   tags: ['bugfix', 'ui', 'feature']
+/// });
+///
+/// // 清空标签
+/// await invoke('set_session_tags', {
+///   sessionId: 'uuid-xxx',
+///   tags: []
+/// });
+/// ```
+#[tauri::command]
+pub async fn set_session_tags(
+    request: SetSessionTagsRequest,
+) -> std::result::Result<SessionMetadataResponse, CommandError> {
+    let conn = crate::database::init::get_connection_shared()
+        .map_err(|e| CommandError {
+            message: format!("获取数据库连接失败: {}", e),
+        })?;
+
+    let repo = crate::database::repository::SessionRepository::with_conn(conn);
+
+    // 克隆 tags 以便后续使用
+    let tags_clone = request.tags.clone();
+    let rows_affected = repo.set_session_tags(&request.session_id, request.tags)
+        .map_err(|e| CommandError {
+            message: format!("设置会话标签失败: {}", e),
+        })?;
+
+    let message = if rows_affected > 0 {
+        format!("会话标签已更新为: {}", tags_clone.join(", "))
+    } else {
+        "会话不存在".to_string()
+    };
+
+    Ok(SessionMetadataResponse {
+        success: rows_affected > 0,
+        rows_affected,
+        message,
+    })
+}
+
+/// 获取会话评分
+///
+/// 获取会话的当前评分。
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+///
+/// # 返回
+/// 返回评分值 (1-5)，null 表示未评分
+///
+/// # 示例
+/// ```javascript
+/// const rating = await invoke('get_session_rating', {
+///   sessionId: 'uuid-xxx'
+/// });
+/// console.log(rating); // 5 或 null
+/// ```
+#[tauri::command]
+pub async fn get_session_rating(
+    session_id: String,
+) -> std::result::Result<Option<i32>, CommandError> {
+    let conn = crate::database::init::get_connection_shared()
+        .map_err(|e| CommandError {
+            message: format!("获取数据库连接失败: {}", e),
+        })?;
+
+    let repo = crate::database::repository::SessionRepository::with_conn(conn);
+
+    repo.get_session_rating(&session_id)
+        .map_err(|e| CommandError {
+            message: format!("获取会话评分失败: {}", e),
+        })
+}
+
+/// 获取会话标签
+///
+/// 获取会话的当前标签列表。
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+///
+/// # 返回
+/// 返回标签数组
+///
+/// # 示例
+/// ```javascript
+/// const tags = await invoke('get_session_tags', {
+///   sessionId: 'uuid-xxx'
+/// });
+/// console.log(tags); // ['bugfix', 'ui', 'feature']
+/// ```
+#[tauri::command]
+pub async fn get_session_tags(
+    session_id: String,
+) -> std::result::Result<Vec<String>, CommandError> {
+    let conn = crate::database::init::get_connection_shared()
+        .map_err(|e| CommandError {
+            message: format!("获取数据库连接失败: {}", e),
+        })?;
+
+    let repo = crate::database::repository::SessionRepository::with_conn(conn);
+
+    repo.get_session_tags(&session_id)
+        .map_err(|e| CommandError {
+            message: format!("获取会话标签失败: {}", e),
+        })
+}
+
+// ==================== 会话归档命令 ====================
+
+/// 归档会话
+///
+/// 将会话标记为已归档，归档后的会话不会在默认列表中显示，但仍可通过搜索找到。
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+///
+/// # 返回
+/// 返回操作结果
+///
+/// # 示例
+/// ```javascript
+/// await invoke('archive_session', {
+///   sessionId: 'uuid-xxx'
+/// });
+/// ```
+#[tauri::command]
+pub async fn archive_session(
+    session_id: String,
+) -> std::result::Result<SessionMetadataResponse, CommandError> {
+    let conn = crate::database::init::get_connection_shared()
+        .map_err(|e| CommandError {
+            message: format!("获取数据库连接失败: {}", e),
+        })?;
+
+    let repo = crate::database::repository::SessionRepository::with_conn(conn);
+
+    let rows_affected = repo.archive_session(&session_id)
+        .map_err(|e| CommandError {
+            message: format!("归档会话失败: {}", e),
+        })?;
+
+    let message = if rows_affected > 0 {
+        "会话已归档".to_string()
+    } else {
+        "会话不存在".to_string()
+    };
+
+    Ok(SessionMetadataResponse {
+        success: rows_affected > 0,
+        rows_affected,
+        message,
+    })
+}
+
+/// 取消归档会话
+///
+/// 将已归档的会话恢复到默认列表。
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+///
+/// # 返回
+/// 返回操作结果
+///
+/// # 示例
+/// ```javascript
+/// await invoke('unarchive_session', {
+///   sessionId: 'uuid-xxx'
+/// });
+/// ```
+#[tauri::command]
+pub async fn unarchive_session(
+    session_id: String,
+) -> std::result::Result<SessionMetadataResponse, CommandError> {
+    let conn = crate::database::init::get_connection_shared()
+        .map_err(|e| CommandError {
+            message: format!("获取数据库连接失败: {}", e),
+        })?;
+
+    let repo = crate::database::repository::SessionRepository::with_conn(conn);
+
+    let rows_affected = repo.unarchive_session(&session_id)
+        .map_err(|e| CommandError {
+            message: format!("取消归档会话失败: {}", e),
+        })?;
+
+    let message = if rows_affected > 0 {
+        "会话已恢复到活跃列表".to_string()
+    } else {
+        "会话不存在".to_string()
+    };
+
+    Ok(SessionMetadataResponse {
+        success: rows_affected > 0,
+        rows_affected,
+        message,
+    })
+}
+
+/// 获取已归档的会话列表
+///
+/// 返回所有已归档的会话，按更新时间倒序排列。
+///
+/// # 返回
+/// 返回已归档的会话列表
+///
+/// # 示例
+/// ```javascript
+/// const archivedSessions = await invoke('get_archived_sessions');
+/// console.log(archivedSessions); // Session 对象数组
+/// ```
+#[tauri::command]
+pub async fn get_archived_sessions(
+) -> std::result::Result<Vec<crate::database::models::Session>, CommandError> {
+    let conn = crate::database::init::get_connection_shared()
+        .map_err(|e| CommandError {
+            message: format!("获取数据库连接失败: {}", e),
+        })?;
+
+    let repo = crate::database::repository::SessionRepository::with_conn(conn);
+
+    repo.get_archived_sessions()
+        .map_err(|e| CommandError {
+            message: format!("获取已归档会话列表失败: {}", e),
+        })
+}
+
+/// 获取未归档的活跃会话列表
+///
+/// 返回所有未归档的会话（默认列表），按更新时间倒序排列。
+///
+/// # 返回
+/// 返回未归档的会话列表
+///
+/// # 示例
+/// ```javascript
+/// const activeSessions = await invoke('get_active_sessions');
+/// console.log(activeSessions); // Session 对象数组
+/// ```
+#[tauri::command]
+pub async fn get_active_sessions(
+) -> std::result::Result<Vec<crate::database::models::Session>, CommandError> {
+    let conn = crate::database::init::get_connection_shared()
+        .map_err(|e| CommandError {
+            message: format!("获取数据库连接失败: {}", e),
+        })?;
+
+    let repo = crate::database::repository::SessionRepository::with_conn(conn);
+
+    repo.get_active_sessions()
+        .map_err(|e| CommandError {
+            message: format!("获取活跃会话列表失败: {}", e),
+        })
+}
+

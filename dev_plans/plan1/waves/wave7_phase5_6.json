@@ -6,7 +6,9 @@
     "name": "feat/phase5-6-wave7",
     "base": "master",
     "strategy": "feature_branch",
-    "depends_on": ["feat/phase4-wave6"]
+    "depends_on": [
+      "feat/phase4-wave6"
+    ]
   },
   "parallel_groups": [
     {
@@ -22,8 +24,12 @@
           "estimated_hours": 8,
           "priority": "high",
           "status": "pending",
-          "requirement_ref": ["F4.5"],
-          "dependencies": ["T4_2"],
+          "requirement_ref": [
+            "F4.5"
+          ],
+          "dependencies": [
+            "T4_2"
+          ],
           "output_artifacts": [
             "src/components/MonacoEditor.tsx",
             "src/components/CodeViewer.tsx"
@@ -33,7 +39,9 @@
               "step": 1,
               "title": "安装 Monaco Editor",
               "description": "添加 @monaco-editor/react",
-              "commands": ["npm install @monaco-editor/react"],
+              "commands": [
+                "npm install @monaco-editor/react"
+              ],
               "verification": "组件正常渲染"
             },
             {
@@ -69,11 +77,15 @@
           "task_id": "T5_1b",
           "name": "实现代码变更检测",
           "assignee": "frontend",
-          "estimated_hours": 10,
+          "estimated_hours": 8,
           "priority": "high",
           "status": "pending",
-          "requirement_ref": ["F4.5"],
-          "dependencies": ["T2_3"],
+          "requirement_ref": [
+            "F4.5"
+          ],
+          "dependencies": [
+            "T2_3"
+          ],
           "output_artifacts": [
             "src/utils/codeChangeExtractor.ts"
           ],
@@ -115,8 +127,13 @@
           "estimated_hours": 12,
           "priority": "high",
           "status": "pending",
-          "requirement_ref": ["F4.5"],
-          "dependencies": ["T5_1a", "T5_1b"],
+          "requirement_ref": [
+            "F4.5"
+          ],
+          "dependencies": [
+            "T5_1a",
+            "T5_1b"
+          ],
           "output_artifacts": [
             "src/components/DiffViewer.tsx"
           ],
@@ -125,7 +142,9 @@
               "step": 1,
               "title": "安装 Diff 组件",
               "description": "添加 react-diff-viewer-continued",
-              "commands": ["npm install react-diff-viewer-continued"],
+              "commands": [
+                "npm install react-diff-viewer-continued"
+              ],
               "verification": "组件正常渲染"
             },
             {
@@ -159,10 +178,16 @@
           "name": "提示词实验室 UI",
           "assignee": "frontend",
           "estimated_hours": 18,
-          "priority": "high",
+          "priority": "medium",
           "status": "pending",
-          "requirement_ref": ["F4.3", "F9"],
-          "dependencies": ["T3_3", "T4_3"],
+          "requirement_ref": [
+            "F4.3",
+            "F9"
+          ],
+          "dependencies": [
+            "T3_3",
+            "T4_3"
+          ],
           "output_artifacts": [
             "src/pages/PromptLab.tsx",
             "src/components/PromptBuilder.tsx"
@@ -219,8 +244,13 @@
           "estimated_hours": 14,
           "priority": "medium",
           "status": "pending",
-          "requirement_ref": ["F9.1", "F9.2"],
-          "dependencies": ["T3_5"],
+          "requirement_ref": [
+            "F9.1",
+            "F9.2"
+          ],
+          "dependencies": [
+            "T3_5"
+          ],
           "output_artifacts": [
             "src/components/PromptLibrary.tsx",
             "src/components/PromptCard.tsx"
@@ -278,8 +308,13 @@
           "estimated_hours": 10,
           "priority": "medium",
           "status": "pending",
-          "requirement_ref": ["F5.4", "F8.2"],
-          "dependencies": ["T3_4"],
+          "requirement_ref": [
+            "F5.4",
+            "F8.2"
+          ],
+          "dependencies": [
+            "T3_4"
+          ],
           "output_artifacts": [
             "src/components/ExportDialog.tsx",
             "src/utils/exporters.ts"
@@ -335,8 +370,13 @@
           "estimated_hours": 8,
           "priority": "medium",
           "status": "pending",
-          "requirement_ref": ["F7.4"],
-          "dependencies": ["T2B_3", "T4_1"],
+          "requirement_ref": [
+            "F7.4"
+          ],
+          "dependencies": [
+            "T2B_3",
+            "T4_1"
+          ],
           "output_artifacts": [
             "src/components/ArchiveManager.tsx"
           ],
@@ -382,8 +422,53 @@
       "name": "PHASE_6 测试与发布",
       "description": "端到端测试、性能优化、打包发布",
       "sub_branch": "feat/phase5-6-wave7-phase6",
-      "parallel_with": "GROUP_A_PHASE5",
+      "parallel_with": "sequential_after",
       "sequential_tasks": [
+        {
+          "task_id": "T6_PERF_FRONTEND",
+          "name": "前端性能基准测试",
+          "assignee": "frontend",
+          "estimated_hours": 10,
+          "priority": "medium",
+          "status": "pending",
+          "requirement_ref": [
+            "NF1"
+          ],
+          "dependencies": [
+            "T4_2",
+            "T5_1c"
+          ],
+          "output_artifacts": [
+            "src/tests/performance/frontend.spec.ts",
+            "docs/performance_report_frontend.md"
+          ],
+          "_directory_note": "src/tests/performance/ 是新增目录，用于存放性能测试文件，与其他测试文件保持一致的命名规范",
+          "implementation_steps": [
+            {
+              "step": 1,
+              "title": "配置 Lighthouse CI",
+              "description": "设置自动化性能测试",
+              "tool": "Lighthouse CI",
+              "verification": "CI 正常运行"
+            },
+            {
+              "step": 2,
+              "title": "执行性能测试",
+              "description": "测试核心场景",
+              "scenarios": [
+                "会话列表渲染（1000+项）<500ms",
+                "消息树展开/折叠 <100ms",
+                "代码 Diff 渲染（1000+行）<1s"
+              ],
+              "verification": "所有性能指标达标"
+            }
+          ],
+          "acceptance_criteria": [
+            "AC1: 会话列表渲染（1000+项）<500ms",
+            "AC2: 消息树展开/折叠 <100ms",
+            "AC3: 代码 Diff 渲染（1000+行）<1s"
+          ]
+        },
         {
           "task_id": "T6_1",
           "name": "端到端测试",
@@ -391,8 +476,13 @@
           "estimated_hours": 20,
           "priority": "high",
           "status": "pending",
-          "requirement_ref": ["NF1", "NF2"],
-          "dependencies": ["T5_5"],
+          "requirement_ref": [
+            "NF1",
+            "NF2"
+          ],
+          "dependencies": [
+            "T5_5"
+          ],
           "output_artifacts": [
             "tests/e2e/**/*.test.ts",
             "tests/e2e/test-plan.md"
@@ -431,8 +521,12 @@
           "estimated_hours": 16,
           "priority": "high",
           "status": "pending",
-          "requirement_ref": ["NF1"],
-          "dependencies": ["T6_1"],
+          "requirement_ref": [
+            "NF1"
+          ],
+          "dependencies": [
+            "T6_1"
+          ],
           "output_artifacts": [
             "docs/optimization-report.md"
           ],
@@ -485,7 +579,9 @@
           "estimated_hours": 12,
           "priority": "high",
           "status": "pending",
-          "dependencies": ["T6_2"],
+          "dependencies": [
+            "T6_2"
+          ],
           "output_artifacts": [
             "src-tauri/target/release/prism-forge_*.msi",
             "src-tauri/target/release/prism-forge_*.exe"
@@ -498,7 +594,9 @@
               "config": {
                 "bundle": {
                   "identifier": "com.prismforge.app",
-                  "icon": ["icons/icon.ico"],
+                  "icon": [
+                    "icons/icon.ico"
+                  ],
                   "copyright": "Copyright © 2025",
                   "category": "Developer Tool",
                   "short_description": "Claude Code Session Monitor",
@@ -540,9 +638,11 @@
           "name": "文档与发布",
           "assignee": "tech-writer",
           "estimated_hours": 16,
-          "priority": "medium",
+          "priority": "low",
           "status": "pending",
-          "dependencies": ["T6_3"],
+          "dependencies": [
+            "T6_3"
+          ],
           "output_artifacts": [
             "README.md",
             "docs/USER_MANUAL.md",
@@ -673,5 +773,7 @@
       "impact": "low",
       "mitigation": "跳过签名，提示用户信任发布者"
     }
-  ]
+  ],
+  "_file_type": "wave_manifest",
+  "_description": "WAVE_7: 第七波：PHASE_5 UI 增强与 PHASE_6 测试发布"
 }

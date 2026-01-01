@@ -1,0 +1,248 @@
+{
+  "_file_type": "prerequisites_specification",
+  "_description": "Wave 2 前置条件详细说明：依赖 Wave 1 的具体交付物",
+  "wave_id": "WAVE_2",
+  "name": "Wave 2 前置条件规范",
+  "version": "v1.0",
+  "overview": {
+    "description": "Wave 2 完全建立在 Wave 1 的基础上，需要 Wave 1 的所有交付物已就绪",
+    "dependency_wave": "WAVE_1",
+    "blocking_reason": "Wave 2 的会话扫描功能需要 Wave 1 建立的数据库基础设施和 Repository 层"
+  },
+  "wave_1_deliverables": {
+    "database": {
+      "title": "数据库基础设施",
+      "items": [
+        {
+          "deliverable": "数据库文件位置",
+          "expected_value": "%APPDATA%\\prism-forge\\prism-forge.db (Windows)",
+          "verification_sql": "PRAGMA database_list;"
+        },
+        {
+          "deliverable": "数据库版本",
+          "expected_value": "8 (schema_migrations.version)",
+          "verification_sql": "PRAGMA user_version;",
+          "fallback_check": "SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1;"
+        },
+        {
+          "deliverable": "sessions 表",
+          "expected_columns": ["id", "session_id", "project_path", "project_name", "created_at", "updated_at", "is_active"],
+          "verification_sql": "PRAGMA table_info(sessions);"
+        },
+        {
+          "deliverable": "messages 表",
+          "expected_columns": ["id", "session_id", "role", "content", "created_at"],
+          "verification_sql": "PRAGMA table_info(messages);"
+        },
+        {
+          "deliverable": "api_providers 表",
+          "expected_columns": ["id", "provider_type", "name", "base_url", "api_key_ref", "model", "config_json", "is_active"],
+          "verification_sql": "PRAGMA table_info(api_providers);"
+        },
+        {
+          "deliverable": "settings 表（Wave 2 配置依赖）",
+          "expected_columns": ["id", "active_threshold", "scan_cache_enabled"],
+          "critical_fields": [
+            {
+              "field": "active_threshold",
+              "type": "INTEGER",
+              "purpose": "活跃判断时间阈值（秒），用于会话活跃状态判断",
+              "required_by": "T1_2 (会话扫描器 is_active 判断)",
+              "wave1_version": "migrate_v6 创建",
+              "verification_sql": "SELECT active_threshold FROM settings WHERE id = 1;",
+              "expected_default": "86400"
+            },
+            {
+              "field": "scan_cache_enabled",
+              "type": "INTEGER",
+              "purpose": "是否启用扫描缓存（0=禁用，1=启用）",
+              "required_by": "T1_2 (会话扫描器缓存优化)",
+              "wave1_version": "migrate_v6 创建",
+              "verification_sql": "SELECT scan_cache_enabled FROM settings WHERE id = 1;",
+              "expected_default": "1"
+            }
+          ],
+          "verification_sql": "PRAGMA table_info(settings);"
+        },
+        {
+          "deliverable": "ensure_single_active 触发器",
+          "verification_sql": "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='ensure_single_active';"
+        }
+      ]
+    },
+    "repository_layer": {
+      "title": "Repository 数据访问层",
+      "items": [
+        {
+          "deliverable": "SessionRepository 结构体",
+          "location": "src-tauri/src/database/repository.rs",
+          "required_methods": [
+            "pub fn new(conn: Connection) -> Self",
+            "pub fn get_session(&self, id: i64) -> Result<Session>",
+            "pub fn get_session_by_sid(&self, session_id: &str) -> Result<Session>",
+            "pub fn create_session(&self, session: &Session) -> Result<Session>",
+            "pub fn update_session(&self, id: i64, session: &Session) -> Result<Session>",
+            "pub fn list_sessions(&self) -> Result<Vec<Session>>",
+            "pub fn delete_session(&self, id: i64) -> Result<()>"
+          ],
+          "verification": "grep -n 'pub struct SessionRepository' src-tauri/src/database/repository.rs"
+        },
+        {
+          "deliverable": "Session 数据模型",
+          "location": "src-tauri/src/database/models.rs",
+          "required_fields": [
+            "pub id: Option<i64>",
+            "pub session_id: String",
+            "pub project_path: String",
+            "pub project_name: String",
+            "pub is_active: bool",
+            "pub created_at: String",
+            "pub updated_at: String"
+          ],
+          "verification": "grep -A 10 'pub struct Session' src-tauri/src/database/models.rs"
+        }
+      ]
+    },
+    "llm_infrastructure": {
+      "title": "LLM 客户端基础设施",
+      "items": [
+        {
+          "deliverable": "LLMClientManager 单例",
+          "location": "src-tauri/src/llm/manager.rs",
+          "required_capabilities": [
+            "get_conn() - 获取数据库连接",
+            "get_active_client() - 获取活跃的 LLM 客户端"
+          ],
+          "verification": "grep -n 'pub struct LLMClientManager' src-tauri/src/llm/manager.rs"
+        },
+        {
+          "deliverable": "Tauri Command 基础设施",
+          "location": "src-tauri/src/commands.rs",
+          "required_pattern": "已有 #[tauri::command] 定义",
+          "verification": "grep -c '#\\[tauri::command\\]' src-tauri/src/commands.rs"
+        }
+      ]
+    }
+  },
+  "environment_prerequisites": {
+    "development_environment": {
+      "rust_toolchain": "1.70+",
+      "cargo_version": "Latest",
+      "verification": "rustc --version && cargo --version"
+    },
+    "dependencies": {
+      "required_crates": [
+        "rusqlite = { version = \"0.32\", features = [\"bundled\"] }",
+        "serde = { version = \"1.0\", features = [\"derive\"] }",
+        "serde_json = \"1.0\"",
+        "tauri = \"2.0\"",
+        "anyhow = \"1.0\""
+      ],
+      "verification": "cargo tree | grep -E '(rusqlite|serde|tauri|anyhow)'"
+    },
+    "filesystem": {
+      "claude_directory": "~/.claude/projects/",
+      "description": "Claude Code 默认项目存储位置",
+      "note": "如果不存在，扫描器应返回空列表而非报错"
+    }
+  },
+  "verification_checklist": [
+    {
+      "check_id": "V_WAVE2_001",
+      "title": "验证数据库版本",
+      "command": "sqlite3 prism-forge.db \"PRAGMA user_version;\"",
+      "expected_output": "8",
+      "on_failure": "先完成 Wave 1 的数据库迁移"
+    },
+    {
+      "check_id": "V_WAVE2_002",
+      "title": "验证 sessions 表存在",
+      "command": "sqlite3 prism-forge.db \"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sessions';\"",
+      "expected_output": "1",
+      "on_failure": "先运行 Wave 1 的数据库初始化"
+    },
+    {
+      "check_id": "V_WAVE2_003",
+      "title": "验证 SessionRepository 存在",
+      "command": "grep -q 'pub struct SessionRepository' src-tauri/src/database/repository.rs && echo 'EXISTS' || echo 'NOT_FOUND'",
+      "expected_output": "EXISTS",
+      "on_failure": "先完成 Wave 1 的 Repository 层"
+    },
+    {
+      "check_id": "V_WAVE2_004",
+      "title": "验证 LLMClientManager 存在",
+      "command": "grep -q 'pub struct LLMClientManager' src-tauri/src/llm/manager.rs && echo 'EXISTS' || echo 'NOT_FOUND'",
+      "expected_output": "EXISTS",
+      "on_failure": "先完成 Wave 1 的 LLM 基础设施"
+    },
+    {
+      "check_id": "V_WAVE2_005",
+      "title": "验证代码编译通过",
+      "command": "cargo check --message-format=short",
+      "expected_output": "Finished (无错误)",
+      "on_failure": "修复 Wave 1 的编译错误后再继续"
+    },
+    {
+      "check_id": "V_WAVE2_006",
+      "title": "验证 settings 表存在（规则 16 增强）",
+      "command": "sqlite3 prism-forge.db \"SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='settings';\"",
+      "expected_output": "1",
+      "on_failure": "先完成 Wave 1 的 migrate_v6 创建 settings 表"
+    },
+    {
+      "check_id": "V_WAVE2_007",
+      "title": "验证 active_threshold 字段存在（规则 16）",
+      "command": "sqlite3 prism-forge.db \"SELECT active_threshold FROM settings WHERE id = 1;\"",
+      "expected_output": "86400 (或正整数)",
+      "on_failure": "settings 表缺少 active_threshold 字段，检查 Wave 1 migrate_v6"
+    },
+    {
+      "check_id": "V_WAVE2_008",
+      "title": "验证 scan_cache_enabled 字段存在（规则 16）",
+      "command": "sqlite3 prism-forge.db \"SELECT scan_cache_enabled FROM settings WHERE id = 1;\"",
+      "expected_output": "1 或 0",
+      "on_failure": "settings 表缺少 scan_cache_enabled 字段，检查 Wave 1 migrate_v6"
+    }
+  ],
+  "blocking_scenarios": [
+    {
+      "scenario": "数据库版本低于 8",
+      "impact": "Wave 2 的迁移 v9-v11 无法执行",
+      "resolution": "先完成 Wave 1 的 migrate_v8"
+    },
+    {
+      "scenario": "SessionRepository 不存在",
+      "impact": "T1_2 任务无法实现 upsert_session 方法",
+      "resolution": "先完成 Wave 1 的 T1_1 任务"
+    },
+    {
+      "scenario": "LLMClientManager 未注册为 Tauri State",
+      "impact": "scan_sessions 命令无法注入依赖",
+      "resolution": "先在 lib.rs 中注册 manager 为 State"
+    }
+  ],
+  "integration_points": {
+    "wave2_to_wave1": [
+      {
+        "point": "T1_2 使用 SessionRepository",
+        "wave1_component": "SessionRepository::create_session, update_session",
+        "wave2_component": "SessionRepository::upsert_session (新增)"
+      },
+      {
+        "point": "T1_3 扩展 Session 模型",
+        "wave1_component": "Session 基础字段",
+        "wave2_component": "Session 新增字段 (rating, tags, is_archived)"
+      },
+      {
+        "point": "T1_2 创建 monitor 模块",
+        "wave1_component": "database 模块 (存储扫描结果)",
+        "wave2_component": "monitor 模块 (扫描逻辑)"
+      }
+    ]
+  },
+  "notes": [
+    "Wave 2 完全依赖 Wave 1，不能独立执行",
+    "所有验证检查点必须通过才能开始 Wave 2 开发",
+    "如果前置条件未满足，应回退到 Wave 1 完成相关工作"
+  ]
+}

@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 3;
+const CURRENT_DB_VERSION: i32 = 9;
 
 /// 初始化数据库
 ///
@@ -49,7 +49,7 @@ pub fn initialize_database() -> Result<Connection> {
 /// 运行数据库迁移
 ///
 /// 根据版本号执行相应的迁移脚本
-fn run_migrations(conn: &mut Connection) -> Result<()> {
+pub fn run_migrations(conn: &mut Connection) -> Result<()> {
     // 创建版本管理表（如果不存在）
     conn.execute(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -72,6 +72,12 @@ fn run_migrations(conn: &mut Connection) -> Result<()> {
             1 => migrate_v1(conn)?,
             2 => migrate_v2(conn)?,
             3 => migrate_v3(conn)?,
+            4 => migrate_v4(conn)?,
+            5 => migrate_v5(conn)?,
+            6 => migrate_v6(conn)?,
+            7 => migrate_v7(conn)?,
+            8 => migrate_v8(conn)?,
+            9 => migrate_v9(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -191,6 +197,350 @@ fn migrate_v3_impl(conn: &mut Connection) -> Result<()> {
     // 添加 max_tokens 列（默认值 2000）
     conn.execute(
         "ALTER TABLE api_providers ADD COLUMN max_tokens INTEGER DEFAULT 2000;",
+        [],
+    )?;
+
+    Ok(())
+}
+
+/// 迁移到版本 4: 创建 sessions 表
+#[cfg(test)]
+pub fn migrate_v4(conn: &mut Connection) -> Result<()> {
+    migrate_v4_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v4(conn: &mut Connection) -> Result<()> {
+    migrate_v4_impl(conn)
+}
+
+fn migrate_v4_impl(conn: &mut Connection) -> Result<()> {
+    // 创建 sessions 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL UNIQUE,
+            project_path TEXT NOT NULL,
+            project_name TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            rating INTEGER CHECK (rating IN (1, 2, 3, 4, 5) OR rating IS NULL),
+            tags TEXT DEFAULT '[]',
+            is_archived INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );",
+        [],
+    )?;
+
+    // 索引: 按 session_id 快速查找
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_session_id
+            ON sessions(session_id);",
+        [],
+    )?;
+
+    // 索引: 按项目路径分组查询
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_project_path
+            ON sessions(project_path);",
+        [],
+    )?;
+
+    // 索引: 活跃会话查询
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_is_active
+            ON sessions(is_active);",
+        [],
+    )?;
+
+    // 索引: 归档状态查询
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_is_archived
+            ON sessions(is_archived);",
+        [],
+    )?;
+
+    // 索引: 评分排序查询
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sessions_rating
+            ON sessions(rating) WHERE rating IS NOT NULL;",
+        [],
+    )?;
+
+    // 触发器: 确保 is_active 唯一性 (UPDATE)
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS ensure_single_active_session
+            BEFORE UPDATE OF is_active ON sessions
+            WHEN NEW.is_active = 1
+            BEGIN
+                UPDATE sessions SET is_active = 0 WHERE is_active = 1 AND id != NEW.id;
+            END;",
+        [],
+    )?;
+
+    // 触发器: 确保 is_active 唯一性 (INSERT)
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS ensure_single_active_session_insert
+            BEFORE INSERT ON sessions
+            WHEN NEW.is_active = 1
+            BEGIN
+                UPDATE sessions SET is_active = 0 WHERE is_active = 1;
+            END;",
+        [],
+    )?;
+
+    Ok(())
+}
+
+/// 迁移到版本 5: 创建 messages 表
+#[cfg(test)]
+pub fn migrate_v5(conn: &mut Connection) -> Result<()> {
+    migrate_v5_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v5(conn: &mut Connection) -> Result<()> {
+    migrate_v5_impl(conn)
+}
+
+fn migrate_v5_impl(conn: &mut Connection) -> Result<()> {
+    // 创建 messages 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            uuid TEXT NOT NULL,
+            parent_uuid TEXT,
+            type TEXT NOT NULL CHECK (type IN ('user', 'assistant', 'tool_use', 'thinking')),
+            timestamp TEXT NOT NULL,
+            offset INTEGER NOT NULL,
+            length INTEGER NOT NULL,
+            summary TEXT,
+            parent_idx INTEGER,
+            created_at TEXT NOT NULL,
+
+            FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+        );",
+        [],
+    )?;
+
+    // 索引: 按会话查询所有消息
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_messages_session_id
+            ON messages(session_id);",
+        [],
+    )?;
+
+    // 索引: 按 UUID 查找单条消息
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_messages_uuid
+            ON messages(uuid);",
+        [],
+    )?;
+
+    // 索引: 按父 UUID 查找子消息
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_messages_parent_uuid
+            ON messages(parent_uuid) WHERE parent_uuid IS NOT NULL;",
+        [],
+    )?;
+
+    // 索引: 按类型过滤
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_messages_type
+            ON messages(type);",
+        [],
+    )?;
+
+    // 复合索引: 按会话+时间戳排序
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_messages_session_timestamp
+            ON messages(session_id, timestamp);",
+        [],
+    )?;
+
+    Ok(())
+}
+
+/// 迁移到版本 6: 创建 message_embeddings 虚拟表
+#[cfg(test)]
+pub fn migrate_v6(conn: &mut Connection) -> Result<()> {
+    migrate_v6_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v6(conn: &mut Connection) -> Result<()> {
+    migrate_v6_impl(conn)
+}
+
+fn migrate_v6_impl(conn: &mut Connection) -> Result<()> {
+    // 创建 message_embeddings 虚拟表 (vec0)
+    // 注意: 使用 sqlite-vec 的 vec0 虚拟表语法
+    // 向量维度为 384 (BGE-small-en-v1.5)
+    conn.execute(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS message_embeddings
+            USING vec0(
+                embedding FLOAT(384),
+                summary TEXT
+            );",
+        [],
+    )?;
+
+    // 关联表: 存储 message_id 到 vec0 行 ID 的映射
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS message_embedding_map (
+            message_id INTEGER PRIMARY KEY,
+            vec_row_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+
+            FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+        );",
+        [],
+    )?;
+
+    // 索引: 快速查找消息对应的向量
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_message_embedding_map_vec_row_id
+            ON message_embedding_map(vec_row_id);",
+        [],
+    )?;
+
+    Ok(())
+}
+
+/// 迁移到版本 7: 创建 saved_prompts 表
+#[cfg(test)]
+pub fn migrate_v7(conn: &mut Connection) -> Result<()> {
+    migrate_v7_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v7(conn: &mut Connection) -> Result<()> {
+    migrate_v7_impl(conn)
+}
+
+fn migrate_v7_impl(conn: &mut Connection) -> Result<()> {
+    // 创建 saved_prompts 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS saved_prompts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT,
+            category TEXT NOT NULL CHECK (category IN ('next_goals', 'ai_analysis', 'user_saved')),
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            rating INTEGER CHECK (rating IN (1, 2, 3, 4, 5) OR rating IS NULL),
+            usage_count INTEGER NOT NULL DEFAULT 0,
+            tokens INTEGER,
+            created_at TEXT NOT NULL,
+
+            FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE SET NULL
+        );",
+        [],
+    )?;
+
+    // 索引: 按分类查询
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_saved_prompts_category
+            ON saved_prompts(category);",
+        [],
+    )?;
+
+    // 索引: 按会话查询
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_saved_prompts_session_id
+            ON saved_prompts(session_id) WHERE session_id IS NOT NULL;",
+        [],
+    )?;
+
+    // 索引: 按评分排序
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_saved_prompts_rating
+            ON saved_prompts(rating) WHERE rating IS NOT NULL;",
+        [],
+    )?;
+
+    // 索引: 按使用次数排序
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_saved_prompts_usage_count
+            ON saved_prompts(usage_count);",
+        [],
+    )?;
+
+    Ok(())
+}
+
+/// 迁移到版本 8: 创建 meta_templates 表
+#[cfg(test)]
+pub fn migrate_v8(conn: &mut Connection) -> Result<()> {
+    migrate_v8_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v8(conn: &mut Connection) -> Result<()> {
+    migrate_v8_impl(conn)
+}
+
+fn migrate_v8_impl(conn: &mut Connection) -> Result<()> {
+    // 创建 meta_templates 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS meta_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            key TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            content TEXT NOT NULL,
+            description TEXT,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            updated_at TEXT NOT NULL
+        );",
+        [],
+    )?;
+
+    // 索引: 按 key 快速查找
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_meta_templates_key
+            ON meta_templates(key);",
+        [],
+    )?;
+
+    // 索引: 查询启用的模板
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_meta_templates_is_active
+            ON meta_templates(is_active);",
+        [],
+    )?;
+
+    Ok(())
+}
+
+/// 迁移到版本 9: 创建 settings 表
+///
+/// # 功能
+/// - 创建全局配置表
+/// - active_threshold: 活跃会话判断时间阈值（秒），默认 86400（24小时）
+#[cfg(test)]
+pub fn migrate_v9(conn: &mut Connection) -> Result<()> {
+    migrate_v9_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v9(conn: &mut Connection) -> Result<()> {
+    migrate_v9_impl(conn)
+}
+
+fn migrate_v9_impl(conn: &mut Connection) -> Result<()> {
+    // 创建 settings 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY,
+            active_threshold INTEGER NOT NULL DEFAULT 86400
+        );",
+        [],
+    )?;
+
+    // 插入默认配置（如果不存在）
+    conn.execute(
+        "INSERT OR IGNORE INTO settings (id, active_threshold) VALUES (1, 86400);",
         [],
     )?;
 
