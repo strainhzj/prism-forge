@@ -396,7 +396,7 @@
       "assignee": "qa",
       "estimated_hours": 8,
       "priority": "medium",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "NF1"
       ],
