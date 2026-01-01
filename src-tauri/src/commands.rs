@@ -1869,3 +1869,48 @@ pub async fn optimize_prompt(
 
     Ok(result)
 }
+
+// ==================== Meta-Prompt 管理命令 ====================
+
+/// 获取 Meta-Prompt 模板
+///
+/// 根据类别获取元提示词模板内容
+#[tauri::command]
+pub fn get_meta_template(
+    category: String,
+) -> Result<String, CommandError> {
+    use crate::database::repository::SessionRepository;
+
+    let repo = SessionRepository::new()
+        .map_err(|e| CommandError {
+            message: format!("创建仓库失败: {}", e),
+        })?;
+
+    repo.get_meta_template(&category)
+        .map_err(|e| CommandError {
+            message: format!("获取模板失败: {}", e),
+        })
+}
+
+/// 更新 Meta-Prompt 模板
+///
+/// 根据类别更新元提示词模板内容
+#[tauri::command]
+pub fn update_meta_template(
+    category: String,
+    content: String,
+) -> Result<(), CommandError> {
+    use crate::database::repository::SessionRepository;
+
+    let repo = SessionRepository::new()
+        .map_err(|e| CommandError {
+            message: format!("创建仓库失败: {}", e),
+        })?;
+
+    repo.update_meta_template(&category, &content)
+        .map_err(|e| CommandError {
+            message: format!("更新模板失败: {}", e),
+        })?;
+
+    Ok(())
+}

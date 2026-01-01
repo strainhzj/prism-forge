@@ -61,6 +61,8 @@ pub fn run() {
             vector_search,
             compress_context,
             optimize_prompt,
+            get_meta_template,
+            update_meta_template,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
