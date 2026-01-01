@@ -1215,7 +1215,7 @@ impl SessionRepository {
     }
 
     /// 根据 session_id 获取会话详情
-    fn get_session_by_id(&self, session_id: &str) -> Result<Option<crate::database::models::Session>> {
+    pub fn get_session_by_id(&self, session_id: &str) -> Result<Option<crate::database::models::Session>> {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, session_id, project_path, project_name, file_path,
@@ -1363,13 +1363,46 @@ impl SessionRepository {
             Ok(final_results)
         })
     }
-// ==================== Meta-Prompt 管理方法 ====================    /// 获取 Meta-Prompt 模板    ///    /// 根据类别（key）获取元提示词模板    pub fn get_meta_template(&self, category: &str) -> Result<String> {        use rusqlite::params;        let conn = self.get_connection()?;        let mut stmt = conn.prepare(            "SELECT content FROM meta_templates WHERE key = ?1 AND is_active = 1"        )?;        stmt.query_row(params![category], |row| row.get(0))            .map_err(|_| anyhow::anyhow!(                "未找到类别为 "{}" 的 Meta-Prompt 模板", category            ))    }    /// 更新 Meta-Prompt 模板    ///    /// 根据类别（key）更新元提示词模板内容    pub fn update_meta_template(&self, category: &str, content: &str) -> Result<()> {        use rusqlite::params;        let conn = self.get_connection()?;        conn.execute(            "UPDATE meta_templates SET content = ?1, updated_at = datetime("now") WHERE key = ?2",            params![content, category]        )?;        Ok(())    }
+// ==================== Meta-Prompt 管理方法 ====================
+
+    /// 获取 Meta-Prompt 模板
+    ///
+    /// 根据类别（key）获取元提示词模板
+    pub fn get_meta_template(&self, category: &str) -> Result<String> {
+        use rusqlite::params;
+
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT content FROM meta_templates WHERE key = ?1 AND is_active = 1"
+            )?;
+
+            stmt.query_row(params![category], |row| row.get(0))
+                .map_err(|_| anyhow::anyhow!(
+                    "未找到类别为 \"{}\" 的 Meta-Prompt 模板", category
+                ))
+        })
+    }
+
+    /// 更新 Meta-Prompt 模板
+    ///
+    /// 根据类别（key）更新元提示词模板内容
+    pub fn update_meta_template(&self, category: &str, content: &str) -> Result<()> {
+        use rusqlite::params;
+
+        self.with_conn_inner(|conn| {
+            conn.execute(
+                "UPDATE meta_templates SET content = ?1, updated_at = datetime('now') WHERE key = ?2",
+                params![content, category]
+            )?;
+
+            Ok(())
+        })
+    }
 }
 
 /// 计算加权分数
 ///
 /// # 参数
-/// - `cosine_similarity`: 余弦相似度（0-1）
 /// - `rating`: 用户评分（1-5）
 ///
 /// # 返回

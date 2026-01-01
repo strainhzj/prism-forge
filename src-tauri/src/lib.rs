@@ -7,8 +7,9 @@ mod commands;
 mod tokenizer;
 mod monitor;
 mod parser;
-mod embedding;
-mod optimizer;
+pub mod embedding;
+pub use embedding::EmbeddingGenerator;
+pub mod optimizer;
 
 use llm::LLMClientManager;
 use database::migrations;
