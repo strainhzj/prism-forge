@@ -15,6 +15,7 @@ use crate::database::{ApiProvider, ApiProviderType, ApiProviderRepository};
 use crate::llm::security::ApiKeyStorage;
 use crate::tokenizer::{TokenCounter, TokenEncodingType};
 use crate::optimizer::compressor::CompressionResult;
+use crate::optimizer::prompt_generator::{EnhancedPromptRequest, EnhancedPrompt};
 use crate::parser::{jsonl::JsonlParser, tree::{MessageTreeBuilder, ConversationTree}, extractor::{ExtractionLevel, ExportFormat, ExtractionEngine}};
 
 // ==================== 性能基准测试模块（内联） ====================
@@ -1835,6 +1836,35 @@ pub async fn compress_context(
         .compress_session(&request.messages_json)
         .map_err(|e| CommandError {
             message: format!("压缩失败: {}", e),
+        })?;
+
+    Ok(result)
+}
+
+// ==================== 增强提示词生成命令 ====================
+
+/// 优化提示词
+///
+/// 整合向量检索、上下文压缩和 LLM 生成，创建增强的提示词
+#[tauri::command]
+pub async fn optimize_prompt(
+    request: EnhancedPromptRequest,
+    llm_manager: State<'_, LLMClientManager>,
+) -> Result<EnhancedPrompt, CommandError> {
+    use crate::optimizer::prompt_generator::PromptGenerator;
+
+    // 创建提示词生成器
+    let generator = PromptGenerator::new()
+        .map_err(|e| CommandError {
+            message: format!("创建提示词生成器失败: {}", e),
+        })?;
+
+    // 生成增强提示词
+    let result = generator
+        .generate_enhanced_prompt(request, &llm_manager)
+        .await
+        .map_err(|e| CommandError {
+            message: format!("生成提示词失败: {}", e),
         })?;
 
     Ok(result)
