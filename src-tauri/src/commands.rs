@@ -1673,3 +1673,95 @@ pub async fn export_session_log(
         file_size,
     })
 }
+
+// ==================== 向量相似度检索命令 ====================
+
+/// 向量搜索请求参数
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VectorSearchRequest {
+    /// 查询文本
+    pub query: String,
+    /// 返回结果数量上限（默认 5）
+    #[serde(rename = "limit")]
+    pub limit: Option<usize>,
+}
+
+/// 向量相似度搜索
+///
+/// 根据查询文本检索最相似的历史会话。
+///
+/// # 参数
+/// - `request`: 包含查询文本和结果数量限制
+///
+/// # 返回
+/// 返回按相似度排序的会话搜索结果列表
+///
+/// # 功能
+/// - 使用 BGE-small-en-v1.5 生成查询向量
+/// - 使用 sqlite-vec 的 distance 函数计算余弦相似度
+/// - 自动合并同一会话的多条匹配消息
+///
+/// # 示例
+/// ```javascript
+/// const results = await invoke('vector_search', {
+///   query: '如何实现文件上传功能',
+///   limit: 5
+/// });
+/// console.log(results);
+/// // [
+/// //   {
+/// //     session: { session_id: '...', project_name: '...', ... },
+/// //     similarityScore: 0.23,
+/// //     summary: '实现文件上传...'
+/// //   },
+/// //   ...
+/// // ]
+/// ```
+#[tauri::command]
+pub async fn vector_search(
+    request: VectorSearchRequest,
+) -> std::result::Result<Vec<crate::database::models::VectorSearchResult>, CommandError> {
+    use crate::embedding::EmbeddingGenerator;
+    use crate::database::init::get_connection_shared;
+    use crate::database::repository::SessionRepository;
+
+    // 参数验证
+    let query = request.query.trim();
+    if query.is_empty() {
+        return Err(CommandError {
+            message: "查询文本不能为空".to_string(),
+        });
+    }
+
+    let limit = request.limit.unwrap_or(5).min(20); // 最多返回 20 条
+
+    // 生成查询向量
+    let generator = EmbeddingGenerator::new()
+        .map_err(|e| CommandError {
+            message: format!("初始化向量生成器失败: {}", e),
+        })?;
+
+    let query_embedding = generator.generate_for_message(query)
+        .map_err(|e| CommandError {
+            message: format!("生成查询向量失败: {}", e),
+        })?;
+
+    // 检查是否使用占位符实现
+    if generator.is_placeholder() {
+        eprintln!("警告: 当前使用占位符向量实现，搜索结果可能不准确");
+    }
+
+    // 执行向量检索
+    let conn = get_connection_shared()
+        .map_err(|e| CommandError {
+            message: format!("获取数据库连接失败: {}", e),
+        })?;
+
+    let repo = SessionRepository::with_conn(conn);
+    let results = repo.vector_search_sessions(&query_embedding, limit)
+        .map_err(|e| CommandError {
+            message: format!("向量检索失败: {}", e),
+        })?;
+
+    Ok(results)
+}

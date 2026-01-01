@@ -536,6 +536,26 @@ pub struct TokenStats {
     #[serde(rename = "estimated_cost")]
     pub estimated_cost: f64,
 }
+/// 向量相似度搜索结果
+///
+/// 包含匹配的会话信息和相似度分数
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VectorSearchResult {
+    /// 匹配的会话信息
+    pub session: Session,
+
+    /// 相似度分数（距离值，越小越相似）
+    /// 范围: 0.0 - 2.0（余弦距离）
+    /// - 0.0: 完全相同
+    /// - 1.0: 正交（无相关性）
+    /// - 2.0: 完全相反
+    #[serde(rename = "similarity_score")]
+    pub similarity_score: f64,
+
+    /// 匹配的消息摘要（用于预览）
+    pub summary: String,
+}
 
 /// 时间戳验证函数
 ///

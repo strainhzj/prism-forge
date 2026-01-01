@@ -57,6 +57,7 @@ pub fn run() {
             start_file_watcher,
             extract_session_log,
             export_session_log,
+            vector_search,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
