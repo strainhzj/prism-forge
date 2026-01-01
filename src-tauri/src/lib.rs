@@ -8,6 +8,7 @@ mod tokenizer;
 mod monitor;
 mod parser;
 mod embedding;
+mod optimizer;
 
 use llm::LLMClientManager;
 use database::migrations;
@@ -58,6 +59,7 @@ pub fn run() {
             extract_session_log,
             export_session_log,
             vector_search,
+            compress_context,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
