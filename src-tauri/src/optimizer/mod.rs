@@ -2,6 +2,8 @@
 //!
 //! 使用 LLMClientManager 调用当前活跃的 LLM 提供商来分析和优化提示词
 
+pub mod compressor;
+
 use anyhow::{Context, Result};
 use std::fs::File;
 use std::io::{BufRead, BufReader};

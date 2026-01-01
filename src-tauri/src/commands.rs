@@ -14,6 +14,7 @@ use crate::llm::interface::TestConnectionResult;
 use crate::database::{ApiProvider, ApiProviderType, ApiProviderRepository};
 use crate::llm::security::ApiKeyStorage;
 use crate::tokenizer::{TokenCounter, TokenEncodingType};
+use crate::optimizer::compressor::CompressionResult;
 use crate::parser::{jsonl::JsonlParser, tree::{MessageTreeBuilder, ConversationTree}, extractor::{ExtractionLevel, ExportFormat, ExtractionEngine}};
 
 // ==================== 性能基准测试模块（内联） ====================
@@ -1801,4 +1802,40 @@ pub async fn vector_search(
     };
 
     Ok(results)
+}
+
+// ==================== 上下文压缩命令 ====================
+
+/// 上下文压缩请求
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompressContextRequest {
+    /// 消息的 JSON 数组字符串
+    pub messages_json: String,
+}
+
+/// 压缩上下文
+///
+/// 压缩会话消息以减少 Token 使用量，去除冗余信息（thinking、工具输出等）
+/// 保留关键决策点和代码变更
+#[tauri::command]
+pub async fn compress_context(
+    request: CompressContextRequest,
+) -> Result<CompressionResult, CommandError> {
+    use crate::optimizer::compressor::ContextCompressor;
+
+    // 创建压缩器
+    let compressor = ContextCompressor::new()
+        .map_err(|e| CommandError {
+            message: format!("创建压缩器失败: {}", e),
+        })?;
+
+    // 执行压缩
+    let result = compressor
+        .compress_session(&request.messages_json)
+        .map_err(|e| CommandError {
+            message: format!("压缩失败: {}", e),
+        })?;
+
+    Ok(result)
 }
