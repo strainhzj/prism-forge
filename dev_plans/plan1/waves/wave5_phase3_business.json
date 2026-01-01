@@ -342,7 +342,7 @@
       "assignee": "backend",
       "estimated_hours": 8,
       "priority": "medium",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "F9.3"
       ],
