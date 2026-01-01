@@ -60,6 +60,7 @@ pub fn run() {
             export_session_log,
             vector_search,
             compress_context,
+            optimize_prompt,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
