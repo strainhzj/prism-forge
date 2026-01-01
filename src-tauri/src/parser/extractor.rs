@@ -3,6 +3,7 @@
 //! 从消息树中提取工具调用、错误消息、代码变更等关键信息，生成摘要。
 
 use anyhow::{Result, Context};
+use serde::{Serialize, Deserialize};
 use serde_json::Value;
 
 use super::tree::{MessageNode, MessageMetadata, ToolCall, ErrorMessage, CodeChange, ConversationTree};
@@ -483,6 +484,293 @@ impl MetadataExtractor {
         } else {
             path.to_string()
         }
+    }
+}
+
+// ==================== 日志提取引擎 (T3_4) ====================
+
+/// 提取等级
+///
+/// 定义三种日志提取视图，从完整到精简
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtractionLevel {
+    /// L1: 完整追踪 - 包含所有内容
+    L1FullTrace,
+    /// L2: 清理流程 - 过滤工具参数和中间输出
+    L2CleanFlow,
+    /// L3: 仅提示词 - 仅 User Query 和 Final Answer
+    L3PromptOnly,
+}
+
+impl ExtractionLevel {
+    /// 获取等级名称
+    pub fn name(&self) -> &'static str {
+        match self {
+            ExtractionLevel::L1FullTrace => "Full Trace",
+            ExtractionLevel::L2CleanFlow => "Clean Flow",
+            ExtractionLevel::L3PromptOnly => "Prompt Only",
+        }
+    }
+}
+
+/// 导出格式
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportFormat {
+    Markdown,
+    Json,
+}
+
+/// 日志提取引擎
+///
+/// 根据不同等级提取会话日志内容
+pub struct ExtractionEngine;
+
+impl ExtractionEngine {
+    /// 提取会话内容
+    ///
+    /// # 参数
+    /// - `tree`: 对话树
+    /// - `level`: 提取等级
+    ///
+    /// # 返回
+    /// 返回提取后的文本内容
+    pub fn extract(tree: &ConversationTree, level: ExtractionLevel) -> Result<String> {
+        let mut content = String::new();
+
+        // 添加标题
+        content.push_str(&format!("# 会话日志 - {}\n\n", level.name()));
+
+        // 遍历所有根节点（每个根节点代表一个独立的对话）
+        for (idx, root) in tree.roots.iter().enumerate() {
+            if tree.roots.len() > 1 {
+                content.push_str(&format!("## 对话 {}\n\n", idx + 1));
+            }
+
+            Self::extract_node(root, level, 0, &mut content);
+        }
+
+        Ok(content)
+    }
+
+    /// 递归提取节点内容
+    fn extract_node(node: &MessageNode, level: ExtractionLevel, depth: usize, output: &mut String) {
+        match level {
+            ExtractionLevel::L1FullTrace => {
+                // L1: 保留所有节点，完整渲染
+                Self::render_full_node(node, depth, output);
+            }
+            ExtractionLevel::L2CleanFlow => {
+                // L2: 过滤 tool_input 和 tool_output
+                Self::render_clean_node(node, depth, output);
+            }
+            ExtractionLevel::L3PromptOnly => {
+                // L3: 仅保留 User 和叶子 Assistant 节点
+                if Self::is_user_or_leaf_assistant(node) {
+                    Self::render_prompt_only_node(node, depth, output);
+                }
+            }
+        }
+
+        // 递归处理子节点
+        for child in &node.children {
+            Self::extract_node(child, level, depth + 1, output);
+        }
+    }
+
+    /// 检查节点是否为 User 或叶子 Assistant 节点
+    fn is_user_or_leaf_assistant(node: &MessageNode) -> bool {
+        // User 消息总是保留
+        if node.role().as_deref() == Some("user") {
+            return true;
+        }
+
+        // Assistant 消息：仅当没有子节点时保留（叶子节点）
+        if node.role().as_deref() == Some("assistant") && node.children.is_empty() {
+            return true;
+        }
+
+        false
+    }
+
+    /// 完整渲染节点（L1）
+    fn render_full_node(node: &MessageNode, depth: usize, output: &mut String) {
+        let indent = "  ".repeat(depth);
+
+        // 添加角色和类型
+        let role = node.role().unwrap_or_else(|| "unknown".to_string());
+        let msg_type = node.message_type().unwrap_or_else(|| "message".to_string());
+
+        output.push_str(&format!("{}**[{}] {}**: ", indent, msg_type, role));
+
+        // 添加内容
+        if let Some(content) = Self::extract_text_content(&node.message_data) {
+            if content.len() > 200 {
+                output.push_str(&format!("{}...\n", &content[..200]));
+            } else {
+                output.push_str(&format!("{}\n", content));
+            }
+        } else {
+            output.push_str("\n");
+        }
+
+        // 添加工具调用信息
+        if let Some(metadata) = &node.metadata {
+            if !metadata.tool_calls.is_empty() {
+                output.push_str(&format!("{}  工具调用:\n", indent));
+                for tool_call in &metadata.tool_calls {
+                    output.push_str(&format!("{}    - {}\n", indent, tool_call.name));
+                }
+            }
+
+            // 添加错误信息
+            if !metadata.errors.is_empty() {
+                output.push_str(&format!("{}  错误:\n", indent));
+                for error in &metadata.errors {
+                    output.push_str(&format!("{}    - {}: {}\n", indent, error.error_type, error.message));
+                }
+            }
+        }
+    }
+
+    /// 清理渲染节点（L2）
+    fn render_clean_node(node: &MessageNode, depth: usize, output: &mut String) {
+        let indent = "  ".repeat(depth);
+
+        // 对于 tool_use 类型，仅显示工具名称，不显示参数
+        if node.message_type().as_deref() == Some("tool_use") {
+            if let Some(metadata) = &node.metadata {
+                for tool_call in &metadata.tool_calls {
+                    output.push_str(&format!("{}🔧 {}\n", indent, tool_call.name));
+                }
+                return;
+            }
+        }
+
+        // 对于 tool_result 类型，仅显示状态，不显示输出
+        if node.message_type().as_deref() == Some("tool_result") {
+            if let Some(metadata) = &node.metadata {
+                let has_errors = !metadata.errors.is_empty();
+                output.push_str(&format!("{}✅ {}\n", indent, if has_errors { "失败" } else { "成功" }));
+                return;
+            }
+        }
+
+        // User 和 Assistant 消息正常显示
+        let role = node.role().unwrap_or_else(|| "unknown".to_string());
+        if role == "user" || role == "assistant" {
+            output.push_str(&format!("{}**{}**: ", indent, role.to_uppercase()));
+
+            if let Some(content) = Self::extract_text_content(&node.message_data) {
+                if content.len() > 500 {
+                    output.push_str(&format!("{}...\n", &content[..500]));
+                } else {
+                    output.push_str(&format!("{}\n", content));
+                }
+            } else {
+                output.push_str("\n");
+            }
+        }
+    }
+
+    /// 仅提示词渲染节点（L3）
+    fn render_prompt_only_node(node: &MessageNode, depth: usize, output: &mut String) {
+        let role = node.role().unwrap_or_else(|| "unknown".to_string());
+
+        if role == "user" {
+            output.push_str(&format!("**用户**: "));
+            if let Some(content) = Self::extract_text_content(&node.message_data) {
+                output.push_str(&format!("{}\n", content));
+            } else {
+                output.push_str("\n");
+            }
+        } else if role == "assistant" && node.children.is_empty() {
+            // 叶子 Assistant 节点（最终回复）
+            output.push_str(&format!("**助手**: "));
+            if let Some(content) = Self::extract_text_content(&node.message_data) {
+                // 截取较长内容
+                if content.len() > 1000 {
+                    output.push_str(&format!("{}...\n", &content[..1000]));
+                } else {
+                    output.push_str(&format!("{}\n", content));
+                }
+            } else {
+                output.push_str("\n");
+            }
+        }
+    }
+
+    /// 从消息数据中提取文本内容
+    fn extract_text_content(data: &Value) -> Option<String> {
+        match data {
+            Value::String(s) => Some(s.clone()),
+            Value::Array(arr) => {
+                let mut texts = Vec::new();
+                for item in arr {
+                    if let Some(item_type) = item.get("type").and_then(|v| v.as_str()) {
+                        if item_type == "text" {
+                            if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
+                                texts.push(text);
+                            }
+                        }
+                    }
+                }
+                if texts.is_empty() {
+                    None
+                } else {
+                    Some(texts.join(" "))
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// 导出为 Markdown 文件
+    ///
+    /// # 参数
+    /// - `content`: 要导出的内容
+    /// - `path`: 目标文件路径
+    ///
+    /// # 返回
+    /// 返回写入的字节数或错误
+    pub fn export_markdown(content: &str, path: &std::path::Path) -> Result<()> {
+        std::fs::write(path, content)
+            .context(format!("写入 Markdown 文件失败: {:?}", path))
+    }
+
+    /// 导出为 JSON 文件
+    ///
+    /// # 参数
+    /// - `tree`: 对话树
+    /// - `level`: 提取等级
+    /// - `path`: 目标文件路径
+    ///
+    /// # 返回
+    /// 返回写入的字节数或错误
+    pub fn export_json(tree: &ConversationTree, level: ExtractionLevel, path: &std::path::Path) -> Result<()> {
+        #[derive(Debug, serde::Serialize)]
+        struct ExportedSession {
+            level: String,
+            root_count: usize,
+            total_nodes: usize,
+            content: String,
+        }
+
+        let content = Self::extract(tree, level)?;
+
+        let exported = ExportedSession {
+            level: level.name().to_string(),
+            root_count: tree.roots.len(),
+            total_nodes: tree.total_count,
+            content,
+        };
+
+        let json = serde_json::to_string_pretty(&exported)
+            .context("序列化为 JSON 失败")?;
+
+        std::fs::write(path, json)
+            .context(format!("写入 JSON 文件失败: {:?}", path))
     }
 }
 

@@ -14,7 +14,7 @@ use crate::llm::interface::TestConnectionResult;
 use crate::database::{ApiProvider, ApiProviderType, ApiProviderRepository};
 use crate::llm::security::ApiKeyStorage;
 use crate::tokenizer::{TokenCounter, TokenEncodingType};
-use crate::parser::{jsonl::JsonlParser, tree::{MessageTreeBuilder, ConversationTree}};
+use crate::parser::{jsonl::JsonlParser, tree::{MessageTreeBuilder, ConversationTree}, extractor::{ExtractionLevel, ExportFormat, ExtractionEngine}};
 
 // ==================== 性能基准测试模块（内联） ====================
 
@@ -1330,3 +1330,346 @@ pub async fn get_active_sessions(
         })
 }
 
+// ==================== 文件监控命令 ====================
+
+/// 启动文件监控响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartWatcherResponse {
+    /// 是否成功启动
+    pub success: bool,
+    /// 消息
+    pub message: String,
+}
+
+/// 启动文件监控
+///
+/// 启动 Claude 会话文件的实时监控，检测文件变更后推送事件到前端。
+///
+/// # 返回
+/// 返回启动结果
+///
+/// # 前端事件
+/// 启动后，会收到 `sessions-changed` 事件：
+/// ```javascript
+/// import { listen } from '@tauri-apps/api/event';
+///
+/// listen('sessions-changed', (event) => {
+///     console.log('会话文件变更:', event.payload);
+///     // { kind: 'created', path: 'xxx.jsonl', isJsonl: true, timestamp: '...' }
+///     // 重新加载会话列表
+/// });
+/// ```
+///
+/// # 示例
+/// ```javascript
+/// await invoke('start_file_watcher');
+/// ```
+#[tauri::command]
+pub async fn start_file_watcher(
+    app_handle: tauri::AppHandle,
+) -> std::result::Result<StartWatcherResponse, CommandError> {
+    use crate::monitor::watcher::{SessionWatcher, get_claude_projects_dir};
+
+    let projects_dir = get_claude_projects_dir()
+        .map_err(|e| CommandError {
+            message: format!("获取 Claude 项目目录失败: {}", e),
+        })?;
+
+    // 检查目录是否存在
+    if !projects_dir.exists() {
+        return Ok(StartWatcherResponse {
+            success: false,
+            message: format!("Claude 项目目录不存在: {:?}", projects_dir),
+        });
+    }
+
+    // 创建监控器
+    let watcher = SessionWatcher::new(projects_dir.clone(), app_handle)
+        .map_err(|e| CommandError {
+            message: format!("创建文件监控器失败: {}", e),
+        })?;
+
+    // 启动监控（在后台线程）
+    watcher.start()
+        .map_err(|e| CommandError {
+            message: format!("启动文件监控器失败: {}", e),
+        })?;
+
+    Ok(StartWatcherResponse {
+        success: true,
+        message: format!("文件监控已启动，监控目录: {:?}", projects_dir),
+    })
+}
+
+// ==================== 日志提取与导出命令 ====================
+
+/// 提取会话日志请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractSessionRequest {
+    /// 文件路径
+    pub file_path: String,
+    /// 提取等级：l1_full_trace, l2_clean_flow, l3_prompt_only
+    pub level: String,
+}
+
+/// 提取会话日志响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtractSessionResponse {
+    /// 提取的内容
+    pub content: String,
+    /// 消息总数
+    pub message_count: usize,
+    /// 提取等级
+    pub level: String,
+}
+
+/// 导出会话日志请求
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportSessionRequest {
+    /// 文件路径
+    pub file_path: String,
+    /// 提取等级
+    pub level: String,
+    /// 导出格式：markdown 或 json
+    pub format: String,
+    /// 输出目录（可选，默认与输入文件同目录）
+    pub output_dir: Option<String>,
+}
+
+/// 导出会话日志响应
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExportSessionResponse {
+    /// 导出的文件路径
+    pub output_path: String,
+    /// 文件大小（字节）
+    pub file_size: u64,
+}
+
+/// 提取会话日志
+///
+/// 根据指定等级提取会话内容，返回纯文本或结构化数据。
+///
+/// # 参数
+/// - `file_path`: JSONL 会话文件路径
+/// - `level`: 提取等级
+///
+/// # 返回
+/// 返回提取后的内容
+///
+/// # 示例
+/// ```javascript
+/// const result = await invoke('extract_session_log', {
+///   filePath: 'C:/Users/xxx/.claude/projects/xxx/sessions/xxx.jsonl',
+///   level: 'l2_clean_flow'
+/// });
+/// console.log(result.content);
+/// ```
+#[tauri::command]
+pub async fn extract_session_log(
+    file_path: String,
+    level: String,
+) -> std::result::Result<ExtractSessionResponse, CommandError> {
+    let path = PathBuf::from(&file_path);
+
+    // 验证文件存在
+    if !path.exists() {
+        return Err(CommandError {
+            message: format!("文件不存在: {}", file_path),
+        });
+    }
+
+    // 解析等级
+    let extraction_level = match level.as_str() {
+        "l1_full_trace" => ExtractionLevel::L1FullTrace,
+        "l2_clean_flow" => ExtractionLevel::L2CleanFlow,
+        "l3_prompt_only" => ExtractionLevel::L3PromptOnly,
+        _ => {
+            return Err(CommandError {
+                message: format!("无效的提取等级: {}，可选值：l1_full_trace, l2_clean_flow, l3_prompt_only", level),
+            });
+        }
+    };
+
+    // 创建 JSONL 解析器并解析
+    let mut parser = JsonlParser::new(path)
+        .map_err(|e| CommandError {
+            message: format!("创建 JSONL 解析器失败: {}", e),
+        })?;
+
+    let entries = parser.parse_all()
+        .map_err(|e| CommandError {
+            message: format!("解析 JSONL 文件失败: {}", e),
+        })?;
+
+    // 构建消息树
+    let mut tree = MessageTreeBuilder::build_from_entries(&entries)
+        .map_err(|e| CommandError {
+            message: format!("构建消息树失败: {}", e),
+        })?;
+
+    // 提取元数据
+    crate::parser::extractor::MetadataExtractor::extract_tree_metadata(&mut tree)
+        .map_err(|e| CommandError {
+            message: format!("提取元数据失败: {}", e),
+        })?;
+
+    // 提取内容
+    let content = ExtractionEngine::extract(&tree, extraction_level)
+        .map_err(|e| CommandError {
+            message: format!("提取会话内容失败: {}", e),
+        })?;
+
+    Ok(ExtractSessionResponse {
+        content,
+        message_count: tree.total_count,
+        level: extraction_level.name().to_string(),
+    })
+}
+
+/// 导出会话日志
+///
+/// 提取会话内容并导出为文件（Markdown 或 JSON）。
+///
+/// # 参数
+/// - `file_path`: JSONL 会话文件路径
+/// - `level`: 提取等级
+/// - `format`: 导出格式（markdown 或 json）
+/// - `output_dir`: 输出目录（可选）
+///
+/// # 返回
+/// 返回导出文件的路径和大小
+///
+/// # 示例
+/// ```javascript
+/// const result = await invoke('export_session_log', {
+///   filePath: 'C:/Users/xxx/.claude/projects/xxx/sessions/xxx.jsonl',
+///   level: 'l2_clean_flow',
+///   format: 'markdown'
+/// });
+/// console.log(result.output_path);
+/// ```
+#[tauri::command]
+pub async fn export_session_log(
+    file_path: String,
+    level: String,
+    format: String,
+    output_dir: Option<String>,
+) -> std::result::Result<ExportSessionResponse, CommandError> {
+    let path = PathBuf::from(&file_path);
+
+    // 验证文件存在
+    if !path.exists() {
+        return Err(CommandError {
+            message: format!("文件不存在: {}", file_path),
+        });
+    }
+
+    // 解析等级
+    let extraction_level = match level.as_str() {
+        "l1_full_trace" => ExtractionLevel::L1FullTrace,
+        "l2_clean_flow" => ExtractionLevel::L2CleanFlow,
+        "l3_prompt_only" => ExtractionLevel::L3PromptOnly,
+        _ => {
+            return Err(CommandError {
+                message: format!("无效的提取等级: {}", level),
+            });
+        }
+    };
+
+    // 解析导出格式
+    let export_format = match format.as_str() {
+        "markdown" => ExportFormat::Markdown,
+        "json" => ExportFormat::Json,
+        _ => {
+            return Err(CommandError {
+                message: format!("无效的导出格式: {}，可选值：markdown, json", format),
+            });
+        }
+    };
+
+    // 确定输出目录
+    let output_dir = if let Some(dir) = output_dir {
+        PathBuf::from(dir)
+    } else {
+        // 默认使用输入文件的父目录
+        path.parent()
+            .ok_or_else(|| CommandError {
+                message: "无法确定输出目录".to_string(),
+            })?
+            .to_path_buf()
+    };
+
+    // 确保输出目录存在
+    fs::create_dir_all(&output_dir)
+        .map_err(|e| CommandError {
+            message: format!("创建输出目录失败: {}", e),
+        })?;
+
+    // 创建 JSONL 解析器并解析
+    let mut parser = JsonlParser::new(path.clone())
+        .map_err(|e| CommandError {
+            message: format!("创建 JSONL 解析器失败: {}", e),
+        })?;
+
+    let entries = parser.parse_all()
+        .map_err(|e| CommandError {
+            message: format!("解析 JSONL 文件失败: {}", e),
+        })?;
+
+    // 构建消息树
+    let mut tree = MessageTreeBuilder::build_from_entries(&entries)
+        .map_err(|e| CommandError {
+            message: format!("构建消息树失败: {}", e),
+        })?;
+
+    // 提取元数据
+    crate::parser::extractor::MetadataExtractor::extract_tree_metadata(&mut tree)
+        .map_err(|e| CommandError {
+            message: format!("提取元数据失败: {}", e),
+        })?;
+
+    // 确定输出文件名
+    let file_stem = path.file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("session");
+
+    let ext = match export_format {
+        ExportFormat::Markdown => "md",
+        ExportFormat::Json => "json",
+    };
+
+    let output_path = output_dir.join(format!("{}_{}.{}", file_stem, level, ext));
+
+    // 导出文件
+    match export_format {
+        ExportFormat::Markdown => {
+            let content = ExtractionEngine::extract(&tree, extraction_level)
+                .map_err(|e| CommandError {
+                    message: format!("提取会话内容失败: {}", e),
+                })?;
+
+            ExtractionEngine::export_markdown(&content, &output_path)
+                .map_err(|e| CommandError {
+                    message: format!("导出 Markdown 文件失败: {}", e),
+                })?;
+        }
+        ExportFormat::Json => {
+            ExtractionEngine::export_json(&tree, extraction_level, &output_path)
+                .map_err(|e| CommandError {
+                    message: format!("导出 JSON 文件失败: {}", e),
+                })?;
+        }
+    }
+
+    // 获取文件大小
+    let file_size = fs::metadata(&output_path)
+        .map_err(|e| CommandError {
+            message: format!("获取文件信息失败: {}", e),
+        })?
+        .len();
+
+    Ok(ExportSessionResponse {
+        output_path: output_path.to_string_lossy().to_string(),
+        file_size,
+    })
+}
