@@ -18,7 +18,7 @@
       "assignee": "backend",
       "estimated_hours": 16,
       "priority": "high",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "F3.2"
       ],

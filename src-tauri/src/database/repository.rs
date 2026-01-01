@@ -1143,5 +1143,108 @@ impl SessionRepository {
             results.collect::<Result<Vec<_>, _>>().map_err(Into::into)
         })
     }
-}
 
+    /// 向量相似度检索（返回会话详情）
+    ///
+    /// # 参数
+    /// - `query_embedding`: 查询向量（384 维）
+    /// - `limit`: 返回结果数量上限
+    ///
+    /// # 返回
+    /// 返回按相似度排序的会话搜索结果列表
+    ///
+    /// # 说明
+    /// 使用 sqlite-vec 的 distance 函数计算余弦相似度
+    /// 自动合并同一会话的多条匹配消息，取最相似的一条
+    pub fn vector_search_sessions(
+        &self,
+        query_embedding: &[f32],
+        limit: usize,
+    ) -> Result<Vec<crate::database::models::VectorSearchResult>> {
+        // 执行向量检索获取 (message_id, distance) 列表
+        let message_results = self.vector_search(query_embedding, limit * 2)?;
+
+        let mut session_results: std::collections::HashMap<String, (f64, String)> = std::collections::HashMap::new();
+
+        // 获取每条消息对应的会话信息
+        for (message_id, distance) in message_results {
+            self.with_conn_inner(|conn| {
+                let mut stmt = conn.prepare(
+                    "SELECT m.session_id, m.summary
+                     FROM messages m
+                     WHERE m.id = ?1"
+                )?;
+
+                let result = stmt.query_row(params![message_id], |row| {
+                    let session_id: String = row.get(0)?;
+                    let summary: Option<String> = row.get(1)?;
+                    Ok((session_id, summary.unwrap_or_default()))
+                });
+
+                if let Ok((session_id, summary)) = result {
+                    session_results
+                        .entry(session_id)
+                        .and_modify(|(existing_dist, _)| {
+                            if distance < *existing_dist {
+                                *existing_dist = distance;
+                            }
+                        })
+                        .or_insert((distance, summary));
+                }
+
+                Ok::<(), anyhow::Error>(())
+            })?;
+        }
+
+        // 构建结果列表
+        let mut results = Vec::new();
+        for (session_id, (distance, summary)) in session_results {
+            if let Some(session) = self.get_session_by_id(&session_id)? {
+                results.push(crate::database::models::VectorSearchResult {
+                    session,
+                    similarity_score: distance,
+                    summary,
+                });
+            }
+        }
+
+        results.sort_by(|a, b| a.similarity_score.partial_cmp(&b.similarity_score).unwrap());
+        results.truncate(limit);
+
+        Ok(results)
+    }
+
+    /// 根据 session_id 获取会话详情
+    fn get_session_by_id(&self, session_id: &str) -> Result<Option<crate::database::models::Session>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, project_path, project_name, file_path,
+                        rating, tags, is_archived, is_active, created_at, updated_at
+                 FROM sessions
+                 WHERE session_id = ?1"
+            )?;
+
+            let session = stmt.query_row(params![session_id], |row| {
+                Ok(crate::database::models::Session {
+                    id: Some(row.get(0)?),
+                    session_id: row.get(1)?,
+                    project_path: row.get(2)?,
+                    project_name: row.get(3)?,
+                    file_path: row.get(4)?,
+                    rating: row.get(5)?,
+                    tags: row.get(6)?,
+                    is_archived: row.get::<_, i32>(7)? == 1,
+                    is_active: row.get::<_, i32>(8)? == 1,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                })
+            });
+
+            match session {
+                Ok(s) => Ok(Some(s)),
+                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                Err(e) => Err(e.into()),
+            }
+        })
+    }
+}
