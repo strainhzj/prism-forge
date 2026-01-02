@@ -1,8 +1,14 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import Settings from "./pages/Settings";
+import { SettingsPage } from "./pages/SettingsPage";
+import { SessionsPage } from "./pages/SessionsPage";
+import { SessionDetailPage } from "./pages/SessionDetailPage";
+import { getQueryClient } from "./lib/query-client";
+import "./index.css";
 
 // ==================== 调试模式 ====================
 const DEBUG = import.meta.env.DEV;
@@ -33,15 +39,22 @@ if (DEBUG) {
   console.log('[Main] App starting in DEBUG mode');
 }
 
+const queryClient = getQueryClient();
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <RouteDebugger>
-        <Routes>
-          <Route path="/" element={<App />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-      </RouteDebugger>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <RouteDebugger>
+          <Routes>
+            <Route path="/" element={<App />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/settings/v2" element={<SettingsPage />} />
+            <Route path="/sessions" element={<SessionsPage />} />
+            <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
+          </Routes>
+        </RouteDebugger>
+      </BrowserRouter>
+    </QueryClientProvider>
   </React.StrictMode>,
 );

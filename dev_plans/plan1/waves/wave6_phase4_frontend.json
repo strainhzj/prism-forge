@@ -20,7 +20,7 @@
       "assignee": "frontend",
       "estimated_hours": 16,
       "priority": "critical",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [],
       "output_artifacts": [
         "package.json (更新依赖)",
@@ -86,7 +86,7 @@
       "assignee": "frontend",
       "estimated_hours": 20,
       "priority": "high",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "F4.1",
         "F7.1"
@@ -175,7 +175,7 @@
       "assignee": "frontend",
       "estimated_hours": 24,
       "priority": "critical",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "F4.2",
         "F8.1"
@@ -259,7 +259,7 @@
       "assignee": "frontend",
       "estimated_hours": 8,
       "priority": "high",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "F4.6",
         "F3.5"
@@ -318,7 +318,7 @@
       "assignee": "frontend",
       "estimated_hours": 10,
       "priority": "high",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "F4.4"
       ],
@@ -372,7 +372,7 @@
       "assignee": "frontend",
       "estimated_hours": 12,
       "priority": "medium",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "F7.3"
       ],
@@ -431,7 +431,7 @@
       "assignee": "frontend",
       "estimated_hours": 14,
       "priority": "high",
-      "status": "pending",
+      "status": "completed",
       "requirement_ref": [
         "F6.3",
         "F6.5"

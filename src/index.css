@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@theme {
+  /* 颜色系统 */
+  --color-background: oklch(100% 0 0);
+  --color-foreground: oklch(11% 0.02 285);
+  --color-card: oklch(100% 0 0);
+  --color-card-foreground: oklch(11% 0.02 285);
+  --color-popover: oklch(100% 0 0);
+  --color-popover-foreground: oklch(11% 0.02 285);
+  --color-primary: oklch(11% 0.04 285);
+  --color-primary-foreground: oklch(98% 0.01 285);
+  --color-secondary: oklch(96% 0.01 285);
+  --color-secondary-foreground: oklch(11% 0.04 285);
+  --color-muted: oklch(96% 0.01 285);
+  --color-muted-foreground: oklch(47% 0.02 285);
+  --color-accent: oklch(96% 0.01 285);
+  --color-accent-foreground: oklch(11% 0.04 285);
+  --color-destructive: oklch(60% 0.22 25);
+  --color-destructive-foreground: oklch(98% 0.01 285);
+  --color-border: oklch(91% 0.01 285);
+  --color-input: oklch(91% 0.01 285);
+  --color-ring: oklch(11% 0.02 285);
+
+  /* 圆角 */
+  --radius-lg: 0.5rem;
+  --radius-md: calc(var(--radius-lg) - 2px);
+  --radius-sm: calc(var(--radius-lg) - 4px);
+
+  /* 动画 */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from { height: 0; }
+    to { height: var(--radix-accordion-content-height); }
+  }
+
+  @keyframes accordion-up {
+    from { height: var(--radix-accordion-content-height); }
+    to { height: 0; }
+  }
+}
+
+/* 暗色模式 */
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-background: oklch(11% 0.02 285);
+    --color-foreground: oklch(98% 0.01 285);
+    --color-card: oklch(11% 0.02 285);
+    --color-card-foreground: oklch(98% 0.01 285);
+    --color-popover: oklch(11% 0.02 285);
+    --color-popover-foreground: oklch(98% 0.01 285);
+    --color-primary: oklch(98% 0.01 285);
+    --color-primary-foreground: oklch(11% 0.04 285);
+    --color-secondary: oklch(17% 0.03 285);
+    --color-secondary-foreground: oklch(98% 0.01 285);
+    --color-muted: oklch(17% 0.03 285);
+    --color-muted-foreground: oklch(65% 0.02 285);
+    --color-accent: oklch(17% 0.03 285);
+    --color-accent-foreground: oklch(98% 0.01 285);
+    --color-destructive: oklch(31% 0.15 25);
+    --color-destructive-foreground: oklch(98% 0.01 285);
+    --color-border: oklch(17% 0.03 285);
+    --color-input: oklch(17% 0.03 285);
+    --color-ring: oklch(83% 0.01 285);
+  }
+}
+
+/* 基础样式 */
+* {
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
