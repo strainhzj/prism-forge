@@ -1,0 +1,574 @@
+/**
+ * Session Store - 会话管理
+ *
+ * 使用 Zustand 管理会话列表状态，包括：
+ * - sessions: 会话列表
+ * - filteredSessions: 过滤后的会话
+ * - projects: 项目列表（按项目分组）
+ * - 各种操作（扫描、过滤、评分、标签等）
+ */
+
+import { create } from 'zustand';
+import { immer } from 'zustand/middleware/immer';
+import { invoke } from '@tauri-apps/api/core';
+import { useMemo } from 'react';
+
+// ==================== 调试模式 ====================
+const DEBUG = import.meta.env.DEV;
+
+function debugLog(action: string, ...args: unknown[]) {
+  if (DEBUG) {
+    console.log(`[SessionStore] ${action}`, ...args);
+  }
+}
+
+/**
+ * 解析 Tauri 命令错误
+ */
+function parseError(error: unknown): string {
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (error && typeof error === 'object') {
+    if ('message' in error && typeof (error as { message: unknown }).message === 'string') {
+      return (error as { message: string }).message;
+    }
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
+
+// ==================== 类型定义 ====================
+
+/**
+ * 会话状态接口（与 Rust 后端 Session 模型对应）
+ */
+export interface Session {
+  id?: number;
+  sessionId: string;
+  projectPath: string;
+  projectName: string;
+  filePath: string;
+  rating?: number | null;
+  tags: string; // JSON 数组字符串
+  isArchived: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * 项目分组（包含会话列表）
+ */
+export interface ProjectGroup {
+  projectName: string;
+  projectPath: string;
+  sessions: Session[];
+  sessionCount: number;
+}
+
+/**
+ * 会话过滤条件
+ */
+export interface SessionFilters {
+  searchQuery: string;
+  selectedProject?: string;
+  selectedTags: string[];
+  minRating?: number;
+  showArchived: boolean;
+}
+
+/**
+ * 设置会话评分请求
+ */
+export interface SetSessionRatingRequest {
+  sessionId: string;
+  rating: number | null;
+}
+
+/**
+ * 设置会话标签请求
+ */
+export interface SetSessionTagsRequest {
+  sessionId: string;
+  tags: string[];
+}
+
+// ==================== Store State ====================
+
+interface SessionState {
+  // 数据状态
+  sessions: Session[];
+  projects: ProjectGroup[];
+  loading: boolean;
+  error: string | null;
+  filters: SessionFilters;
+
+  // Actions
+  scanSessions: () => Promise<void>;
+  setActiveSessions: () => Promise<void>;
+  setArchivedSessions: () => Promise<void>;
+  setSessionRating: (request: SetSessionRatingRequest) => Promise<void>;
+  setSessionTags: (request: SetSessionTagsRequest) => Promise<void>;
+  archiveSession: (sessionId: string) => Promise<void>;
+  unarchiveSession: (sessionId: string) => Promise<void>;
+  updateFilters: (filters: Partial<SessionFilters>) => void;
+  resetFilters: () => void;
+  clearError: () => void;
+
+  // 计算属性
+  getFilteredSessions: () => Session[];
+  getProjectGroups: () => ProjectGroup[];
+}
+
+// ==================== 辅助函数 ====================
+
+/**
+ * 解析标签 JSON 字符串
+ */
+function parseTags(tagsJson: string): string[] {
+  if (!tagsJson || tagsJson === '[]') {
+    return [];
+  }
+  try {
+    return JSON.parse(tagsJson) as string[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 按项目分组会话
+ */
+function groupSessionsByProject(sessions: Session[]): ProjectGroup[] {
+  const projectMap = new Map<string, ProjectGroup>();
+
+  sessions.forEach((session) => {
+    const key = session.projectPath;
+
+    if (!projectMap.has(key)) {
+      projectMap.set(key, {
+        projectName: session.projectName,
+        projectPath: session.projectPath,
+        sessions: [],
+        sessionCount: 0,
+      });
+    }
+
+    const group = projectMap.get(key)!;
+    group.sessions.push(session);
+    group.sessionCount++;
+  });
+
+  // 转换为数组并按会话数量排序
+  return Array.from(projectMap.values()).sort(
+    (a, b) => b.sessionCount - a.sessionCount
+  );
+}
+
+/**
+ * 过滤会话
+ */
+function filterSessions(
+  sessions: Session[],
+  filters: SessionFilters
+): Session[] {
+  return sessions.filter((session) => {
+    // 归档过滤
+    if (!filters.showArchived && session.isArchived) {
+      return false;
+    }
+
+    // 项目过滤
+    if (
+      filters.selectedProject &&
+      session.projectPath !== filters.selectedProject
+    ) {
+      return false;
+    }
+
+    // 评分过滤
+    if (
+      filters.minRating !== undefined &&
+      (session.rating === null || session.rating === undefined || session.rating < filters.minRating)
+    ) {
+      return false;
+    }
+
+    // 标签过滤
+    if (filters.selectedTags.length > 0) {
+      const sessionTags = parseTags(session.tags);
+      const hasAllTags = filters.selectedTags.every((tag) =>
+        sessionTags.includes(tag)
+      );
+      if (!hasAllTags) {
+        return false;
+      }
+    }
+
+    // 搜索过滤（搜索会话 ID 和项目名称）
+    if (filters.searchQuery) {
+      const query = filters.searchQuery.toLowerCase();
+      const matchesSearch =
+        session.sessionId.toLowerCase().includes(query) ||
+        session.projectName.toLowerCase().includes(query) ||
+        session.projectPath.toLowerCase().includes(query);
+
+      if (!matchesSearch) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+// ==================== Store 实现 ====================
+
+export const useSessionStore = create<SessionState>()(
+  immer((set, get) => ({
+    // 初始状态
+    sessions: [],
+    projects: [],
+    loading: false,
+    error: null,
+    filters: {
+      searchQuery: '',
+      selectedProject: undefined,
+      selectedTags: [],
+      showArchived: false,
+    },
+
+    // 扫描会话
+    scanSessions: async () => {
+      debugLog('scanSessions', 'start');
+      set((state) => {
+        state.loading = true;
+        state.error = null;
+      });
+
+      try {
+        // 调用后端扫描命令（返回 SessionMeta[]，包含基本字段）
+        const result = await invoke<
+          Array<{
+            sessionId: string;
+            projectPath: string;
+            projectName: string;
+            createdAt: string;
+            updatedAt: string;
+            messageCount: number;
+            isActive: boolean;
+          }>
+        >('scan_sessions');
+
+        debugLog('scanSessions', 'success', result);
+
+        // 转换为 Session 类型（缺少详细字段，需要从数据库获取完整信息）
+        // 这里暂时使用扫描结果的基本信息
+        const sessions: Session[] = result.map((meta) => ({
+          sessionId: meta.sessionId,
+          projectPath: meta.projectPath,
+          projectName: meta.projectName,
+          filePath: '', // 需要从数据库获取
+          isActive: meta.isActive,
+          createdAt: meta.createdAt,
+          updatedAt: meta.updatedAt,
+          tags: '[]',
+          isArchived: false,
+        }));
+
+        set((state) => {
+          state.sessions = sessions;
+          state.projects = groupSessionsByProject(sessions);
+          state.loading = false;
+        });
+      } catch (error) {
+        debugLog('scanSessions', 'error', error);
+        set((state) => {
+          state.error = `扫描会话失败: ${parseError(error)}`;
+          state.loading = false;
+        });
+        throw error;
+      }
+    },
+
+    // 获取活跃会话
+    setActiveSessions: async () => {
+      debugLog('setActiveSessions', 'start');
+      set((state) => {
+        state.loading = true;
+        state.error = null;
+      });
+
+      try {
+        const sessions = await invoke<Session[]>('get_active_sessions');
+        debugLog('setActiveSessions', 'success', sessions.length);
+
+        set((state) => {
+          state.sessions = sessions;
+          state.projects = groupSessionsByProject(sessions);
+          state.loading = false;
+        });
+      } catch (error) {
+        debugLog('setActiveSessions', 'error', error);
+        set((state) => {
+          state.error = `获取活跃会话失败: ${parseError(error)}`;
+          state.loading = false;
+        });
+        throw error;
+      }
+    },
+
+    // 获取归档会话
+    setArchivedSessions: async () => {
+      debugLog('setArchivedSessions', 'start');
+      set((state) => {
+        state.loading = true;
+        state.error = null;
+      });
+
+      try {
+        const sessions = await invoke<Session[]>('get_archived_sessions');
+        debugLog('setArchivedSessions', 'success', sessions.length);
+
+        set((state) => {
+          state.sessions = sessions;
+          state.projects = groupSessionsByProject(sessions);
+          state.loading = false;
+        });
+      } catch (error) {
+        debugLog('setArchivedSessions', 'error', error);
+        set((state) => {
+          state.error = `获取归档会话失败: ${parseError(error)}`;
+          state.loading = false;
+        });
+        throw error;
+      }
+    },
+
+    // 设置会话评分
+    setSessionRating: async (request) => {
+      debugLog('setSessionRating', request);
+      set((state) => {
+        state.loading = true;
+        state.error = null;
+      });
+
+      try {
+        await invoke('set_session_rating', {
+          request: {
+            sessionId: request.sessionId,
+            rating: request.rating,
+          },
+        });
+
+        // 更新本地状态
+        set((state) => {
+          const session = state.sessions.find(
+            (s) => s.sessionId === request.sessionId
+          );
+          if (session) {
+            session.rating = request.rating ?? undefined;
+          }
+          state.loading = false;
+        });
+      } catch (error) {
+        debugLog('setSessionRating', 'error', error);
+        set((state) => {
+          state.error = `设置评分失败: ${parseError(error)}`;
+          state.loading = false;
+        });
+        throw error;
+      }
+    },
+
+    // 设置会话标签
+    setSessionTags: async (request) => {
+      debugLog('setSessionTags', request);
+      set((state) => {
+        state.loading = true;
+        state.error = null;
+      });
+
+      try {
+        await invoke('set_session_tags', {
+          request: {
+            sessionId: request.sessionId,
+            tags: request.tags,
+          },
+        });
+
+        // 更新本地状态
+        set((state) => {
+          const session = state.sessions.find(
+            (s) => s.sessionId === request.sessionId
+          );
+          if (session) {
+            session.tags = JSON.stringify(request.tags);
+          }
+          state.loading = false;
+        });
+      } catch (error) {
+        debugLog('setSessionTags', 'error', error);
+        set((state) => {
+          state.error = `设置标签失败: ${parseError(error)}`;
+          state.loading = false;
+        });
+        throw error;
+      }
+    },
+
+    // 归档会话
+    archiveSession: async (sessionId) => {
+      debugLog('archiveSession', sessionId);
+      set((state) => {
+        state.loading = true;
+        state.error = null;
+      });
+
+      try {
+        await invoke('archive_session', { sessionId });
+
+        // 更新本地状态
+        set((state) => {
+          const session = state.sessions.find((s) => s.sessionId === sessionId);
+          if (session) {
+            session.isArchived = true;
+          }
+          state.loading = false;
+        });
+      } catch (error) {
+        debugLog('archiveSession', 'error', error);
+        set((state) => {
+          state.error = `归档会话失败: ${parseError(error)}`;
+          state.loading = false;
+        });
+        throw error;
+      }
+    },
+
+    // 取消归档会话
+    unarchiveSession: async (sessionId) => {
+      debugLog('unarchiveSession', sessionId);
+      set((state) => {
+        state.loading = true;
+        state.error = null;
+      });
+
+      try {
+        await invoke('unarchive_session', { sessionId });
+
+        // 更新本地状态
+        set((state) => {
+          const session = state.sessions.find((s) => s.sessionId === sessionId);
+          if (session) {
+            session.isArchived = false;
+          }
+          state.loading = false;
+        });
+      } catch (error) {
+        debugLog('unarchiveSession', 'error', error);
+        set((state) => {
+          state.error = `取消归档失败: ${parseError(error)}`;
+          state.loading = false;
+        });
+        throw error;
+      }
+    },
+
+    // 更新过滤条件
+    updateFilters: (newFilters) => {
+      set((state) => {
+        state.filters = { ...state.filters, ...newFilters };
+      });
+    },
+
+    // 重置过滤条件
+    resetFilters: () => {
+      set((state) => {
+        state.filters = {
+          searchQuery: '',
+          selectedProject: undefined,
+          selectedTags: [],
+          showArchived: false,
+        };
+      });
+    },
+
+    // 清除错误
+    clearError: () => {
+      set((state) => {
+        state.error = null;
+      });
+    },
+
+    // 获取过滤后的会话
+    getFilteredSessions: () => {
+      const { sessions, filters } = get();
+      return filterSessions(sessions, filters);
+    },
+
+    // 获取项目分组
+    getProjectGroups: () => {
+      const { sessions } = get();
+      return groupSessionsByProject(sessions);
+    },
+  }))
+);
+
+// ==================== 便捷 Hooks ====================
+
+/**
+ * 获取所有会话
+ */
+export const useSessions = () => useSessionStore((state) => state.sessions);
+
+/**
+ * 获取过滤后的会话
+ */
+export const useFilteredSessions = () => useSessionStore((state) => state.getFilteredSessions());
+
+/**
+ * 获取项目分组
+ */
+export const useProjectGroups = () => useSessionStore((state) => state.getProjectGroups());
+
+/**
+ * 获取加载状态
+ */
+export const useSessionsLoading = () => useSessionStore((state) => state.loading);
+
+/**
+ * 获取错误信息
+ */
+export const useSessionsError = () => useSessionStore((state) => state.error);
+
+/**
+ * 获取会话操作（稳定引用）
+ */
+export const useSessionActions = () => {
+  const store = useSessionStore;
+
+  return useMemo(
+    () => ({
+      scanSessions: store.getState().scanSessions,
+      setActiveSessions: store.getState().setActiveSessions,
+      setArchivedSessions: store.getState().setArchivedSessions,
+      setSessionRating: store.getState().setSessionRating,
+      setSessionTags: store.getState().setSessionTags,
+      archiveSession: store.getState().archiveSession,
+      unarchiveSession: store.getState().unarchiveSession,
+      updateFilters: store.getState().updateFilters,
+      resetFilters: store.getState().resetFilters,
+      clearError: store.getState().clearError,
+    }),
+    []
+  );
+};

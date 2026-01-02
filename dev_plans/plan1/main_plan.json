@@ -5,13 +5,14 @@
   "global_status": {
     "current_phase": "PHASE_2",
     "overall_progress": "52.5%",
-    "last_updated": "2026-01-01",
+    "last_updated": "2026-01-02",
     "blocking_issues": [],
     "completed_waves": [
       "WAVE_1",
       "WAVE_2",
       "WAVE_3",
-      "WAVE_4"
+      "WAVE_4",
+      "WAVE_6"
     ]
   },
   "git_strategy": {
@@ -49,7 +50,14 @@
     "T3_2",
     "T3_3",
     "T3_5",
-    "T3_PERF"
+    "T3_PERF",
+    "T4_SETUP",
+    "T4_1",
+    "T4_2",
+    "T4_3",
+    "T4_4",
+    "T4_5",
+    "T4_6"
   ],
   "phases": [
     {
