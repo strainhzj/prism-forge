@@ -40,7 +40,6 @@ export interface ErrorInfo {
   stack_trace?: string;
 }
 
-
 /**
  * 代码变更信息
  */
@@ -49,27 +48,8 @@ export interface CodeChangeInfo {
   change_type: 'create' | 'update' | 'delete';
   lines_added?: number;
   lines_removed?: number;
-  /**
-   * 变更前的代码（用于 Diff 视图）
-   */
-  old_text?: string;
-  /**
-   * 变更后的代码（用于 Diff 视图）
-   */
-  new_text?: string;
-  /**
-   * 起始行号（从 1 开始）
-   */
-  start_line?: number;
-  /**
-   * 结束行号
-   */
-  end_line?: number;
-  /**
-   * 工具名称（如 'write', 'edit'）
-   */
-  tool_name?: string;
 }
+
 /**
  * 消息节点
  */

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { ProviderSettings } from '@/components/settings/ProviderSettings';
 import { ProviderForm } from '@/components/settings/ProviderForm';
 import {
@@ -109,12 +110,13 @@ export function SettingsPage({ className }: SettingsPageProps) {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold">API 提供商设置</h1>
+          <h1 className="text-xl font-bold text-foreground">API 提供商设置</h1>
         </div>
         <Button onClick={handleCreate} className="shrink-0">
           <Plus className="h-4 w-4 mr-2" />
           新建提供商
         </Button>
+        <ThemeToggle />
       </div>
 
       {/* 主内容区域 */}

@@ -17,17 +17,22 @@
 
 .header-row h1 {
   margin: 0;
+  color: var(--color-app-foreground);
+}
+
+h1, h2 {
+  color: var(--color-app-foreground);
 }
 
 .settings-btn {
-  background: #6c757d;
-  color: white;
+  background: var(--color-app-button-bg);
+  color: var(--color-app-white);
   border: none;
   font-size: 0.9em;
 }
 
 .settings-btn:hover {
-  background: #5a6268;
+  background: var(--color-app-button-hover);
 }
 
 .config-section {
@@ -35,7 +40,7 @@
   flex-direction: column;
   gap: 15px;
   padding: 20px;
-  background: #f5f5f5;
+  background: var(--color-app-secondary);
   border-radius: 8px;
   margin-bottom: 20px;
 }
@@ -49,6 +54,7 @@
 .input-group label {
   font-weight: bold;
   font-size: 0.9em;
+  color: var(--color-app-foreground);
 }
 
 .row {
@@ -58,37 +64,40 @@
 
 input, textarea {
   padding: 8px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--color-app-border-light);
   border-radius: 4px;
   flex-grow: 1;
+  color: var(--color-app-foreground);
+  background-color: var(--color-app-white);
 }
 
 button {
   padding: 8px 16px;
-  background: #eee;
-  border: 1px solid #ccc;
+  background: var(--color-app-button-default);
+  border: 1px solid var(--color-app-border-light);
   border-radius: 4px;
   cursor: pointer;
+  color: var(--color-app-foreground);
 }
 
 .primary-btn {
-  background: #007bff;
-  color: white;
+  background: var(--color-app-primary-blue);
+  color: var(--color-app-primary-blue-foreground);
   border: none;
   font-weight: bold;
   padding: 12px;
 }
 
 .primary-btn:disabled {
-  background: #ccc;
+  background: var(--color-app-border-light);
 }
 
 .info-note {
-  background: #e7f3ff;
-  border-left: 3px solid #007bff;
+  background: var(--color-app-info-bg);
+  border-left: 3px solid var(--color-app-primary-blue);
   padding: 10px;
   border-radius: 4px;
-  color: #004085;
+  color: var(--color-app-info-text);
 }
 
 .main-content {
@@ -112,17 +121,18 @@ button {
 }
 
 .result-box {
-  background: #fff;
-  border: 1px solid #ddd;
+  background: var(--color-app-white);
+  border: 1px solid var(--color-app-border-light);
   border-radius: 8px;
   padding: 15px;
   flex-grow: 1;
   overflow-y: auto;
   overflow-x: hidden; /* 隐藏水平滚动条，内容自动换行 */
-  background-color: #f9fdfc;
+  background-color: var(--color-app-result-bg);
   /* 防止内容撑开容器 */
   min-width: 0;
   width: 90%;
+  color: var(--color-app-foreground);
 }
 
 /* result-box 内的 pre 标签支持自动换行 */
@@ -135,6 +145,7 @@ button {
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 0.9em;
   line-height: 1.5;
+  color: var(--color-app-foreground);
 }
 
 .debug-panel {
@@ -144,7 +155,7 @@ button {
   max-width: 600px;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid #eee;
+  border-left: 1px solid var(--color-border);
   padding-left: 20px;
   overflow: hidden; /* 防止内容撑开面板 */
   flex-shrink: 0; /* 防止被压缩 */
@@ -167,16 +178,16 @@ button {
 .sm-btn {
   padding: 4px 10px;
   font-size: 0.8em;
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
+  background: var(--color-app-secondary);
+  border: 1px solid var(--color-app-border-light);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .sm-btn:hover:not(:disabled) {
-  background: #e9ecef;
-  border-color: #adb5bd;
+  background: var(--color-app-button-default);
+  border-color: var(--color-app-border-light);
 }
 
 .sm-btn:disabled {
@@ -186,14 +197,13 @@ button {
 
 /* 自动刷新激活状态 */
 .sm-btn.active {
-  background: #28a745;
-  color: white;
-  border-color: #28a745;
+  background: var(--color-app-success);
+  color: var(--color-app-white);
+  border-color: var(--color-app-success);
 }
 
 .sm-btn.active:hover {
-  background: #218838;
-  border-color: #1e7e34;
+  filter: brightness(0.9);
 }
 
 .events-list {
@@ -210,11 +220,12 @@ button {
 }
 
 .event-card {
-  border: 1px solid #eee;
+  border: 1px solid var(--color-border);
   padding: 10px;
   border-radius: 6px;
   font-size: 0.85em;
-  background: white;
+  background: var(--color-app-white);
+  color: var(--color-app-foreground);
   /* 防止内容撑开容器 */
   min-width: 0;
   width: 100%;
@@ -225,18 +236,18 @@ button {
 }
 
 .event-card.tool_result {
-  background: #f8f9fa;
-  border-left: 3px solid #6c757d;
+  background: var(--color-app-secondary);
+  border-left: 3px solid var(--color-app-button-bg);
 }
 
 .event-card.message {
-  border-left: 3px solid #007bff;
+  border-left: 3px solid var(--color-app-primary-blue);
 }
 
 .event-meta {
   display: flex;
   justify-content: space-between;
-  color: #666;
+  color: var(--color-muted-foreground);
   font-size: 0.8em;
   margin-bottom: 5px;
   font-weight: bold;
@@ -252,19 +263,20 @@ button {
   word-wrap: break-word;
   word-break: break-word;
   min-width: 0;
+  color: var(--color-app-foreground);
 }
 
 .placeholder {
-  color: #999;
+  color: var(--color-muted-foreground);
   text-align: center;
   margin-top: 20px;
 }
 
 .error-message {
-  color: #721c24;
-  background: #f8d7da;
-  border: 1px solid #f5c6cb;
-  border-left: 3px solid #dc3545;
+  color: var(--color-app-error-text);
+  background: var(--color-app-error-bg);
+  border: 1px solid var(--color-app-error-border);
+  border-left: 3px solid var(--color-app-error-accent);
   padding: 10px;
   border-radius: 4px;
   margin: 10px 0;

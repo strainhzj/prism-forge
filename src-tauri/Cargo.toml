@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
+default-run = "prism-forge"
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = [] }
@@ -36,3 +37,11 @@ notify = "6.1"
 
 [dev-dependencies]
 proptest = "1.4"
+
+[[bin]]
+name = "test_db"
+path = "bin/test_db.rs"
+
+[[bin]]
+name = "test_init"
+path = "bin/test_init.rs"

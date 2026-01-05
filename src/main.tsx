@@ -1,14 +1,34 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
-import Settings from "./pages/Settings";
-import { SettingsPage } from "./pages/SettingsPage";
-import { SessionsPage } from "./pages/SessionsPage";
-import { SessionDetailPage } from "./pages/SessionDetailPage";
 import { getQueryClient } from "./lib/query-client";
+import { Loading } from "./components/ui/loading";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import "./index.css";
+
+// 代码分割：路由级懒加载
+const Settings = lazy(() => import("./pages/Settings"));
+const SettingsPage = lazy(() =>
+  import("./pages/SettingsPage").then(m => ({ default: m.SettingsPage }))
+);
+const SessionsPage = lazy(() =>
+  import("./pages/SessionsPage").then(m => ({ default: m.SessionsPage }))
+);
+const SessionDetailPage = lazy(() =>
+  import("./pages/SessionDetailPage").then(m => ({ default: m.SessionDetailPage }))
+);
+const PromptLab = lazy(() =>
+  import("./pages/PromptLab").then(m => ({ default: m.PromptLab }))
+);
+
+// 加载中组件
+const RouteLoadingFallback = () => (
+  <div className="flex items-center justify-center min-h-screen">
+    <Loading text="加载页面..." />
+  </div>
+);
 
 // ==================== 调试模式 ====================
 const DEBUG = import.meta.env.DEV;
@@ -43,18 +63,23 @@ const queryClient = getQueryClient();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <RouteDebugger>
-          <Routes>
-            <Route path="/" element={<App />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/settings/v2" element={<SettingsPage />} />
-            <Route path="/sessions" element={<SessionsPage />} />
-            <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
-          </Routes>
-        </RouteDebugger>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ThemeProvider defaultTheme="system">
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <RouteDebugger>
+            <Suspense fallback={<RouteLoadingFallback />}>
+              <Routes>
+                <Route path="/" element={<App />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/settings/v2" element={<SettingsPage />} />
+                <Route path="/sessions" element={<SessionsPage />} />
+                <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
+                <Route path="/prompt-lab" element={<PromptLab />} />
+              </Routes>
+            </Suspense>
+          </RouteDebugger>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ThemeProvider>
   </React.StrictMode>,
 );

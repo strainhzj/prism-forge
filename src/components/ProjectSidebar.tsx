@@ -76,10 +76,10 @@ export function ProjectSidebar({
   }, [setActiveSessions]);
 
   return (
-    <div className={cn('flex flex-col h-full', className)}>
+    <div className={cn('flex flex-col h-full bg-card', className)}>
       {/* 头部 */}
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <h2 className="text-sm font-semibold">项目</h2>
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
+        <h2 className="text-sm font-semibold text-foreground">项目</h2>
         <Button
           variant="ghost"
           size="sm"
@@ -120,7 +120,7 @@ export function ProjectSidebar({
                       <ChevronDown className="h-4 w-4 shrink-0" />
                     )}
                     <Folder className="h-4 w-4 shrink-0 text-blue-500" />
-                    <span className="flex-1 text-left truncate">
+                    <span className="flex-1 text-left truncate text-foreground">
                       {project.projectName}
                     </span>
                     <span className="text-xs text-muted-foreground">
@@ -138,7 +138,7 @@ export function ProjectSidebar({
                             className={cn(
                               'w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-colors',
                               'hover:bg-accent hover:text-accent-foreground',
-                              'truncate'
+                              'truncate text-foreground'
                             )}
                             title={session.filePath}
                           >

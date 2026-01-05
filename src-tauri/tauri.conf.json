@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "prism-forge",
+  "productName": "PrismForge",
   "version": "0.1.0",
-  "identifier": "npm",
+  "identifier": "com.prismforge.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,14 +12,19 @@
   "app": {
     "windows": [
       {
-        "title": "PrismForge",
-        "width": 800,
-        "height": 600
+        "title": "PrismForge - Claude Code Session Monitor",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "minWidth": 900,
+        "minHeight": 600
       }
     ],
     "security": {
       "csp": null
-    }
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,
@@ -30,6 +35,12 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "PrismForge Team",
+    "copyright": "Copyright © 2025 PrismForge Team",
+    "category": "Developer Tool",
+    "shortDescription": "Claude Code Session Monitor & Prompt Optimizer",
+    "longDescription": "PrismForge is a professional desktop application for monitoring and optimizing Claude Code sessions. Features include session scanning, vector-based retrieval, prompt optimization, and performance analysis.",
+    "createUpdaterArtifacts": false
   }
 }

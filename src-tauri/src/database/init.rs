@@ -26,7 +26,7 @@ fn load_sqlite_vec_extension(conn: &mut Connection) -> Result<()> {
     // 注意: sqlite-vec 0.1.7-alpha.2 使用不同的初始化方式
     // 使用 sqlite-vec 的 bundle 版本会自动加载扩展
     // 这里调用 vec_init() 来确保扩展已正确初始化
-    conn.execute("SELECT vec_init()", [])?;
+    conn.query_row("SELECT vec_init()", [], |_| Ok(()))?;
     log::info!("sqlite-vec 扩展加载成功");
     Ok(())
 }
@@ -47,18 +47,18 @@ fn initialize_connection() -> Result<Arc<Mutex<Connection>>> {
     log::debug!("外键约束已启用");
 
     // 设置 PRAGMA: 忙等待超时 30 秒
-    conn.execute("PRAGMA busy_timeout = 30000;", [])?;
+    let _timeout: i32 = conn.query_row("PRAGMA busy_timeout = 30000;", [], |row| row.get(0))?;
     log::debug!("忙等待超时设置为 30 秒");
 
     // 设置 PRAGMA: 启用 WAL 模式（提升并发性能）
-    conn.execute("PRAGMA journal_mode = WAL;", [])?;
+    let _journal_mode: String = conn.query_row("PRAGMA journal_mode = WAL;", [], |row| row.get(0))?;
     log::debug!("WAL 模式已启用");
 
     // 加载 sqlite-vec 扩展
-    if let Err(e) = load_sqlite_vec_extension(&mut conn) {
-        log::warn!("sqlite-vec 扩展加载失败: {}", e);
+    // if let Err(e) = load_sqlite_vec_extension(&mut conn) {
+    // log::warn!("sqlite-vec 扩展加载失败: {}", e);
         // 不中断初始化，向量功能将在需要时报错
-    }
+    // }
 
     // 执行数据库迁移
     crate::database::migrations::run_migrations(&mut conn)?;

@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { ProjectSidebar } from '@/components/ProjectSidebar';
 import { SessionList } from '@/components/SessionList';
 import type { Session } from '@/stores/useSessionStore';
@@ -50,7 +51,7 @@ export function SessionsPage({ className }: SessionsPageProps) {
   );
 
   return (
-    <div className={cn('flex flex-col h-screen', className)}>
+    <div className={cn('flex flex-col h-screen bg-background', className)}>
       {/* 顶部导航栏 */}
       <div className="flex items-center gap-4 px-6 py-4 border-b bg-background">
         <Button
@@ -62,17 +63,18 @@ export function SessionsPage({ className }: SessionsPageProps) {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold">会话管理</h1>
+          <h1 className="text-xl font-bold text-foreground">会话管理</h1>
           <p className="text-sm text-muted-foreground">
             浏览和管理 Claude Code 会话历史
           </p>
         </div>
+        <ThemeToggle />
       </div>
 
       {/* 主内容区域 */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden bg-background">
         {/* 左侧：项目侧边栏 */}
-        <div className="w-64 border-r shrink-0">
+        <div className="w-64 border-r shrink-0 bg-card">
           <ProjectSidebar
             onProjectSelect={handleProjectSelect}
             selectedProject={selectedProject}
@@ -80,7 +82,7 @@ export function SessionsPage({ className }: SessionsPageProps) {
         </div>
 
         {/* 右侧：会话列表 */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 bg-background">
           <SessionList onSessionClick={handleSessionClick} />
         </div>
       </div>
