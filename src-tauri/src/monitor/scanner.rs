@@ -127,14 +127,25 @@ pub fn scan_session_files() -> Result<Vec<SessionMetadata>> {
         }
     };
 
+    scan_directory(&projects_dir)
+}
+
+/// 扫描指定目录的会话文件
+///
+/// # 参数
+/// - `directory`: 要扫描的目录路径
+///
+/// # 返回
+/// 返回扫描到的所有会话元数据列表
+pub fn scan_directory(directory: &Path) -> Result<Vec<SessionMetadata>> {
     // 如果目录不存在，返回空列表
-    if !projects_dir.exists() {
-        eprintln!("警告: Claude 项目目录不存在: {:?}", projects_dir);
+    if !directory.exists() {
+        eprintln!("警告: 目录不存在: {:?}", directory);
         return Ok(Vec::new());
     }
 
     // 使用 glob 查找所有 JSONL 文件
-    let pattern = projects_dir.join("**").join("*.jsonl");
+    let pattern = directory.join("**").join("*.jsonl");
     let pattern_str = pattern.to_str()
         .ok_or_else(|| anyhow::anyhow!("无效的路径模式"))?;
 
@@ -143,7 +154,7 @@ pub fn scan_session_files() -> Result<Vec<SessionMetadata>> {
     for entry in glob(pattern_str)? {
         match entry {
             Ok(path) => {
-                match extract_session_metadata(&path) {
+                match extract_session_metadata_from_dir(&path, directory) {
                     Ok(metadata) => sessions.push(metadata),
                     Err(e) => {
                         // 跳过损坏的文件，记录到日志
@@ -158,6 +169,84 @@ pub fn scan_session_files() -> Result<Vec<SessionMetadata>> {
     }
 
     Ok(sessions)
+}
+
+/// 从指定基础目录提取会话元数据
+fn extract_session_metadata_from_dir(path: &Path, base_dir: &Path) -> Result<SessionMetadata> {
+    // 1. 从文件名提取 session_id (UUID 格式)
+    let file_name = path.file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| anyhow::anyhow!("无效的文件名: {:?}", path))?;
+
+    // 验证是否为有效的 UUID 格式
+    if !is_valid_uuid(file_name) {
+        return Err(anyhow::anyhow!("无效的 UUID 格式: {}", file_name));
+    }
+
+    let session_id = file_name.to_string();
+
+    // 2. 从文件路径提取 project_path 和 project_name
+    let full_path = path.canonicalize()?;
+    let base_path = base_dir.canonicalize()?;
+    let path_str = full_path.to_string_lossy().to_string();
+    let base_str = base_path.to_string_lossy().to_string();
+
+    let project_path = if path_str.starts_with(&base_str) {
+        // 提取项目相对路径
+        let relative = path_str[base_str.len()..].trim_start_matches('\\').trim_start_matches('/');
+        // 获取项目根目录（包含会话文件的目录）
+        if let Some(parent) = Path::new(relative).parent() {
+            parent.to_string_lossy().to_string()
+        } else {
+            String::new()
+        }
+    } else {
+        // 使用完整路径的父目录
+        path.parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default()
+    };
+
+    // 提取项目名称（路径的最后一段）
+    let project_name = if project_path.is_empty() {
+        base_dir.file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Unknown")
+            .to_string()
+    } else {
+        Path::new(&project_path)
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_string()
+    };
+
+    // 3. 读取文件元数据
+    let metadata = std::fs::metadata(path)?;
+    let created = metadata.created()
+        .or_else(|_| metadata.modified())?;
+    let modified = metadata.modified()?;
+
+    // 转换为 RFC3339 格式
+    let created_at = system_time_to_rfc3339(created)?;
+    let updated_at = system_time_to_rfc3339(modified)?;
+
+    // 4. 计算消息数量（简单方法：计算 JSONL 文件的行数）
+    let message_count = count_jsonl_lines(path)?;
+
+    // 5. 判断是否活跃
+    let is_active = is_session_active(path);
+
+    Ok(SessionMetadata {
+        session_id,
+        project_path,
+        project_name,
+        file_path: path.to_path_buf(),
+        created_at,
+        updated_at,
+        message_count,
+        is_active,
+    })
 }
 
 /// 检查是否为有效的 UUID 格式

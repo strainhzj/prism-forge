@@ -110,9 +110,11 @@ interface SessionState {
   loading: boolean;
   error: string | null;
   filters: SessionFilters;
+  customDirectory: string | null;
 
   // Actions
   scanSessions: () => Promise<void>;
+  scanDirectory: (directory: string) => Promise<void>;
   setActiveSessions: () => Promise<void>;
   setArchivedSessions: () => Promise<void>;
   setSessionRating: (request: SetSessionRatingRequest) => Promise<void>;
@@ -239,6 +241,7 @@ export const useSessionStore = create<SessionState>()(
     projects: [],
     loading: false,
     error: null,
+    customDirectory: null,
     filters: {
       searchQuery: '',
       selectedProject: undefined,
@@ -246,7 +249,7 @@ export const useSessionStore = create<SessionState>()(
       showArchived: false,
     },
 
-    // 扫描会话
+    // 扫描会话（默认目录）
     scanSessions: async () => {
       debugLog('scanSessions', 'start');
       set((state) => {
@@ -299,17 +302,94 @@ export const useSessionStore = create<SessionState>()(
       }
     },
 
-    // 获取活跃会话
+    // 扫描指定目录
+    scanDirectory: async (directory: string) => {
+      debugLog('scanDirectory', 'start', directory);
+      set((state) => {
+        state.loading = true;
+        state.error = null;
+        state.customDirectory = directory;
+      });
+
+      try {
+        const result = await invoke<
+          Array<{
+            sessionId: string;
+            projectPath: string;
+            projectName: string;
+            createdAt: string;
+            updatedAt: string;
+            messageCount: number;
+            isActive: boolean;
+          }>
+        >('scan_directory', { directory });
+
+        debugLog('scanDirectory', 'success', result.length);
+
+        const sessions: Session[] = result.map((meta) => ({
+          sessionId: meta.sessionId,
+          projectPath: meta.projectPath,
+          projectName: meta.projectName,
+          filePath: '',
+          isActive: meta.isActive,
+          createdAt: meta.createdAt,
+          updatedAt: meta.updatedAt,
+          tags: '[]',
+          isArchived: false,
+        }));
+
+        set((state) => {
+          state.sessions = sessions;
+          state.projects = groupSessionsByProject(sessions);
+          state.loading = false;
+        });
+      } catch (error) {
+        debugLog('scanDirectory', 'error', error);
+        set((state) => {
+          state.error = `扫描目录失败: ${parseError(error)}`;
+          state.loading = false;
+        });
+        throw error;
+      }
+    },
+
+    // 加载会话列表（使用 scan_sessions 命令）
     setActiveSessions: async () => {
-      debugLog('setActiveSessions', 'start');
+      debugLog('setActiveSessions', 'start - using scan_sessions');
+
       set((state) => {
         state.loading = true;
         state.error = null;
       });
 
       try {
-        const sessions = await invoke<Session[]>('get_active_sessions');
-        debugLog('setActiveSessions', 'success', sessions.length);
+        // 调用 scan_sessions 命令获取会话列表
+        const result = await invoke<
+          Array<{
+            sessionId: string;
+            projectPath: string;
+            projectName: string;
+            createdAt: string;
+            updatedAt: string;
+            messageCount: number;
+            isActive: boolean;
+          }>
+        >('scan_sessions');
+
+        debugLog('setActiveSessions', 'scan_sessions success', result.length);
+
+        // 转换为 Session 类型
+        const sessions: Session[] = result.map((meta) => ({
+          sessionId: meta.sessionId,
+          projectPath: meta.projectPath,
+          projectName: meta.projectName,
+          filePath: '',
+          isActive: meta.isActive,
+          createdAt: meta.createdAt,
+          updatedAt: meta.updatedAt,
+          tags: '[]',
+          isArchived: false,
+        }));
 
         set((state) => {
           state.sessions = sessions;
@@ -319,7 +399,7 @@ export const useSessionStore = create<SessionState>()(
       } catch (error) {
         debugLog('setActiveSessions', 'error', error);
         set((state) => {
-          state.error = `获取活跃会话失败: ${parseError(error)}`;
+          state.error = `加载会话失败: ${parseError(error)}`;
           state.loading = false;
         });
         throw error;
@@ -531,14 +611,21 @@ export const useSessionStore = create<SessionState>()(
 export const useSessions = () => useSessionStore((state) => state.sessions);
 
 /**
- * 获取过滤后的会话
+ * 获取过滤后的会话（使用浅比较避免无限循环）
  */
-export const useFilteredSessions = () => useSessionStore((state) => state.getFilteredSessions());
+export const useFilteredSessions = () => {
+  const sessions = useSessionStore((state) => state.sessions);
+  const filters = useSessionStore((state) => state.filters);
+  return useMemo(() => filterSessions(sessions, filters), [sessions, filters]);
+};
 
 /**
- * 获取项目分组
+ * 获取项目分组（使用 useMemo 缓存结果）
  */
-export const useProjectGroups = () => useSessionStore((state) => state.getProjectGroups());
+export const useProjectGroups = () => {
+  const sessions = useSessionStore((state) => state.sessions);
+  return useMemo(() => groupSessionsByProject(sessions), [sessions]);
+};
 
 /**
  * 获取加载状态
@@ -554,21 +641,20 @@ export const useSessionsError = () => useSessionStore((state) => state.error);
  * 获取会话操作（稳定引用）
  */
 export const useSessionActions = () => {
-  const store = useSessionStore;
-
-  return useMemo(
-    () => ({
-      scanSessions: store.getState().scanSessions,
-      setActiveSessions: store.getState().setActiveSessions,
-      setArchivedSessions: store.getState().setArchivedSessions,
-      setSessionRating: store.getState().setSessionRating,
-      setSessionTags: store.getState().setSessionTags,
-      archiveSession: store.getState().archiveSession,
-      unarchiveSession: store.getState().unarchiveSession,
-      updateFilters: store.getState().updateFilters,
-      resetFilters: store.getState().resetFilters,
-      clearError: store.getState().clearError,
-    }),
-    []
-  );
+  return useMemo(() => {
+    const store = useSessionStore.getState();
+    return {
+      scanSessions: store.scanSessions,
+      scanDirectory: store.scanDirectory,
+      setActiveSessions: store.setActiveSessions,
+      setArchivedSessions: store.setArchivedSessions,
+      setSessionRating: store.setSessionRating,
+      setSessionTags: store.setSessionTags,
+      archiveSession: store.archiveSession,
+      unarchiveSession: store.unarchiveSession,
+      updateFilters: store.updateFilters,
+      resetFilters: store.resetFilters,
+      clearError: store.clearError,
+    };
+  }, []);
 };

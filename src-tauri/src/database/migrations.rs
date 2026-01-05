@@ -378,14 +378,14 @@ fn migrate_v6_impl(conn: &mut Connection) -> Result<()> {
     // 创建 message_embeddings 虚拟表 (vec0)
     // 注意: 使用 sqlite-vec 的 vec0 虚拟表语法
     // 向量维度为 384 (BGE-small-en-v1.5)
-    conn.execute(
-        "CREATE VIRTUAL TABLE IF NOT EXISTS message_embeddings
-            USING vec0(
-                embedding FLOAT(384),
-                summary TEXT
-            );",
-        [],
-    )?;
+//     conn.execute(
+//         "CREATE VIRTUAL TABLE IF NOT EXISTS message_embeddings
+//             USING vec0(
+//                 embedding FLOAT(384),
+//                 summary TEXT
+//             );",
+//         [],
+//     )?;
 
     // 关联表: 存储 message_id 到 vec0 行 ID 的映射
     conn.execute(

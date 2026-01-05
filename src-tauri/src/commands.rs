@@ -770,6 +770,79 @@ pub async fn scan_sessions(
     Ok(result)
 }
 
+/// 扫描指定目录的 Claude Code 会话文件
+///
+/// 扫描用户选择的目录，查找所有 .jsonl 会话文件并提取元数据
+///
+/// # 参数
+/// - `directory`: 要扫描的目录路径
+///
+/// # 返回
+/// 返回会话元数据列表
+#[tauri::command]
+pub async fn scan_directory(
+    directory: String,
+) -> std::result::Result<Vec<SessionMeta>, CommandError> {
+    use crate::monitor::scanner;
+    use crate::database::repository::SessionRepository;
+
+    let path = PathBuf::from(&directory);
+    
+    // 验证目录存在
+    if !path.exists() {
+        return Err(CommandError {
+            message: format!("目录不存在: {}", directory),
+        });
+    }
+    
+    if !path.is_dir() {
+        return Err(CommandError {
+            message: format!("路径不是目录: {}", directory),
+        });
+    }
+
+    // 扫描指定目录的会话文件
+    let sessions_metadata = scanner::scan_directory(&path)
+        .map_err(|e| CommandError {
+            message: format!("扫描目录失败: {}", e),
+        })?;
+
+    // 获取数据库连接并创建 SessionRepository
+    let conn = crate::database::init::get_connection_shared()
+        .map_err(|e| CommandError {
+            message: format!("获取数据库连接失败: {}", e),
+        })?;
+    let session_repo = SessionRepository::with_conn(conn);
+
+    // 将扫描结果存入数据库
+    for metadata in &sessions_metadata {
+        let file_path = metadata.file_path.to_string_lossy().to_string();
+        let _ = session_repo.upsert_session(
+            &metadata.session_id,
+            &metadata.project_path,
+            &metadata.project_name,
+            &file_path,
+            metadata.is_active,
+        );
+    }
+
+    // 转换为返回格式
+    let result: Vec<SessionMeta> = sessions_metadata
+        .into_iter()
+        .map(|m| SessionMeta {
+            session_id: m.session_id,
+            project_path: m.project_path,
+            project_name: m.project_name,
+            created_at: m.created_at,
+            updated_at: m.updated_at,
+            message_count: m.message_count,
+            is_active: m.is_active,
+        })
+        .collect();
+
+    Ok(result)
+}
+
 
 // ==================== 性能基准测试命令 ====================
 
@@ -1301,34 +1374,6 @@ pub async fn get_archived_sessions(
     repo.get_archived_sessions()
         .map_err(|e| CommandError {
             message: format!("获取已归档会话列表失败: {}", e),
-        })
-}
-
-/// 获取未归档的活跃会话列表
-///
-/// 返回所有未归档的会话（默认列表），按更新时间倒序排列。
-///
-/// # 返回
-/// 返回未归档的会话列表
-///
-/// # 示例
-/// ```javascript
-/// const activeSessions = await invoke('get_active_sessions');
-/// console.log(activeSessions); // Session 对象数组
-/// ```
-#[tauri::command]
-pub async fn get_active_sessions(
-) -> std::result::Result<Vec<crate::database::models::Session>, CommandError> {
-    let conn = crate::database::init::get_connection_shared()
-        .map_err(|e| CommandError {
-            message: format!("获取数据库连接失败: {}", e),
-        })?;
-
-    let repo = crate::database::repository::SessionRepository::with_conn(conn);
-
-    repo.get_active_sessions()
-        .map_err(|e| CommandError {
-            message: format!("获取活跃会话列表失败: {}", e),
         })
 }
 

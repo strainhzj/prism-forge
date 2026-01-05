@@ -6,18 +6,21 @@
 
 import { useCallback, useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
-import { ArrowLeft, FileText, Edit3, Check } from 'lucide-react';
+import { ArrowLeft, FileText, Edit3, Check, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { ViewLevelTabs, ExtractionLevel } from '@/components/ViewLevelSelector';
 import { MessageTree } from '@/components/MessageTree';
 import { TokenStatsCard } from '@/components/TokenCounter';
 import { SessionRating } from '@/components/SessionRating';
 import { TagEditor, TagDisplay } from '@/components/TagEditor';
 import { Badge } from '@/components/ui/badge';
+import { ExportDialog } from '@/components/ExportDialog';
 import { useSessions, useSessionActions } from '@/stores/useSessionStore';
 import type { ConversationTree } from '@/types/message';
+import type { ExportData } from '@/types/export';
 
 /**
  * SessionDetailPage 组件
@@ -40,6 +43,9 @@ export function SessionDetailPage({ className }: { className?: string }) {
   // 标签编辑状态
   const [isEditingTags, setIsEditingTags] = useState(false);
   const [editingTags, setEditingTags] = useState<string[]>([]);
+
+  // 导出状态
+  const [showExportDialog, setShowExportDialog] = useState(false);
 
   // 查找当前会话
   const session = sessions.find((s) => s.sessionId === sessionId);
@@ -149,6 +155,72 @@ export function SessionDetailPage({ className }: { className?: string }) {
     return session.tags.split(/[,，\s]+/).filter(Boolean);
   }, [session?.tags]);
 
+  /**
+   * 准备导出数据
+   */
+  const exportData = useMemo<ExportData>(() => {
+    if (!conversationTree) {
+      return {
+        sessionId: session?.sessionId || '',
+        title: session?.sessionId || '',
+        projectPath: session?.projectName,
+        createdAt: session?.createdAt,
+        messages: []
+      };
+    }
+
+    // 递归转换树节点为导出格式
+    const convertNodes = (nodes: any[]): any[] => {
+      const result: any[] = [];
+      for (const node of nodes) {
+        const message: any = {
+          role: node.role || 'assistant',
+          content: node.content || ''
+        };
+
+        // 添加时间戳（如果有的话）
+        if (node.timestamp) {
+          message.timestamp = node.timestamp;
+        }
+
+        // 添加代码块（从 metadata.code_changes 提取）
+        if (node.metadata?.code_changes && node.metadata.code_changes.length > 0) {
+          message.codeBlocks = node.metadata.code_changes.map((change: any) => ({
+            language: change.file_path?.split('.').pop() || 'text',
+            code: change.new_text || change.old_text || ''
+          }));
+        }
+
+        // 添加元数据
+        if (node.metadata) {
+          message.metadata = node.metadata;
+        }
+
+        result.push(message);
+
+        // 递归处理子节点
+        if (node.children && node.children.length > 0) {
+          result.push(...convertNodes(node.children));
+        }
+      }
+      return result;
+    };
+
+    return {
+      sessionId: session?.sessionId || '',
+      title: session?.sessionId || '',
+      projectPath: session?.projectName,
+      createdAt: session?.createdAt,
+      messages: convertNodes(conversationTree.roots),
+      stats: tokenStats
+        ? {
+            totalMessages: tokenStats.messageCount,
+            totalTokens: tokenStats.totalTokens
+          }
+        : undefined
+    };
+  }, [conversationTree, session, tokenStats]);
+
   // 会话不存在
   if (!session) {
     return (
@@ -180,12 +252,22 @@ export function SessionDetailPage({ className }: { className?: string }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary shrink-0" />
-            <h1 className="text-xl font-bold truncate">会话详情</h1>
+            <h1 className="text-xl font-bold truncate text-foreground">会话详情</h1>
           </div>
           <p className="text-sm text-muted-foreground truncate mt-0.5">
             {session.projectName} · {session.sessionId.slice(0, 8)}...
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowExportDialog(true)}
+          className="shrink-0"
+        >
+          <Download className="h-4 w-4 mr-2" />
+          导出
+        </Button>
+        <ThemeToggle />
       </div>
 
       {/* 评分和标签区域 */}
@@ -289,6 +371,16 @@ export function SessionDetailPage({ className }: { className?: string }) {
           className="h-full"
         />
       </div>
+
+      {/* 导出对话框 */}
+      <ExportDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        data={exportData}
+        onExportComplete={(filename) => {
+          console.log('导出完成:', filename);
+        }}
+      />
     </div>
   );
 }

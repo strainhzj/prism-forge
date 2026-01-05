@@ -9,6 +9,7 @@ import { ChevronDown, ChevronRight, User, Bot, Wrench, FileText } from 'lucide-r
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CodeBlockRenderer } from '@/components/CodeBlockRenderer';
 import type { MessageNode as MessageType } from '@/types/message';
 
 export interface MessageNodeProps {
@@ -153,8 +154,14 @@ export function MessageNode({
           </div>
 
           {messageContent && (
-            <div className="text-sm whitespace-pre-wrap break-words font-mono bg-background/50 rounded p-2">
-              {messageContent}
+            <div className="bg-background/50 rounded p-2">
+              <CodeBlockRenderer
+                content={messageContent}
+                theme="vs-dark"
+                maxHeight={400}
+                showCopyButton={true}
+                allowFullscreen={true}
+              />
             </div>
           )}
 

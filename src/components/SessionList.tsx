@@ -6,11 +6,12 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter } from 'lucide-react';
+import { Search, Filter, Archive } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SessionCard } from '@/components/SessionCard';
 import { Loading } from '@/components/ui/loading';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -77,6 +78,9 @@ export function SessionList({
 
   // 过滤条件状态（简化版本，只支持搜索）
   const [searchQuery, setSearchQueryState] = useState('');
+
+  // 归档标签页状态
+  const [archiveTab, setArchiveTab] = useState<'all' | 'archived'>('all');
 
   // 处理搜索输入
   const handleSearchChange = useCallback(
@@ -150,13 +154,21 @@ export function SessionList({
     };
   }, [sessions]);
 
+  // 根据标签页过滤会话
+  const filteredSessions = useMemo(() => {
+    if (archiveTab === 'archived') {
+      return sessions.filter((s) => s.isArchived);
+    }
+    return sessions.filter((s) => !s.isArchived);
+  }, [sessions, archiveTab]);
+
   return (
-    <div className={cn('flex flex-col h-full', className)}>
+    <div className={cn('flex flex-col h-full bg-background', className)}>
       {/* 头部：搜索和过滤 */}
-      <div className="flex flex-col gap-3 p-4 border-b">
+      <div className="flex flex-col gap-3 p-4 border-b bg-card">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold">会话列表</h2>
+            <h2 className="text-lg font-semibold text-foreground">会话列表</h2>
             {/* 实时刷新指示器 */}
             <InlineRefreshIndicator
               isRefreshing={loading || isMonitoringRefresh}
@@ -225,47 +237,81 @@ export function SessionList({
         </div>
       )}
 
-      {/* 加载状态 */}
-      {loading && (
-        <div className="flex-1 flex items-center justify-center">
-          <Loading text="加载会话列表..." />
+      {/* 标签页 */}
+      <Tabs className="flex-1 flex flex-col">
+        <div className="px-4 pt-2">
+          <TabsList className="w-full justify-start">
+            <TabsTrigger
+              value="all"
+              data-state={archiveTab === 'all' ? 'active' : 'inactive'}
+              onClick={() => setArchiveTab('all')}
+              className="flex items-center gap-2"
+            >
+              全部会话
+              <Badge variant="secondary" className="text-xs">
+                {sessions.filter((s) => !s.isArchived).length}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger
+              value="archived"
+              data-state={archiveTab === 'archived' ? 'active' : 'inactive'}
+              onClick={() => setArchiveTab('archived')}
+              className="flex items-center gap-2"
+            >
+              <Archive className="h-4 w-4" />
+              已归档
+              <Badge variant="secondary" className="text-xs">
+                {stats.archived}
+              </Badge>
+            </TabsTrigger>
+          </TabsList>
         </div>
-      )}
 
-      {/* 会话列表 */}
-      {!loading && (
-        <div className="flex-1 overflow-y-auto p-4">
-          {sessions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <p className="text-lg text-muted-foreground">暂无会话</p>
-              <p className="text-sm text-muted-foreground mt-2">
-                点击刷新按钮扫描 Claude 会话
-              </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setActiveSessions()}
-                className="mt-4"
-              >
-                刷新
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {sessions.map((session) => (
-                <SessionCard
-                  key={session.sessionId}
-                  session={session}
-                  onClick={handleSessionClick}
-                  onRatingChange={handleRatingChange}
-                  onArchive={handleArchive}
-                  onUnarchive={handleUnarchive}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+        {/* 加载状态 */}
+        {loading && (
+          <div className="flex-1 flex items-center justify-center">
+            <Loading text="加载会话列表..." />
+          </div>
+        )}
+
+        {/* 会话列表 */}
+        {!loading && (
+          <div className="flex-1 overflow-y-auto p-4">
+            {filteredSessions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <Archive className="h-12 w-12 mx-auto mb-4 opacity-50 text-muted-foreground" />
+                <p className="text-lg text-muted-foreground">
+                  {archiveTab === 'archived' ? '暂无已归档的会话' : '暂无会话'}
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  {archiveTab === 'all' && '点击刷新按钮扫描 Claude 会话'}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveSessions()}
+                  className="mt-4"
+                >
+                  刷新
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredSessions.map((session) => (
+                  <SessionCard
+                    key={session.sessionId}
+                    session={session}
+                    onClick={handleSessionClick}
+                    onRatingChange={handleRatingChange}
+                    onArchive={handleArchive}
+                    onUnarchive={handleUnarchive}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Tabs>
     </div>
   );
 }

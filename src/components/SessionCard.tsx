@@ -4,7 +4,7 @@
  * 显示单个会话的卡片信息
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, memo } from 'react';
 import { Star, Archive, Tag, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
@@ -79,6 +79,8 @@ function formatDateTime(dateString: string): string {
 /**
  * SessionCard 组件
  *
+ * 使用 React.memo 优化：仅当关键 props 变化时重新渲染
+ *
  * @example
  * <SessionCard
  *   session={sessionData}
@@ -86,7 +88,7 @@ function formatDateTime(dateString: string): string {
  *   onRatingChange={(id, rating) => console.log('Rated', id, rating)}
  * />
  */
-export function SessionCard({
+export const SessionCard = memo(function SessionCard({
   session,
   onClick,
   onRatingChange,
@@ -249,4 +251,13 @@ export function SessionCard({
       </CardFooter>
     </Card>
   );
-}
+}, (prevProps, nextProps) => {
+  // 自定义比较函数：仅当关键属性变化时重新渲染
+  return (
+    prevProps.session.sessionId === nextProps.session.sessionId &&
+    prevProps.session.rating === nextProps.session.rating &&
+    prevProps.session.isArchived === nextProps.session.isArchived &&
+    prevProps.session.updatedAt === nextProps.session.updatedAt &&
+    prevProps.className === nextProps.className
+  );
+});
