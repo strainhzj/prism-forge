@@ -1411,3 +1411,229 @@ fn calculate_weighted_score(cosine_similarity: f64, rating: i32) -> f64 {
     let rating_normalized = rating as f64 / 5.0;
     0.7 * cosine_similarity + 0.3 * rating_normalized
 }
+
+// ============================================================================
+// 监控目录数据仓库 (Wave 2: 手动添加监控目录)
+// ============================================================================
+
+/// 监控目录数据仓库
+///
+/// 提供 monitored_directories 表的 CRUD 操作
+pub struct MonitoredDirectoryRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+unsafe impl Send for MonitoredDirectoryRepository {}
+unsafe impl Sync for MonitoredDirectoryRepository {}
+
+impl MonitoredDirectoryRepository {
+    /// 使用共享连接创建仓库实例
+    pub fn with_conn(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
+    }
+
+    /// 从默认数据库路径创建仓库
+    pub fn from_default_db() -> Result<Self> {
+        let conn = crate::database::init::get_connection_shared()?;
+        Ok(Self::with_conn(conn))
+    }
+
+    /// 辅助方法：获取连接锁
+    fn with_conn_inner<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&rusqlite::Connection) -> Result<R>,
+    {
+        let conn = self.conn.lock().map_err(|e| {
+            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
+        })?;
+        f(&conn)
+    }
+
+    /// 创建新的监控目录
+    ///
+    /// # 参数
+    /// - `directory`: 要创建的监控目录对象
+    ///
+    /// # 返回
+    /// 返回创建后的目录（包含生成的 id）
+    pub fn create_directory(&mut self, mut directory: crate::database::models::MonitoredDirectory) -> Result<crate::database::models::MonitoredDirectory> {
+        // 验证目录
+        directory.validate()?;
+
+        let now = Utc::now().to_rfc3339();
+
+        self.with_conn_inner(|conn| {
+            conn.execute(
+                "INSERT INTO monitored_directories (path, name, is_active, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    directory.path,
+                    directory.name,
+                    if directory.is_active { 1 } else { 0 },
+                    now,
+                    now,
+                ],
+            )?;
+            Ok(())
+        })?;
+
+        let id = self.with_conn_inner(|conn| {
+            Ok(conn.last_insert_rowid())
+        })?;
+
+        directory.id = Some(id);
+        Ok(directory)
+    }
+
+    /// 获取所有监控目录
+    pub fn get_all_directories(&self) -> Result<Vec<crate::database::models::MonitoredDirectory>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, path, name, is_active, created_at, updated_at
+                 FROM monitored_directories
+                 ORDER BY created_at DESC"
+            )?;
+
+            let directories = stmt.query_map([], |row| {
+                Ok(crate::database::models::MonitoredDirectory {
+                    id: Some(row.get(0)?),
+                    path: row.get(1)?,
+                    name: row.get(2)?,
+                    is_active: row.get::<_, i32>(3)? == 1,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                })
+            })?;
+
+            directories.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        })
+    }
+
+    /// 获取所有启用的监控目录
+    pub fn get_active_directories(&self) -> Result<Vec<crate::database::models::MonitoredDirectory>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, path, name, is_active, created_at, updated_at
+                 FROM monitored_directories
+                 WHERE is_active = 1
+                 ORDER BY created_at DESC"
+            )?;
+
+            let directories = stmt.query_map([], |row| {
+                Ok(crate::database::models::MonitoredDirectory {
+                    id: Some(row.get(0)?),
+                    path: row.get(1)?,
+                    name: row.get(2)?,
+                    is_active: row.get::<_, i32>(3)? == 1,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                })
+            })?;
+
+            directories.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        })
+    }
+
+    /// 根据 ID 获取监控目录
+    pub fn get_directory_by_id(&self, id: i64) -> Result<Option<crate::database::models::MonitoredDirectory>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, path, name, is_active, created_at, updated_at
+                 FROM monitored_directories
+                 WHERE id = ?1"
+            )?;
+
+            let directory = stmt.query_row(params![id], |row| {
+                Ok(crate::database::models::MonitoredDirectory {
+                    id: Some(row.get(0)?),
+                    path: row.get(1)?,
+                    name: row.get(2)?,
+                    is_active: row.get::<_, i32>(3)? == 1,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                })
+            });
+
+            match directory {
+                Ok(d) => Ok(Some(d)),
+                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                Err(e) => Err(e.into()),
+            }
+        })
+    }
+
+    /// 删除监控目录
+    ///
+    /// # 参数
+    /// - `id`: 要删除的目录 ID
+    ///
+    /// # 返回
+    /// 返回删除的行数
+    pub fn delete_directory(&self, id: i64) -> Result<usize> {
+        self.with_conn_inner(|conn| {
+            let rows = conn.execute(
+                "DELETE FROM monitored_directories WHERE id = ?1",
+                params![id],
+            )?;
+            Ok(rows)
+        })
+    }
+
+    /// 更新监控目录
+    ///
+    /// # 参数
+    /// - `directory`: 要更新的目录对象（必须包含 id）
+    ///
+    /// # 返回
+    /// 返回更新的行数
+    pub fn update_directory(&mut self, directory: &crate::database::models::MonitoredDirectory) -> Result<usize> {
+        let id = directory.id.ok_or_else(|| anyhow::anyhow!("目录必须有 id"))?;
+        let now = Utc::now().to_rfc3339();
+
+        self.with_conn_inner(|conn| {
+            let rows = conn.execute(
+                "UPDATE monitored_directories
+                 SET path = ?1, name = ?2, is_active = ?3, updated_at = ?4
+                 WHERE id = ?5",
+                params![
+                    directory.path,
+                    directory.name,
+                    if directory.is_active { 1 } else { 0 },
+                    now,
+                    id,
+                ],
+            )?;
+            Ok(rows)
+        })
+    }
+
+    /// 切换目录的启用状态
+    ///
+    /// # 参数
+    /// - `id`: 目录 ID
+    ///
+    /// # 返回
+    /// 返回更新后的行数
+    pub fn toggle_directory_active(&mut self, id: i64) -> Result<bool> {
+        let now = Utc::now().to_rfc3339();
+
+        self.with_conn_inner(|conn| {
+            // 获取当前状态
+            let current_is_active: i32 = conn.query_row(
+                "SELECT is_active FROM monitored_directories WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )?;
+
+            // 切换状态
+            let new_is_active = if current_is_active == 1 { 0 } else { 1 };
+
+            conn.execute(
+                "UPDATE monitored_directories SET is_active = ?1, updated_at = ?2 WHERE id = ?3",
+                params![new_is_active, now, id],
+            )?;
+
+            Ok(new_is_active == 1)
+        })
+    }
+}

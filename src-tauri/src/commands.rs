@@ -720,19 +720,44 @@ pub struct SessionMeta {
 
 /// 扫描 Claude Code 会话文件
 ///
-/// 扫描 ~/.claude/projects/ 目录，查找所有会话文件并提取元数据
+/// 扫描用户配置的监控目录列表，查找所有会话文件并提取元数据
 #[tauri::command]
 pub async fn scan_sessions(
     _manager: State<'_, LLMClientManager>,
 ) -> std::result::Result<Vec<SessionMeta>, CommandError> {
     use crate::monitor::scanner;
-    use crate::database::repository::SessionRepository;
+    use crate::database::repository::{SessionRepository, MonitoredDirectoryRepository};
 
-    // 扫描会话文件
-    let sessions_metadata = scanner::scan_session_files()
+    // 获取用户配置的监控目录列表
+    let dir_repo = MonitoredDirectoryRepository::from_default_db()
         .map_err(|e| CommandError {
-            message: format!("扫描会话失败: {}", e),
+            message: format!("创建目录仓库失败: {}", e),
         })?;
+
+    let directories = dir_repo.get_active_directories()
+        .map_err(|e| CommandError {
+            message: format!("获取监控目录失败: {}", e),
+        })?;
+
+    // 如果没有配置任何监控目录，返回空列表
+    if directories.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // 扫描所有配置的监控目录
+    let mut all_sessions = Vec::new();
+    for directory in directories {
+        let path = std::path::PathBuf::from(&directory.path);
+        match scanner::scan_directory(&path) {
+            Ok(mut sessions) => {
+                all_sessions.append(&mut sessions);
+            }
+            Err(e) => {
+                eprintln!("警告: 扫描目录 {} 失败: {}", directory.path, e);
+                // 继续扫描其他目录
+            }
+        }
+    }
 
     // 获取数据库连接并创建 SessionRepository
     let conn = crate::database::init::get_connection_shared()
@@ -742,7 +767,7 @@ pub async fn scan_sessions(
     let session_repo = SessionRepository::with_conn(conn);
 
     // 将扫描结果存入数据库
-    for metadata in &sessions_metadata {
+    for metadata in &all_sessions {
         let file_path = metadata.file_path.to_string_lossy().to_string();
         let _ = session_repo.upsert_session(
             &metadata.session_id,
@@ -754,7 +779,7 @@ pub async fn scan_sessions(
     }
 
     // 转换为返回格式
-    let result: Vec<SessionMeta> = sessions_metadata
+    let result: Vec<SessionMeta> = all_sessions
         .into_iter()
         .map(|m| SessionMeta {
             session_id: m.session_id,
@@ -1955,6 +1980,117 @@ pub fn update_meta_template(
     repo.update_meta_template(&category, &content)
         .map_err(|e| CommandError {
             message: format!("更新模板失败: {}", e),
+        })?;
+
+    Ok(())
+}
+
+// ============================================================================
+// 监控目录管理命令 (Wave 2: 手动添加监控目录)
+// ============================================================================
+
+/// 获取所有监控目录
+///
+/// 返回用户配置的所有监控目录列表
+#[tauri::command]
+pub fn get_monitored_directories(
+) -> Result<Vec<crate::database::models::MonitoredDirectory>, CommandError> {
+    use crate::database::repository::MonitoredDirectoryRepository;
+
+    let repo = MonitoredDirectoryRepository::from_default_db()
+        .map_err(|e| CommandError {
+            message: format!("创建目录仓库失败: {}", e),
+        })?;
+
+    repo.get_all_directories()
+        .map_err(|e| CommandError {
+            message: format!("获取监控目录失败: {}", e),
+        })
+}
+
+/// 添加监控目录
+///
+/// 添加新的监控目录到配置列表
+#[tauri::command]
+pub fn add_monitored_directory(
+    path: String,
+    name: String,
+) -> Result<crate::database::models::MonitoredDirectory, CommandError> {
+    use crate::database::repository::MonitoredDirectoryRepository;
+
+    let mut repo = MonitoredDirectoryRepository::from_default_db()
+        .map_err(|e| CommandError {
+            message: format!("创建目录仓库失败: {}", e),
+        })?;
+
+    let directory = crate::database::models::MonitoredDirectory::new(path, name);
+    repo.create_directory(directory)
+        .map_err(|e| CommandError {
+            message: format!("添加监控目录失败: {}", e),
+        })
+}
+
+/// 删除监控目录
+///
+/// 从配置列表中删除指定的监控目录
+#[tauri::command]
+pub fn remove_monitored_directory(
+    id: i64,
+) -> Result<(), CommandError> {
+    use crate::database::repository::MonitoredDirectoryRepository;
+
+    let repo = MonitoredDirectoryRepository::from_default_db()
+        .map_err(|e| CommandError {
+            message: format!("创建目录仓库失败: {}", e),
+        })?;
+
+    repo.delete_directory(id)
+        .map_err(|e| CommandError {
+            message: format!("删除监控目录失败: {}", e),
+        })?;
+
+    Ok(())
+}
+
+/// 切换监控目录的启用状态
+///
+/// 启用或禁用指定的监控目录
+#[tauri::command]
+pub fn toggle_monitored_directory(
+    id: i64,
+) -> Result<bool, CommandError> {
+    use crate::database::repository::MonitoredDirectoryRepository;
+
+    let mut repo = MonitoredDirectoryRepository::from_default_db()
+        .map_err(|e| CommandError {
+            message: format!("创建目录仓库失败: {}", e),
+        })?;
+
+    let is_active = repo.toggle_directory_active(id)
+        .map_err(|e| CommandError {
+            message: format!("切换目录状态失败: {}", e),
+        })?;
+
+    Ok(is_active)
+}
+
+/// 更新监控目录
+///
+/// 更新监控目录的路径和名称
+#[tauri::command]
+pub fn update_monitored_directory(
+    directory: crate::database::models::MonitoredDirectory,
+) -> Result<(), CommandError> {
+    use crate::database::repository::MonitoredDirectoryRepository;
+
+    let mut repo = MonitoredDirectoryRepository::from_default_db()
+        .map_err(|e| CommandError {
+            message: format!("创建目录仓库失败: {}", e),
+        })?;
+
+    repo.update_directory(&directory)
+        .map_err(|e| CommandError {
+            message: format!("更新监控目录失败: {}", e),
         })?;
 
     Ok(())

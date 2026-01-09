@@ -557,6 +557,74 @@ pub struct VectorSearchResult {
     pub summary: String,
 }
 
+// ============================================================================
+// 监控目录模型 (Wave 2: 手动添加监控目录)
+// ============================================================================
+
+/// 监控目录模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitoredDirectory {
+    /// 主键 ID
+    pub id: Option<i64>,
+
+    /// 目录完整路径
+    pub path: String,
+
+    /// 用户自定义名称
+    pub name: String,
+
+    /// 是否启用监控
+    #[serde(rename = "is_active")]
+    pub is_active: bool,
+
+    /// 创建时间
+    #[serde(rename = "created_at")]
+    pub created_at: String,
+
+    /// 最后更新时间
+    #[serde(rename = "updated_at")]
+    pub updated_at: String,
+}
+
+impl MonitoredDirectory {
+    /// 创建新的监控目录
+    pub fn new(path: String, name: String) -> Self {
+        let now = chrono::Utc::now().to_rfc3339();
+        Self {
+            id: None,
+            path,
+            name,
+            is_active: true,
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+
+    /// 验证路径是否有效
+    pub fn validate(&self) -> Result<()> {
+        if self.path.is_empty() {
+            return Err(anyhow::anyhow!("目录路径不能为空"));
+        }
+
+        if self.name.is_empty() {
+            return Err(anyhow::anyhow!("目录名称不能为空"));
+        }
+
+        // 检查路径是否存在
+        let path = std::path::Path::new(&self.path);
+        if !path.exists() {
+            return Err(anyhow::anyhow!("目录不存在: {}", self.path));
+        }
+
+        if !path.is_dir() {
+            return Err(anyhow::anyhow!("路径不是目录: {}", self.path));
+        }
+
+        Ok(())
+    }
+}
+
 /// 时间戳验证函数
 ///
 /// 验证时间戳字符串是否为有效的 RFC3339 格式
