@@ -27,6 +27,21 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+/// 获取最新的会话文件路径
+#[tauri::command]
+fn get_latest_session_path() -> Result<String, String> {
+    optimizer::find_latest_session_file()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "未找到会话文件".to_string())
+}
+
+/// 解析会话文件（用于前端预览展示）
+#[tauri::command]
+fn parse_session_file(file_path: String) -> Result<Vec<optimizer::ParsedEvent>, String> {
+    optimizer::PromptOptimizer::parse_session_file(&file_path)
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // 执行启动验证
@@ -73,6 +88,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             greet,
+            get_latest_session_path,
+            parse_session_file,
             cmd_get_providers,
             cmd_save_provider,
             cmd_delete_provider,

@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "PrismForge - Claude Code Session Monitor",
         "width": 1200,
         "height": 800,
@@ -26,6 +27,7 @@
     },
     "withGlobalTauri": true
   },
+  "plugins": {},
   "bundle": {
     "active": true,
     "targets": "all",

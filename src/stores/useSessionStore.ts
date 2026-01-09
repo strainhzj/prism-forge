@@ -48,6 +48,18 @@ function parseError(error: unknown): string {
 // ==================== 类型定义 ====================
 
 /**
+ * 监控目录接口（与 Rust 后端 MonitoredDirectory 模型对应）
+ */
+export interface MonitoredDirectory {
+  id?: number;
+  path: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
  * 会话状态接口（与 Rust 后端 Session 模型对应）
  */
 export interface Session {
@@ -107,6 +119,7 @@ interface SessionState {
   // 数据状态
   sessions: Session[];
   projects: ProjectGroup[];
+  monitoredDirectories: MonitoredDirectory[];
   loading: boolean;
   error: string | null;
   filters: SessionFilters;
@@ -124,6 +137,13 @@ interface SessionState {
   updateFilters: (filters: Partial<SessionFilters>) => void;
   resetFilters: () => void;
   clearError: () => void;
+
+  // 监控目录管理操作
+  fetchMonitoredDirectories: () => Promise<void>;
+  addMonitoredDirectory: (path: string, name: string) => Promise<void>;
+  removeMonitoredDirectory: (id: number) => Promise<void>;
+  toggleMonitoredDirectory: (id: number) => Promise<void>;
+  updateMonitoredDirectory: (directory: MonitoredDirectory) => Promise<void>;
 
   // 计算属性
   getFilteredSessions: () => Session[];
@@ -239,6 +259,7 @@ export const useSessionStore = create<SessionState>()(
     // 初始状态
     sessions: [],
     projects: [],
+    monitoredDirectories: [],
     loading: false,
     error: null,
     customDirectory: null,
@@ -600,6 +621,141 @@ export const useSessionStore = create<SessionState>()(
       const { sessions } = get();
       return groupSessionsByProject(sessions);
     },
+
+    // ==================== 监控目录管理操作 ====================
+
+    // 获取所有监控目录
+    fetchMonitoredDirectories: async () => {
+      debugLog('fetchMonitoredDirectories', 'start');
+      set((state) => {
+        state.error = null;
+      });
+
+      try {
+        const directories = await invoke<MonitoredDirectory[]>('get_monitored_directories');
+        debugLog('fetchMonitoredDirectories', 'success', directories.length);
+
+        set((state) => {
+          state.monitoredDirectories = directories;
+        });
+      } catch (error) {
+        debugLog('fetchMonitoredDirectories', 'error', error);
+        set((state) => {
+          state.error = `获取监控目录失败: ${parseError(error)}`;
+        });
+        throw error;
+      }
+    },
+
+    // 添加监控目录
+    addMonitoredDirectory: async (path: string, name: string) => {
+      debugLog('addMonitoredDirectory', 'start', { path, name });
+      set((state) => {
+        state.loading = true;
+        state.error = null;
+      });
+
+      try {
+        const newDirectory = await invoke<MonitoredDirectory>('add_monitored_directory', {
+          path,
+          name,
+        });
+        debugLog('addMonitoredDirectory', 'success');
+
+        set((state) => {
+          state.monitoredDirectories.push(newDirectory);
+          state.loading = false;
+        });
+      } catch (error) {
+        debugLog('addMonitoredDirectory', 'error', error);
+        set((state) => {
+          state.error = `添加监控目录失败: ${parseError(error)}`;
+          state.loading = false;
+        });
+        throw error;
+      }
+    },
+
+    // 删除监控目录
+    removeMonitoredDirectory: async (id: number) => {
+      debugLog('removeMonitoredDirectory', 'start', id);
+      set((state) => {
+        state.loading = true;
+        state.error = null;
+      });
+
+      try {
+        await invoke('remove_monitored_directory', { id });
+        debugLog('removeMonitoredDirectory', 'success');
+
+        set((state) => {
+          state.monitoredDirectories = state.monitoredDirectories.filter((d) => d.id !== id);
+          state.loading = false;
+        });
+      } catch (error) {
+        debugLog('removeMonitoredDirectory', 'error', error);
+        set((state) => {
+          state.error = `删除监控目录失败: ${parseError(error)}`;
+          state.loading = false;
+        });
+        throw error;
+      }
+    },
+
+    // 切换监控目录的启用状态
+    toggleMonitoredDirectory: async (id: number) => {
+      debugLog('toggleMonitoredDirectory', 'start', id);
+      set((state) => {
+        state.error = null;
+      });
+
+      try {
+        const isActive = await invoke<boolean>('toggle_monitored_directory', { id });
+        debugLog('toggleMonitoredDirectory', 'success', isActive);
+
+        set((state) => {
+          const directory = state.monitoredDirectories.find((d) => d.id === id);
+          if (directory) {
+            directory.is_active = isActive;
+          }
+        });
+      } catch (error) {
+        debugLog('toggleMonitoredDirectory', 'error', error);
+        set((state) => {
+          state.error = `切换目录状态失败: ${parseError(error)}`;
+        });
+        throw error;
+      }
+    },
+
+    // 更新监控目录
+    updateMonitoredDirectory: async (directory: MonitoredDirectory) => {
+      debugLog('updateMonitoredDirectory', 'start', directory.id);
+      set((state) => {
+        state.loading = true;
+        state.error = null;
+      });
+
+      try {
+        await invoke('update_monitored_directory', { directory });
+        debugLog('updateMonitoredDirectory', 'success');
+
+        set((state) => {
+          const index = state.monitoredDirectories.findIndex((d) => d.id === directory.id);
+          if (index !== -1) {
+            state.monitoredDirectories[index] = directory;
+          }
+          state.loading = false;
+        });
+      } catch (error) {
+        debugLog('updateMonitoredDirectory', 'error', error);
+        set((state) => {
+          state.error = `更新监控目录失败: ${parseError(error)}`;
+          state.loading = false;
+        });
+        throw error;
+      }
+    },
   }))
 );
 
@@ -655,6 +811,27 @@ export const useSessionActions = () => {
       updateFilters: store.updateFilters,
       resetFilters: store.resetFilters,
       clearError: store.clearError,
+    };
+  }, []);
+};
+
+/**
+ * 获取监控目录列表
+ */
+export const useMonitoredDirectories = () => useSessionStore((state) => state.monitoredDirectories);
+
+/**
+ * 获取监控目录操作（稳定引用）
+ */
+export const useMonitoredDirectoryActions = () => {
+  return useMemo(() => {
+    const store = useSessionStore.getState();
+    return {
+      fetchMonitoredDirectories: store.fetchMonitoredDirectories,
+      addMonitoredDirectory: store.addMonitoredDirectory,
+      removeMonitoredDirectory: store.removeMonitoredDirectory,
+      toggleMonitoredDirectory: store.toggleMonitoredDirectory,
+      updateMonitoredDirectory: store.updateMonitoredDirectory,
     };
   }, []);
 };

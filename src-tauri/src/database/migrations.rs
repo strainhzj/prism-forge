@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 9;
+const CURRENT_DB_VERSION: i32 = 10;
 
 /// 初始化数据库
 ///
@@ -78,6 +78,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             7 => migrate_v7(conn)?,
             8 => migrate_v8(conn)?,
             9 => migrate_v9(conn)?,
+            10 => migrate_v10(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -541,6 +542,52 @@ fn migrate_v9_impl(conn: &mut Connection) -> Result<()> {
     // 插入默认配置（如果不存在）
     conn.execute(
         "INSERT OR IGNORE INTO settings (id, active_threshold) VALUES (1, 86400);",
+        [],
+    )?;
+
+    Ok(())
+}
+
+/// 迁移到版本 10: 创建 monitored_directories 表
+///
+/// # 功能
+/// - 存储用户手动添加的监控目录
+/// - 支持添加、删除和查询监控目录
+#[cfg(test)]
+pub fn migrate_v10(conn: &mut Connection) -> Result<()> {
+    migrate_v10_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v10(conn: &mut Connection) -> Result<()> {
+    migrate_v10_impl(conn)
+}
+
+fn migrate_v10_impl(conn: &mut Connection) -> Result<()> {
+    // 创建 monitored_directories 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS monitored_directories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            path TEXT NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );",
+        [],
+    )?;
+
+    // 索引: 按路径快速查找
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_monitored_directories_path
+            ON monitored_directories(path);",
+        [],
+    )?;
+
+    // 索引: 查询启用的目录
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_monitored_directories_is_active
+            ON monitored_directories(is_active);",
         [],
     )?;
 
