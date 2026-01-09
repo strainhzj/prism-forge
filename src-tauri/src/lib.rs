@@ -10,6 +10,12 @@ mod parser;
 pub mod embedding;
 pub use embedding::EmbeddingGenerator;
 pub mod optimizer;
+pub mod command_registry;
+pub mod startup;
+pub mod command_wrapper;
+pub mod logging;
+
+// 导入 Tauri 插件
 
 use llm::LLMClientManager;
 use database::migrations;
@@ -23,6 +29,29 @@ fn greet(name: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 执行启动验证
+    eprintln!("[INFO] Starting application startup validation...");
+    let validation_result = startup::perform_startup_validation();
+    
+    if !validation_result.success {
+        eprintln!("[ERROR] Startup validation failed!");
+        for error in &validation_result.errors {
+            eprintln!("[ERROR]   {}", error);
+        }
+        // Continue with startup but log warnings
+        // In production, you might want to show a dialog or exit
+    } else {
+        eprintln!(
+            "[INFO] Startup validation successful: {} commands registered",
+            validation_result.registered_commands.len()
+        );
+    }
+
+    // Log any warnings
+    for warning in &validation_result.warnings {
+        eprintln!("[WARN]   {}", warning);
+    }
+
     // 初始化数据库
     migrations::get_db_path()
         .and_then(|_| {
@@ -35,8 +64,13 @@ pub fn run() {
     let llm_manager = LLMClientManager::from_default_db()
         .expect("创建 LLM 客户端管理器失败");
 
+    // 创建启动管理器用于运行时诊断
+    let startup_manager = startup::create_startup_manager();
+
     tauri::Builder::default()
         .manage(llm_manager)
+        .manage(startup_manager)
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             cmd_get_providers,
@@ -64,6 +98,12 @@ pub fn run() {
             optimize_prompt,
             get_meta_template,
             update_meta_template,
+            // 监控目录管理命令
+            get_monitored_directories,
+            add_monitored_directory,
+            remove_monitored_directory,
+            toggle_monitored_directory,
+            update_monitored_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
