@@ -6,6 +6,81 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PrismForge 是一个基于 Tauri 2 + React 18 的桌面应用程序，核心功能是 Claude 会话监控和 LLM 提示词优化。应用支持多厂商 LLM API（OpenAI、Anthropic、Ollama、xAI），并提供安全的 API Key 管理和统一的调用接口。
 
+## 工作约束
+
+ **在使用 Claude Code 开发本项目时，必须遵守以下约束：**
+
+### 1. 交互模式（必读）
+
+🔴 **开始任务前，必须先提出实现假设并获得确认**
+
+- **步骤 1**：分析需求，提出你的实现假设
+  - 使用的框架和类库
+  - 架构设计方案
+  - 涉及的关键文件和模块
+- **步骤 2**：检查假设之间的矛盾关系
+  - 技术栈兼容性
+  - 架构设计一致性
+  - 与现有代码的冲突
+- **步骤 3**：等待用户确认后再开始编码
+  - 不要假设用户会接受你的方案
+  - 重大变更必须获得明确批准
+
+**示例：**
+```
+❌ 错误：直接开始编码
+✅ 正确："我计划使用 Zustand 创建新的 store 来管理会话状态，
+       会修改 src/stores/useSessionStore.ts，这样设计符合吗？"
+```
+
+### 2. 代码复用优先
+
+✅ **优先复用现有代码和类，仅在必要时创建新的**
+
+- **检查清单**：
+  1. 搜索项目中是否已有相似功能
+  2. 检查是否可以扩展现有组件/函数
+  3. 评估复用 vs 新增的成本
+- **创建新代码的条件**：
+  - 现有代码无法满足需求
+  - 扩展现有代码会导致复杂度显著增加
+  - 新代码有明确的复用价值
+
+**示例：**
+```
+✅ 优先：使用现有的 useSettingsStore 状态管理模式
+✅ 优先：复用 ProviderForm 组件的表单验证逻辑
+❌ 避免：创建功能重复的工具函数
+```
+
+### 3. 问题澄清机制
+
+❓ **遇到不清楚的细节时，主动提问获取补充信息**
+
+- **必须提问的场景**：
+  - 需求描述模糊或存在歧义
+  - 多种实现方案，需要用户决策
+  - 涉及架构变更或影响现有功能
+  - 不确定业务逻辑或数据流向
+- **提问方式**：
+  - 描述当前理解
+  - 列出可选方案及优劣
+  - 推荐方案并说明理由
+  - 等待用户决策
+
+**示例：**
+```
+❌ 错误：自行猜测需求并实现
+✅ 正确："你希望提供商列表支持搜索功能吗？
+       我建议在前端实现过滤，无需后端修改，性能也更好。
+       是否需要我实现这个方案？"
+```
+
+**总结**：
+- 🤔 **思考** → 📋 **提出假设** → ✅ **等待确认** → 🔨 **开始编码**
+- 🔍 **搜索** → ♻️ **复用优先** → 🆕 **必要时创建**
+- ❓ **发现疑问** → 💬 **主动提问** → 📊 **提供选项** → 👍 **等待决策**
+
 ## 技术栈
 
 **后端 (Rust + Tauri 2):**
@@ -58,14 +133,20 @@ cd src-tauri
 # 运行测试
 cargo test
 
-# 检查代码（不构建）
+# 检查代码（不构建，快速验证编译）
 cargo check
 
 # 格式化代码
 cargo fmt
 
-# Lint 检查
+# Lint 检查（捕获潜在问题）
 cargo clippy
+
+# 仅编译单个包（加速开发）
+cargo build -p prism-forge
+
+# 运行特定测试
+cargo test test_name
 ```
 
 ## 项目架构
@@ -97,13 +178,6 @@ src-tauri/src/
 └── optimizer/           # 提示词优化业务逻辑
     └── mod.rs           # 会话分析和提示词生成
 ```
-
-**关键设计决策：**
-
-1. **API Key 安全存储**：使用 `keyring` crate 将密钥存储在操作系统凭据管理器中，数据库仅存储引用（`api_key_ref: "provider_{id}"`）
-2. **活跃提供商单例**：数据库使用触发器确保同一时间只有一个 `is_active = true` 的提供商
-3. **错误处理链**：`anyhow::Error` → `CommandError`，统一序列化为 `{ message: string }` 返回前端
-4. **异步支持**：所有 LLM 调用都是异步的（`async fn`），Tauri 命令使用 `async fn` 自动处理
 
 ### React 前端结构
 
@@ -144,6 +218,14 @@ src/
          ↓
    返回结果 → 前端更新状态
 ```
+
+**核心设计原则：**
+
+1. **适配器模式**：`LLMService` trait 抽象多厂商 API 接口（src-tauri/src/llm/interface.rs）
+2. **工厂模式**：`LLMClientManager::create_client_from_provider()` 动态创建客户端实例
+3. **仓库模式**：`ApiProviderRepository` 封装所有数据库操作
+4. **单例模式**：`LLMClientManager` 通过 Tauri State 注入，全局唯一
+5. **安全优先**：API Key 存储在 OS 凭据管理器，数据库仅保留引用
 
 ## 关键技术点
 
@@ -201,63 +283,153 @@ pub trait LLMService {
 - **前端**：`const DEBUG = import.meta.env.DEV;` 配合 `debugLog()` 函数
 - **后端**：`#[cfg(debug_assertions)]` 条件编译，仅在开发模式输出日志
 
-## 数据库 Schema
+```typescript
+// 前端调试日志示例（src/stores/useSettingsStore.ts）
+const DEBUG = import.meta.env.DEV;
 
-核心表 `api_providers` 结构：
-
-```sql
-CREATE TABLE api_providers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    provider_type TEXT NOT NULL,  -- 'openai' | 'anthropic' | 'ollama' | 'xai'
-    name TEXT NOT NULL,
-    base_url TEXT NOT NULL,
-    api_key_ref TEXT,             -- keyring 引用: "provider_{id}"
-    model TEXT,
-    config_json TEXT,             -- JSON 扩展配置
-    is_active INTEGER DEFAULT 0,  -- 0 或 1，触发器确保唯一性
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TRIGGER ensure_single_active
-AFTER UPDATE OF is_active ON api_providers
-WHEN NEW.is_active = 1
-BEGIN
-    UPDATE api_providers SET is_active = 0
-    WHERE id != NEW.id AND is_active = 1;
-END;
+function debugLog(action: string, ...args: unknown[]) {
+  if (DEBUG) {
+    console.log(`[SettingsStore] ${action}`, ...args);
+  }
+}
 ```
 
-数据库文件位于：
-- **Windows**: `%APPDATA%\prism-forge\prism-forge.db`
-- **macOS**: `~/Library/Application Support/prism-forge/prism-forge.db`
-- **Linux**: `~/.config/prism-forge/prism-forge.db`
+```rust
+// 后端调试模式示例
+#[cfg(debug_assertions)]
+eprintln!("调试信息: {}", data);
+```
 
-## 常见开发任务
+## 潜在风险和注意事项
 
-### 添加新的 LLM 提供商
+### 安全风险
 
-1. **Rust 后端**：
-   - `database/models.rs`: 添加 `ApiProviderType::XYZ` 变体
-   - `llm/providers/xyz.rs`: 实现 `LLMService` trait
-   - `llm/manager.rs`: 在 `create_client()` 方法添加匹配分支
-   - `commands.rs`: 更新 `SaveProviderRequest` 文档注释
+⚠️ **Keyring 清理风险**（P0 优先级）
+- **问题**：删除提供商时 keyring 清理可能失败（commands.rs:569），导致密钥残留
+- **缓解措施**：
+  - 添加删除验证逻辑，确保 keyring 清理成功
+  - 实现定期审计机制清理孤立密钥
+  - 考虑实现密钥轮换机制
 
-2. **React 前端**：
-   - `stores/useSettingsStore.ts`: 添加 `ApiProviderType.XYZ`
-   - `components/settings/ProviderForm.tsx`: 在表单中添加选项
+⚠️ **Linux 兼容性**（P1 优先级）
+- **问题**：keyring 在某些 Linux 发行版上可能不稳定（依赖 libsecret）
+- **影响**：可能导致 API Key 存储失败
+- **测试**：在主流 Linux 发行版（Ubuntu、Fedora、Arch）上验证
 
-### 修改数据库 Schema
+⚠️ **输入验证不足**（P1 优先级）
+- **问题**：缺少速率限制和全面的输入 sanitization
+- **风险**：可能被滥用或注入恶意内容
+- **建议**：
+  - 实现速率限制（Token Bucket 或 Sliding Window）
+  - 使用 `validator` crate 添加邮箱、URL 验证
+  - 模型名称添加白名单验证
 
-1. 在 `database/migrations.rs` 修改 SQL
-2. 删除本地数据库文件让系统重建，或编写迁移逻辑
-3. 同步更新 `database/models.rs` 中的结构体字段
+### 性能风险
 
-### 调试 Tauri 命令
+⚠️ **Mutex 锁竞争**（P1 优先级）
+- **问题**：数据库使用 `Arc<Mutex<>>`，无连接池，高并发场景性能差
+- **影响位置**：
+  - src-tauri/src/database/repository.rs:13-18
+  - src-tauri/src/llm/manager.rs:16-24
+- **改进建议**：
+  - 使用 `r2d2` 或 `sqlx` 引入连接池
+  - 读多写少场景使用 `RwLock` 替代 `Mutex`
+  - 使用 `tokio::sync::Semaphore` 限制并发数
 
-- **前端**：打开浏览器控制台，`invoke()` 调用失败会打印错误
-- **后端**：在命令中使用 `eprintln!()` 输出到终端（仅在开发模式可见）
-- **Rust 错误**：使用 `?` 操作符传播错误，最终转换为 `CommandError`
+⚠️ **前端缺少缓存和防抖**
+- **问题**：频繁调用 API，无请求缓存
+- **建议**：使用 lodash debounce 或手动实现防抖
+
+### 并发安全风险
+
+🔴 **手动实现 Send/Sync**（P0 优先级）
+- **问题**：多处使用 `unsafe impl Send/Sync`，存在数据竞争风险
+- **影响位置**：
+  - src-tauri/src/commands.rs:23-24
+  - src-tauri/src/llm/manager.rs:16-24
+  - src-tauri/src/database/repository.rs:13-18
+- **修复**：移除手动 `unsafe impl`，让编译器自动推导
+- **示例**：
+  ```rust
+  // ❌ 不安全：手动实现
+  unsafe impl Send for LLMClientManager {}
+  unsafe impl Sync for LLMClientManager {}
+  
+  // ✅ 安全：移除 unsafe，使用 Arc<Mutex<T>> 自动推导
+  pub struct LLMClientManager {
+      repository: Arc<Mutex<ApiProviderRepository>>,
+  }
+  ```
+
+### 数据一致性风险
+
+⚠️ **Keyring 与数据库不一致**
+- **场景**：删除提供商但 keyring 清理失败
+- **影响**：密钥泄漏，存储空间浪费
+- **建议**：添加清理验证和定期审计
+
+⚠️ **活跃提供商不一致**
+- **场景**：数据库触发器失败但代码未检查
+- **影响**：多个活跃提供商导致混乱
+- **建议**：添加应用层验证逻辑
+
+## 关键限制和注意事项
+
+### Tauri 命令注册限制
+
+🔴 **命令必须注册**（新手常见错误）
+- **规则**：所有暴露给前端的命令必须在 `lib.rs` 的 `invoke_handler!` 宏中注册
+- **症状**：未注册的命令前端调用时不会报错，但无响应
+- **检查**：每次添加新命令后，务必检查 `lib.rs` 中的 `invoke_handler!` 宏
+
+```rust
+// lib.rs
+invoke_handler![
+    cmd_get_providers,        // ✅ 已注册
+    cmd_save_provider,        // ✅ 已注册
+    // cmd_new_command,       // ❌ 未注册，前端无法调用
+]
+```
+
+### 错误处理限制
+
+ **引入错误码枚举**
+```rust
+#[derive(Debug, Serialize)]
+pub struct CommandError {
+    pub code: ErrorCode,           // ProviderNotFound | AuthenticationFailed | NetworkError
+    pub message: String,
+    pub details: Option<String>,
+}
+```
+
+### 测试限制
+
+· **引入依赖注入容器（如 `diagonal` crate）**
+
+· **配置测试工具链，添加 CI 自动运行**
+
+### 架构权衡
+
+**引入 `LLMServiceExt` trait 支持扩展功能**
+
+## 数据库文件位置
+
+**开发环境数据库位置：**
+
+```
+Windows: %APPDATA%\prism-forge\prism-forge.db
+         完整路径示例：C:\Users\用户名\AppData\Roaming\prism-forge\prism-forge.db
+
+macOS:   ~/Library/Application Support/prism-forge/prism-forge.db
+
+Linux:   ~/.config/prism-forge/prism-forge.db
+```
+
+**调试技巧：**
+- 使用 SQLite 客户端（如 DB Browser for SQLite）打开数据库文件查看内容
+- 删除数据库文件后重启应用会自动重新创建
+- 修改 Schema 时需要删除旧数据库或编写迁移逻辑
 
 ## 代码风格规范
 
@@ -265,6 +437,57 @@ END;
 - **Rust 命名**：snake_case（函数/变量）、PascalCase（类型/枚举）、SCREAMING_SNAKE_CASE（常量）
 - **TypeScript 命名**：camelCase（变量/函数）、PascalCase（类型/接口/枚举）
 - **文件命名**：Rust 使用 snake_case.rs，TS/TSX 使用 PascalCase.tsx
+
+### 调试模式使用规范
+
+**前端调试（TypeScript）：**
+```typescript
+// 在模块顶部定义调试开关
+const DEBUG = import.meta.env.DEV;
+
+// 创建带模块前缀的调试日志函数
+function debugLog(action: string, ...args: unknown[]) {
+  if (DEBUG) {
+    console.log(`[ModuleName] ${action}`, ...args);
+  }
+}
+
+// 使用示例
+debugLog('fetchProviders', '开始获取提供商列表');
+```
+
+**后端调试（Rust）：**
+```rust
+// 使用条件编译，仅在开发模式输出
+#[cfg(debug_assertions)]
+eprintln!("调试信息: {:?}", data);
+
+// 或者使用日志 crate（推荐用于生产环境）
+use log::debug;
+debug!("调试信息: {:?}", data);
+```
+
+**注意事项：**
+- ⚠️ **生产环境**：前端调试日志会自动关闭（`import.meta.env.DEV` 为 false）
+- ⚠️ **敏感信息**：禁止在日志中输出 API Key、密码等敏感数据
+- ✅ **最佳实践**：使用结构化日志，包含时间戳、模块名、日志级别
+
+### 序列化命名约定
+
+**Rust ↔ 前端数据交换：**
+- Rust 结构体使用 `#[serde(rename_all = "camelCase")]` 确保序列化为驼峰命名
+- 前端发送 camelCase，serde 自动转换为 Rust 的 snake_case
+- 日期时间使用 ISO 8601 格式字符串（`2025-01-09T12:34:56Z`）
+
+```rust
+// Rust 示例
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiProvider {
+    pub api_key_ref: Option<String>,  // 序列化为 "apiKeyRef"
+    pub is_active: bool,               // 序列化为 "isActive"
+}
+```
 
 ## 安全注意事项
 

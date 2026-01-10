@@ -38,13 +38,13 @@ function extractDirectoryName(path: string): string {
 
 export interface ProjectSidebarProps {
   /**
-   * 项目选择回调
+   * 目录选择回调
    */
-  onProjectSelect?: (projectPath: string) => void;
+  onDirectorySelect?: (directoryPath: string, directoryName: string) => void;
   /**
-   * 当前选中的项目路径
+   * 当前选中的目录路径
    */
-  selectedProject?: string;
+  selectedDirectory?: string;
   /**
    * 自定义类名
    */
@@ -56,16 +56,15 @@ export interface ProjectSidebarProps {
  *
  * @example
  * <ProjectSidebar
- *   onProjectSelect={(path) => console.log(path)}
- *   selectedProject="/path/to/project"
+ *   onDirectorySelect={(path, name) => console.log(path, name)}
+ *   selectedDirectory="/path/to/directory"
  * />
  */
 export function ProjectSidebar({
-  onProjectSelect,
-  selectedProject,
+  onDirectorySelect,
+  selectedDirectory,
   className,
 }: ProjectSidebarProps) {
-  const projects = useProjectGroups();
   const monitoredDirectories = useMonitoredDirectories();
   const { setActiveSessions } = useSessionActions();
   const {
@@ -74,9 +73,6 @@ export function ProjectSidebar({
     removeMonitoredDirectory,
     toggleMonitoredDirectory,
   } = useMonitoredDirectoryActions();
-
-  // 折叠状态
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
 
   // 目录管理对话框状态
   const [directoryDialogOpen, setDirectoryDialogOpen] = useState(false);
@@ -109,25 +105,14 @@ export function ProjectSidebar({
     }
   }, []);
 
-  // 切换折叠状态
-  const toggleCollapse = useCallback((projectPath: string) => {
-    setCollapsedProjects((prev) => {
-      const next = new Set(prev);
-      if (next.has(projectPath)) {
-        next.delete(projectPath);
-      } else {
-        next.add(projectPath);
+  // 选择目录
+  const handleDirectoryClick = useCallback(
+    (directory: { path: string; name: string; is_active: boolean }) => {
+      if (directory.is_active) {
+        onDirectorySelect?.(directory.path, directory.name);
       }
-      return next;
-    });
-  }, []);
-
-  // 选择项目
-  const handleProjectSelect = useCallback(
-    (projectPath: string) => {
-      onProjectSelect?.(projectPath);
     },
-    [onProjectSelect]
+    [onDirectorySelect]
   );
 
   // 刷新会话列表
@@ -261,113 +246,62 @@ export function ProjectSidebar({
       </div>
 
       {/* 监控目录列表 */}
-      {monitoredDirectories.length > 0 && (
-        <div className="border-b px-4 py-2 bg-muted/50">
-          <p className="text-xs text-muted-foreground mb-2">监控目录</p>
-          <ul className="space-y-1">
-            {monitoredDirectories.map((dir) => (
-              <li
-                key={dir.id}
-                className={cn(
-                  'flex items-center justify-between px-2 py-1 rounded text-xs',
-                  !dir.is_active && 'opacity-50'
-                )}
-              >
-                <span className="truncate flex-1" title={dir.path}>
-                  {dir.name}
-                </span>
-                <div className="flex items-center gap-1 ml-2">
-                  <button
-                    onClick={() => handleToggleDirectory(dir.id!)}
-                    className={cn(
-                      'p-1 rounded hover:bg-accent',
-                      dir.is_active ? 'text-green-500' : 'text-muted-foreground'
-                    )}
-                    title={dir.is_active ? '禁用' : '启用'}
-                  >
-                    <Power className="h-3 w-3" />
-                  </button>
-                  <button
-                    onClick={() => handleRemoveDirectory(dir.id!)}
-                    className="p-1 rounded hover:bg-accent text-red-500"
-                    title="删除"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* 项目列表 */}
       <div className="flex-1 overflow-y-auto">
-        {projects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-sm text-muted-foreground">
-            <p>暂无项目</p>
-            <p className="text-xs mt-1">
-              {monitoredDirectories.length === 0
-                ? '点击"添加目录"添加监控目录'
-                : '点击刷新扫描会话'}
+        {monitoredDirectories.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-sm text-muted-foreground p-4">
+            <p className="text-foreground font-medium">暂无监控目录</p>
+            <p className="text-xs mt-2 text-center">
+              点击"添加目录"选择要监控的项目目录
             </p>
           </div>
         ) : (
           <ul className="space-y-1 p-2">
-            {projects.map((project) => {
-              const isCollapsed = collapsedProjects.has(project.projectPath);
-              const isSelected = selectedProject === project.projectPath;
+            {monitoredDirectories.map((dir) => {
+              const isSelected = selectedDirectory === dir.path;
 
               return (
-                <li key={project.projectPath}>
-                  {/* 项目标题 */}
+                <li key={dir.id}>
+                  {/* 目录项 */}
                   <button
-                    onClick={() => toggleCollapse(project.projectPath)}
+                    onClick={() => handleDirectoryClick(dir)}
                     className={cn(
-                      'w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors',
+                      'w-full flex items-center gap-2 px-3 py-2.5 rounded-md text-sm transition-colors',
                       'hover:bg-accent hover:text-accent-foreground',
-                      isSelected && 'bg-accent text-accent-foreground'
+                      isSelected && 'bg-accent text-accent-foreground font-medium',
+                      !dir.is_active && 'opacity-50 cursor-not-allowed'
                     )}
+                    title={dir.path}
+                    disabled={!dir.is_active}
                   >
-                    {isCollapsed ? (
-                      <ChevronRight className="h-4 w-4 shrink-0" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 shrink-0" />
-                    )}
                     <Folder className="h-4 w-4 shrink-0 text-blue-500" />
                     <span className="flex-1 text-left truncate text-foreground">
-                      {project.projectName}
+                      {dir.name}
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      {project.sessionCount}
-                    </span>
+                    {!dir.is_active && (
+                      <span className="text-xs text-muted-foreground">已禁用</span>
+                    )}
                   </button>
 
-                  {/* 会话列表 */}
-                  {!isCollapsed && project.sessions.length > 0 && (
-                    <ul className="ml-6 mt-1 space-y-0.5">
-                      {project.sessions.map((session) => (
-                        <li key={session.sessionId}>
-                          <button
-                            onClick={() => handleProjectSelect(project.projectPath)}
-                            className={cn(
-                              'w-full flex items-center gap-2 px-3 py-1.5 rounded-md text-xs transition-colors',
-                              'hover:bg-accent hover:text-accent-foreground',
-                              'truncate text-foreground'
-                            )}
-                            title={session.filePath}
-                          >
-                            <span className="truncate">
-                              {session.sessionId.slice(0, 8)}...
-                            </span>
-                            {session.rating && (
-                              <span className="text-yellow-500">★</span>
-                            )}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  {/* 操作按钮（悬停时显示） */}
+                  <div className="flex items-center gap-1 ml-6 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleToggleDirectory(dir.id!)}
+                      className={cn(
+                        'p-1 rounded hover:bg-accent text-xs',
+                        dir.is_active ? 'text-green-500' : 'text-muted-foreground'
+                      )}
+                      title={dir.is_active ? '禁用' : '启用'}
+                    >
+                      <Power className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => handleRemoveDirectory(dir.id!)}
+                      className="p-1 rounded hover:bg-accent text-red-500 text-xs"
+                      title="删除"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
                 </li>
               );
             })}
