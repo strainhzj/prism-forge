@@ -3081,6 +3081,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "thiserror 2.0.17",
  "tiktoken-rs",
+ "tokio",
 ]
 
 [[package]]
