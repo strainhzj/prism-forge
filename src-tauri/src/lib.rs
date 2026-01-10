@@ -14,6 +14,9 @@ pub mod command_registry;
 pub mod startup;
 pub mod command_wrapper;
 pub mod logging;
+pub mod path_resolver;
+pub mod session_reader;
+pub mod session_type_detector;
 
 // 导入 Tauri 插件
 
@@ -121,6 +124,7 @@ pub fn run() {
             remove_monitored_directory,
             toggle_monitored_directory,
             update_monitored_directory,
+            get_sessions_by_monitored_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

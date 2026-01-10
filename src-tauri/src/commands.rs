@@ -17,6 +17,7 @@ use crate::tokenizer::{TokenCounter, TokenEncodingType};
 use crate::optimizer::compressor::CompressionResult;
 use crate::optimizer::prompt_generator::{EnhancedPromptRequest, EnhancedPrompt};
 use crate::parser::{jsonl::JsonlParser, tree::{MessageTreeBuilder, ConversationTree}, extractor::{ExtractionLevel, ExportFormat, ExtractionEngine}};
+use crate::session_type_detector::SessionFileType;
 
 // ==================== 性能基准测试模块（内联） ====================
 
@@ -2094,4 +2095,109 @@ pub fn update_monitored_directory(
         })?;
 
     Ok(())
+}
+
+/// 会话文件信息（返回给前端）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionFileInfo {
+    /// 会话 ID（文件名）
+    pub session_id: String,
+    /// 完整文件路径
+    pub file_path: String,
+    /// 文件大小（字节）
+    pub file_size: u64,
+    /// 修改时间（RFC3339）
+    pub modified_time: String,
+    /// 会话摘要（从 .jsonl 文件读取）
+    #[serde(rename = "summary")]
+    pub summary: Option<String>,
+    /// 会话文件类型
+    #[serde(rename = "fileType")]
+    pub file_type: SessionFileType,
+}
+
+/// 获取监控目录对应的会话文件列表（异步版本，包含 summary 和类型筛选）
+///
+/// 根据监控目录的路径，查找 ~/.claude/projects/ 下对应的会话文件
+/// 并异步加载每个会话的 summary 信息
+///
+/// # 参数
+/// * `monitored_path` - 监控目录路径
+/// * `include_agent` - 是否包含 Agent 类型的会话（默认只显示 Main 类型）
+#[tauri::command]
+pub async fn get_sessions_by_monitored_directory(
+    monitored_path: String,
+    include_agent: Option<bool>,
+) -> Result<Vec<SessionFileInfo>, CommandError> {
+    use crate::path_resolver::list_session_files;
+    use crate::session_reader::SummaryCache;
+    use std::path::Path;
+
+    // 提供默认值
+    let include_agent = include_agent.unwrap_or(false);
+
+    #[cfg(debug_assertions)]
+    eprintln!("[get_sessions_by_monitored_directory] 监控路径: {}, include_agent: {}", monitored_path, include_agent);
+
+    // 将监控路径转换为项目路径
+    let project_path = Path::new(&monitored_path);
+
+    // 使用路径解析器获取会话文件列表（已按修改时间倒序排序）
+    let session_files = list_session_files(project_path)
+        .map_err(|e| CommandError {
+            message: format!("获取会话文件失败: {}", e),
+        })?;
+
+    #[cfg(debug_assertions)]
+    eprintln!("[get_sessions_by_monitored_directory] 找到 {} 个会话文件", session_files.len());
+
+    // 创建缓存管理器
+    let cache = SummaryCache::new();
+
+    // 并行加载所有会话的 summary
+    use futures::future::join_all;
+    let summary_futures: Vec<_> = session_files
+        .iter()
+        .map(|info| {
+            let cache = &cache;
+            async move {
+                // 尝试从缓存或文件加载 summary
+                cache.get_or_load(&info.full_path).await
+            }
+        })
+        .collect();
+
+    let summaries = join_all(summary_futures).await;
+
+    // 转换为前端格式并应用类型筛选
+    let result: Vec<SessionFileInfo> = session_files
+        .into_iter()
+        .zip(summaries)
+        .filter_map(|(info, summary_result)| {
+            // 应用类型筛选
+            if info.file_type.is_agent() && !include_agent {
+                #[cfg(debug_assertions)]
+                eprintln!("[get_sessions_by_monitored_directory] 过滤掉 Agent 会话: {}", info.file_name);
+                return None;
+            }
+
+            let summary = summary_result
+                .ok()
+                .map(|s| s.summary);
+
+            Some(SessionFileInfo {
+                session_id: info.file_name,
+                file_path: info.full_path.to_string_lossy().to_string(),
+                file_size: info.file_size,
+                modified_time: info.modified_time,
+                summary,
+                file_type: info.file_type,
+            })
+        })
+        .collect();
+
+    #[cfg(debug_assertions)]
+    eprintln!("[get_sessions_by_monitored_directory] 返回 {} 个会话（筛选后）", result.len());
+
+    Ok(result)
 }
