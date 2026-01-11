@@ -13,8 +13,15 @@ import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
 import { ProviderSettings } from '@/components/settings/ProviderSettings';
 import { ProviderForm } from '@/components/settings/ProviderForm';
+import { VectorSettings } from '@/components/settings/VectorSettings';
 import {
   useProviderActions,
   useProviders,
@@ -25,6 +32,7 @@ import {
 } from '@/stores/useSettingsStore';
 
 type ViewMode = 'list' | 'create' | 'edit';
+type SettingsTab = 'providers' | 'vector';
 
 export interface SettingsPageProps {
   /** 自定义类名 */
@@ -50,6 +58,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedProvider, setSelectedProvider] = useState<ProviderResponse | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>('providers');
 
   // 初始化加载
   useEffect(() => {
@@ -110,12 +119,14 @@ export function SettingsPage({ className }: SettingsPageProps) {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-foreground">API 提供商设置</h1>
+          <h1 className="text-xl font-bold text-foreground">设置</h1>
         </div>
-        <Button onClick={handleCreate} className="shrink-0">
-          <Plus className="h-4 w-4 mr-2" />
-          新建提供商
-        </Button>
+        {activeTab === 'providers' && (
+          <Button onClick={handleCreate} className="shrink-0">
+            <Plus className="h-4 w-4 mr-2" />
+            新建提供商
+          </Button>
+        )}
         <ThemeToggle />
       </div>
 
@@ -139,27 +150,43 @@ export function SettingsPage({ className }: SettingsPageProps) {
             </Alert>
           )}
 
-          {/* 提供商列表 */}
-          <ProviderSettings
-            onSelectProvider={handleEdit}
-          />
+          {/* 标签页 */}
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SettingsTab)}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="providers">API 提供商</TabsTrigger>
+              <TabsTrigger value="vector">语义搜索</TabsTrigger>
+            </TabsList>
 
-          {/* 空状态提示 */}
-          {!loading && providers.length === 0 && (
-            <Card className="p-12 text-center">
-              <div className="space-y-4">
-                <div className="text-6xl">⚙️</div>
-                <h3 className="text-lg font-semibold">暂无 API 提供商</h3>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  配置 LLM API 提供商以使用 AI 功能。支持 OpenAI、Anthropic、Ollama、xAI、Google 等多种提供商。
-                </p>
-                <Button onClick={handleCreate}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  添加第一个提供商
-                </Button>
-              </div>
-            </Card>
-          )}
+            {/* API 提供商标签页 */}
+            <TabsContent value="providers" className="space-y-6 mt-6">
+              {/* 提供商列表 */}
+              <ProviderSettings
+                onSelectProvider={handleEdit}
+              />
+
+              {/* 空状态提示 */}
+              {!loading && providers.length === 0 && (
+                <Card className="p-12 text-center">
+                  <div className="space-y-4">
+                    <div className="text-6xl">⚙️</div>
+                    <h3 className="text-lg font-semibold">暂无 API 提供商</h3>
+                    <p className="text-muted-foreground max-w-md mx-auto">
+                      配置 LLM API 提供商以使用 AI 功能。支持 OpenAI、Anthropic、Ollama、xAI、Google 等多种提供商。
+                    </p>
+                    <Button onClick={handleCreate}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      添加第一个提供商
+                    </Button>
+                  </div>
+                </Card>
+              )}
+            </TabsContent>
+
+            {/* 向量搜索标签页 */}
+            <TabsContent value="vector" className="space-y-6 mt-6">
+              <VectorSettings />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
 

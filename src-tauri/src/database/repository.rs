@@ -1637,3 +1637,93 @@ impl MonitoredDirectoryRepository {
         })
     }
 }
+
+/// Settings 数据仓库
+pub struct SettingsRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+unsafe impl Send for SettingsRepository {}
+unsafe impl Sync for SettingsRepository {}
+
+impl SettingsRepository {
+    /// 使用共享连接创建仓库实例
+    pub fn with_conn(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
+    }
+
+    /// 从默认数据库路径创建仓库
+    pub fn from_default_db() -> Result<Self> {
+        let conn = crate::database::init::get_connection_shared()?;
+        Ok(Self::with_conn(conn))
+    }
+
+    /// 创建新的仓库实例（便捷方法）
+    pub fn new() -> Self {
+        Self::from_default_db().unwrap_or_else(|_| {
+            // 如果无法获取默认连接，返回一个带有空连接的实例
+            // 这在调用时会失败，但至少可以编译通过
+            Self {
+                conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+            }
+        })
+    }
+
+    /// 辅助方法：获取连接锁
+    fn with_conn_inner<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&rusqlite::Connection) -> Result<R>,
+    {
+        let conn = self.conn.lock().map_err(|e| {
+            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
+        })?;
+        f(&conn)
+    }
+
+    /// 获取设置
+    pub fn get_settings(&self) -> Result<crate::database::models::Settings> {
+        self.with_conn_inner(|conn| {
+            let settings = conn.query_row(
+                "SELECT id, active_threshold, vector_search_enabled, embedding_provider, embedding_model, embedding_batch_size FROM settings WHERE id = 1",
+                [],
+                |row| {
+                    Ok(crate::database::models::Settings {
+                        id: row.get(0)?,
+                        active_threshold: row.get(1)?,
+                        vector_search_enabled: row.get(2)?,
+                        embedding_provider: row.get(3)?,
+                        embedding_model: row.get(4)?,
+                        embedding_batch_size: row.get(5)?,
+                    })
+                },
+            )?;
+            Ok(settings)
+        })
+    }
+
+    /// 更新设置
+    pub fn update_settings(&self, settings: &crate::database::models::Settings) -> Result<usize> {
+        let now = Utc::now().to_rfc3339();
+
+        self.with_conn_inner(|conn| {
+            conn.execute(
+                "UPDATE settings SET 
+                    active_threshold = ?1,
+                    vector_search_enabled = ?2,
+                    embedding_provider = ?3,
+                    embedding_model = ?4,
+                    embedding_batch_size = ?5,
+                    updated_at = ?6
+                WHERE id = 1",
+                params![
+                    settings.active_threshold,
+                    settings.vector_search_enabled,
+                    settings.embedding_provider,
+                    settings.embedding_model,
+                    settings.embedding_batch_size,
+                    now,
+                ],
+            ).map_err(|e| anyhow::anyhow!("更新设置失败: {}", e))
+        })
+    }
+}

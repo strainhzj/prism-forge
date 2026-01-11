@@ -462,6 +462,71 @@ impl MessageEmbedding {
     }
 }
 
+/// 会话向量嵌入模型
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionEmbedding {
+    /// 主键 ID
+    pub id: Option<i64>,
+
+    /// 关联的会话 ID
+    #[serde(rename = "session_id")]
+    pub session_id: String,
+
+    /// 向量数据 (JSON 序列化的 Vec<f32>)
+    pub embedding: String,
+
+    /// 会话摘要文本 (用于语义搜索)
+    pub summary: String,
+
+    /// 向量维度
+    pub dimension: i32,
+
+    /// 创建时间
+    #[serde(rename = "created_at")]
+    pub created_at: String,
+
+    /// 更新时间
+    #[serde(rename = "updated_at")]
+    pub updated_at: String,
+}
+
+impl SessionEmbedding {
+    /// 创建新的会话向量
+    pub fn new(
+        session_id: String,
+        embedding: Vec<f32>,
+        summary: String,
+    ) -> Self {
+        let now = chrono::Utc::now().to_rfc3339();
+        let dimension = embedding.len() as i32;
+
+        Self {
+            id: None,
+            session_id,
+            embedding: serde_json::to_string(&embedding).unwrap_or_else(|_| "[]".to_string()),
+            summary,
+            dimension,
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+
+    /// 获取向量数组
+    pub fn get_embedding(&self) -> Result<Vec<f32>> {
+        serde_json::from_str(&self.embedding)
+            .map_err(|e| anyhow::anyhow!("解析 embedding 失败: {}", e))
+    }
+
+    /// 设置向量数组
+    pub fn set_embedding(&mut self, embedding: Vec<f32>) -> Result<()> {
+        self.embedding = serde_json::to_string(&embedding)
+            .map_err(|e| anyhow::anyhow!("序列化 embedding 失败: {}", e))?;
+        self.dimension = embedding.len() as i32;
+        Ok(())
+    }
+}
+
 /// 保存的提示词模型
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -707,5 +772,92 @@ mod tests_wave1 {
         let json = serde_json::to_string(&stats).unwrap();
         assert!(json.contains("\"count\":1000"));
         assert!(json.contains("\"estimatedCost\":0.002"));
+    }
+}
+
+// ============================================================================
+// Settings 模型 (Wave 3: 向量功能配置)
+// ============================================================================
+
+/// 应用设置模型
+///
+/// 存储全局应用配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    /// 主键 ID (固定为 1)
+    pub id: i32,
+
+    /// 活跃会话判断时间阈值（秒），默认 86400（24小时）
+    #[serde(rename = "active_threshold")]
+    pub active_threshold: i32,
+
+    /// 是否启用向量搜索功能（默认禁用）
+    #[serde(rename = "vector_search_enabled")]
+    pub vector_search_enabled: bool,
+
+    /// Embedding 提供商（openai/fastembed）
+    #[serde(rename = "embedding_provider")]
+    pub embedding_provider: String,
+
+    /// Embedding 模型名称（默认 text-embedding-3-small）
+    #[serde(rename = "embedding_model")]
+    pub embedding_model: String,
+
+    /// 向量同步批次大小（默认 10）
+    #[serde(rename = "embedding_batch_size")]
+    pub embedding_batch_size: i32,
+}
+
+impl Settings {
+    /// 创建默认设置
+    pub fn default() -> Self {
+        Self {
+            id: 1,
+            active_threshold: 86400,
+            vector_search_enabled: false,
+            embedding_provider: "openai".to_string(),
+            embedding_model: "text-embedding-3-small".to_string(),
+            embedding_batch_size: 10,
+        }
+    }
+
+    /// 验证设置是否有效
+    pub fn validate(&self) -> Result<()> {
+        if self.active_threshold <= 0 {
+            return Err(anyhow::anyhow!("active_threshold 必须大于 0"));
+        }
+
+        if self.embedding_batch_size <= 0 || self.embedding_batch_size > 100 {
+            return Err(anyhow::anyhow!("embedding_batch_size 必须在 1-100 之间"));
+        }
+
+        if !["openai", "fastembed"].contains(&self.embedding_provider.as_str()) {
+            return Err(anyhow::anyhow!(
+                "embedding_provider 必须是 'openai' 或 'fastembed'"
+            ));
+        }
+
+        // 验证 embedding 模型名称
+        if self.embedding_model.is_empty() {
+            return Err(anyhow::anyhow!("embedding_model 不能为空"));
+        }
+
+        Ok(())
+    }
+
+    /// 获取向量维度（根据模型）
+    pub fn get_embedding_dimension(&self) -> usize {
+        match self.embedding_model.as_str() {
+            // OpenAI 模型
+            "text-embedding-3-small" => 1536,
+            "text-embedding-3-large" => 3072,
+            "text-embedding-ada-002" => 1536,
+            // FastEmbed 模型
+            "BGE-small-en-v1.5" => 384,
+            "BGE-base-en-v1.5" => 768,
+            // 默认
+            _ => 1536,
+        }
     }
 }

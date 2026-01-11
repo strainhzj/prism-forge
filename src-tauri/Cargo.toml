@@ -47,3 +47,7 @@ path = "bin/test_db.rs"
 [[bin]]
 name = "test_init"
 path = "bin/test_init.rs"
+
+[[bin]]
+name = "test_vectors"
+path = "bin/test_vectors.rs"
