@@ -2,7 +2,7 @@
 // 注意：模块声明顺序很重要，被依赖的模块需要先声明
 pub mod perf;
 mod llm;
-mod database;
+pub mod database;
 mod commands;
 mod tokenizer;
 mod monitor;
@@ -125,6 +125,12 @@ pub fn run() {
             toggle_monitored_directory,
             update_monitored_directory,
             get_sessions_by_monitored_directory,
+            // 向量搜索命令
+            semantic_search,
+            find_similar_sessions,
+            get_vector_settings,
+            update_vector_settings,
+            sync_embeddings_now,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

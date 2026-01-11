@@ -11,6 +11,7 @@ import { FileText, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Button } from '@/components/ui/button';
 
 // ==================== 调试模式 ====================
 const DEBUG = import.meta.env.DEV;
@@ -36,8 +37,12 @@ export interface SessionFileInfo {
   file_path: string;
   file_size: number;
   modified_time: string;
-  /** 会话摘要（从 .jsonl 文件读取） */
+  /** 会话摘要（从 .jsonl 文件读取，向后兼容） */
   summary?: string;
+  /** 显示名称（智能提取，优先使用） */
+  displayName?: string;
+  /** 名称来源 */
+  nameSource?: string;
   /** 会话文件类型 */
   fileType?: SessionFileType;
 }
@@ -137,41 +142,76 @@ export function SessionFileList({
   // 状态管理
   const [sessions, setSessions] = useState<SessionFileInfo[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false); // 加载更多状态
   const [error, setError] = useState<string | null>(null);
-  const [includeAgent, setIncludeAgent] = useState(false); // 默认不显示 Agent
+  const [includeAgent, setIncludeAgent] = useState(false);
 
-  // 懒加载状态
-  const [displayedCount, setDisplayedCount] = useState(20); // 初始显示20条
-  const observerTarget = useRef<HTMLDivElement>(null);
+  // 分批加载状态
+  const [hasMore, setHasMore] = useState(true); // 是否有更多数据
+  const observerTarget = useRef<HTMLLIElement>(null);
+  const sessionsRef = useRef<SessionFileInfo[]>([]); // 使用 ref 来存储最新的 sessions
 
-  // 加载会话列表
-  const loadSessions = useCallback(async () => {
+  // 同步 sessions 到 ref
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
+
+  // 加载会话列表（初始加载或加载更多）
+  const loadSessions = useCallback(async (isLoadMore = false) => {
     if (!directoryPath) return;
 
-    debugLog('loadSessions', '开始加载会话列表', directoryPath, 'includeAgent:', includeAgent);
-    setLoading(true);
-    setError(null);
+    // 设置加载状态
+    if (isLoadMore) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      setError(null);
+      setSessions([]); // 初始加载时清空列表
+    }
 
     try {
+      // 使用 ref 来获取最新的 sessions.length，避免依赖 sessions
+      const offset = isLoadMore ? sessionsRef.current.length : 0;
+
+      debugLog('loadSessions', isLoadMore ? '加载更多' : '初始加载', 'offset:', offset);
+
       const result = await invoke<SessionFileInfo[]>(
         'get_sessions_by_monitored_directory',
         {
           monitoredPath: directoryPath,
           includeAgent: includeAgent,
+          limit: 20, // 每批加载 20 个
+          offset: offset,
         }
       );
 
       debugLog('loadSessions', '加载成功', result.length, '个会话');
-      setSessions(result);
-      setDisplayedCount(20); // 重置显示数量
+
+      if (isLoadMore) {
+        // 追加数据
+        setSessions((prev) => [...prev, ...result]);
+      } else {
+        // 替换数据
+        setSessions(result);
+      }
+
+      // 判断是否还有更多数据
+      setHasMore(result.length === 20);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       debugLog('loadSessions', '加载失败', errorMsg);
-      setError(errorMsg);
+
+      if (!isLoadMore) {
+        setError(errorMsg);
+      }
     } finally {
-      setLoading(false);
+      if (isLoadMore) {
+        setLoadingMore(false);
+      } else {
+        setLoading(false);
+      }
     }
-  }, [directoryPath, includeAgent]);
+  }, [directoryPath, includeAgent]); // ✅ 移除 sessions.length 依赖
 
   // 初始加载
   useEffect(() => {
@@ -181,22 +221,22 @@ export function SessionFileList({
   // 懒加载：使用 Intersection Observer
   useEffect(() => {
     const target = observerTarget.current;
-    if (!target) return;
+    if (!target || !hasMore || loading || loadingMore) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && displayedCount < sessions.length) {
-          debugLog('懒加载', `当前显示 ${displayedCount}，总共 ${sessions.length}`);
-          setDisplayedCount((prev) => Math.min(prev + 20, sessions.length));
+        if (entries[0].isIntersecting && hasMore) {
+          debugLog('懒加载', '触发加载更多');
+          loadSessions(true);
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1, rootMargin: '100px' } // 距离底部 100px 时触发
     );
 
     observer.observe(target);
 
     return () => observer.disconnect();
-  }, [displayedCount, sessions.length]);
+  }, [hasMore, loading, loadingMore, loadSessions]);
 
   // 处理会话点击
   const handleSessionClick = useCallback(
@@ -206,9 +246,6 @@ export function SessionFileList({
     },
     [onSessionClick]
   );
-
-  // 显示的会话列表（懒加载切片）
-  const displayedSessions = sessions.slice(0, displayedCount);
 
   return (
     <div className={cn('flex flex-col h-full bg-background', className)}>
@@ -222,7 +259,7 @@ export function SessionFileList({
         </div>
 
         {/* 类型筛选复选框 */}
-        <div className="flex items-center gap-2 px-3 py-1.5 border rounded-md bg-background">
+        <div className="flex items-center gap-2 px-3 py-1.5 border rounded-md bg-background hover:bg-accent/50 transition-colors">
           <Checkbox
             id="include-agent"
             checked={includeAgent}
@@ -230,12 +267,20 @@ export function SessionFileList({
               debugLog('Checkbox', 'includeAgent changed:', checked);
               setIncludeAgent(checked as boolean);
             }}
+            className="cursor-pointer"
           />
           <label
             htmlFor="include-agent"
-            className="text-sm cursor-pointer select-none"
+            className="text-sm cursor-pointer select-none user-select-none flex items-center gap-2"
+            onClick={(e) => {
+              // 点击 label 也触发 Checkbox 切换
+              e.preventDefault();
+              const newValue = !includeAgent;
+              debugLog('Checkbox', 'Label clicked, toggling:', newValue);
+              setIncludeAgent(newValue);
+            }}
           >
-            显示 Agent
+            显示 Agent 会话记录
           </label>
         </div>
 
@@ -247,14 +292,16 @@ export function SessionFileList({
       {/* 会话列表 */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          // 加载骨架屏
+          // 初始加载：完整骨架屏
           <div className="p-4 space-y-3">
             {[...Array(5)].map((_, i) => (
               <div key={i} className="flex items-center gap-3 p-3 border rounded-md">
                 <Skeleton className="h-4 w-4" />
-                <div className="flex-1 space-y-1">
+                <div className="flex-1 space-y-2">
+                  {/* 完整骨架：模拟文本和元数据 */}
                   <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
+                  <Skeleton className="h-3 w-1/3" />
+                  <Skeleton className="h-3 w-1/4" />
                 </div>
               </div>
             ))}
@@ -264,7 +311,7 @@ export function SessionFileList({
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <p className="text-destructive font-medium">加载失败</p>
             <p className="text-sm text-muted-foreground mt-2">{error}</p>
-            <Button variant="outline" size="sm" onClick={loadSessions} className="mt-4">
+            <Button variant="outline" size="sm" onClick={() => loadSessions(false)} className="mt-4">
               重试
             </Button>
           </div>
@@ -280,7 +327,7 @@ export function SessionFileList({
         ) : (
           // 会话列表
           <ul className="divide-y">
-            {displayedSessions.map((session) => (
+            {sessions.map((session) => (
               <li key={session.session_id}>
                 <button
                   onClick={() => handleSessionClick(session)}
@@ -295,10 +342,10 @@ export function SessionFileList({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span
-                        className="text-sm font-medium text-foreground truncate"
-                        title={session.summary || session.session_id}
+                        className="text-sm font-medium text-foreground truncate max-w-[200px]"
+                        title={session.displayName || session.summary || session.session_id}
                       >
-                        {session.summary || `${session.session_id.slice(0, 8)}...`}
+                        {session.displayName || session.summary || session.session_id}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
@@ -312,15 +359,39 @@ export function SessionFileList({
                 </button>
               </li>
             ))}
-            {/* 懒加载触发器 */}
-            {displayedCount < sessions.length && (
-              <div ref={observerTarget} className="p-4 text-center text-sm text-muted-foreground">
-                加载更多...
-              </div>
+
+            {/* 加载更多：触发器和骨架屏 */}
+            {hasMore && (
+              <li ref={observerTarget}>
+                {loadingMore ? (
+                  // 加载更多的骨架屏（完整骨架）
+                  <div className="flex items-center gap-3 p-3 border rounded-md">
+                    <Skeleton className="h-4 w-4" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-3 w-1/3" />
+                      <Skeleton className="h-3 w-1/4" />
+                    </div>
+                  </div>
+                ) : (
+                  // 懒加载触发器（不可见，用于 Intersection Observer）
+                  <div className="p-4 text-center text-sm text-muted-foreground">
+                    加载更多...
+                  </div>
+                )}
+              </li>
             )}
           </ul>
         )}
       </div>
+
+      {/* 底部统计信息 */}
+      {!loading && !error && sessions.length > 0 && (
+        <div className="px-6 py-3 border-t bg-muted/30 text-xs text-muted-foreground flex items-center justify-between">
+          <span>共 {sessions.length} 个会话</span>
+          {!hasMore && <span>已全部加载</span>}
+        </div>
+      )}
     </div>
   );
 }

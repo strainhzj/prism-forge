@@ -5,11 +5,11 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Folder, Plus, Trash2, Power } from 'lucide-react';
+import { Folder, Plus, Trash2, Power, Edit2 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
+import { invoke } from '@tauri-apps/api/core';
 import { cn } from '@/lib/utils';
 import {
-  useProjectGroups,
   useSessionActions,
   useMonitoredDirectories,
   useMonitoredDirectoryActions,
@@ -78,6 +78,11 @@ export function ProjectSidebar({
   const [directoryDialogOpen, setDirectoryDialogOpen] = useState(false);
   const [newDirectoryPath, setNewDirectoryPath] = useState('');
   const [newDirectoryName, setNewDirectoryName] = useState('');
+
+  // 重命名对话框状态
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renamingDirectory, setRenamingDirectory] = useState<{ id: number; name: string } | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   // 初始化时加载监控目录
   useEffect(() => {
@@ -158,7 +163,8 @@ export function ProjectSidebar({
 
   // 切换监控目录状态
   const handleToggleDirectory = useCallback(
-    async (id: number) => {
+    async (id: number, event: React.MouseEvent) => {
+      event.stopPropagation(); // 阻止事件冒泡到目录选择
       try {
         await toggleMonitoredDirectory(id);
         // 刷新会话列表
@@ -169,6 +175,44 @@ export function ProjectSidebar({
     },
     [toggleMonitoredDirectory, handleRefresh]
   );
+
+  // 打开重命名对话框
+  const handleOpenRenameDialog = useCallback(
+    (id: number, name: string, event: React.MouseEvent) => {
+      event.stopPropagation(); // 阻止事件冒泡
+      setRenamingDirectory({ id, name });
+      setRenameValue(name);
+      setRenameDialogOpen(true);
+    },
+    []
+  );
+
+  // 确认重命名
+  const handleConfirmRename = useCallback(async () => {
+    if (!renamingDirectory || !renameValue.trim()) {
+      return;
+    }
+
+    try {
+      // 调用更新目录的命令
+      await invoke('update_monitored_directory', {
+        directory: {
+          id: renamingDirectory.id,
+          path: null, // 路径不变
+          name: renameValue.trim(),
+          is_active: true, // 保持原有状态
+        },
+      });
+
+      // 刷新列表
+      await fetchMonitoredDirectories();
+      setRenameDialogOpen(false);
+      setRenamingDirectory(null);
+      setRenameValue('');
+    } catch (error) {
+      console.error('重命名失败:', error);
+    }
+  }, [renamingDirectory, renameValue, fetchMonitoredDirectories]);
 
   return (
     <div className={cn('flex flex-col h-full bg-card', className)}>
@@ -234,6 +278,51 @@ export function ProjectSidebar({
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* 重命名对话框 */}
+          <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+            <DialogContent className="sm:max-w-[425px]">
+              <DialogHeader>
+                <DialogTitle>重命名监控目录</DialogTitle>
+                <DialogDescription>
+                  为此监控目录设置一个新的显示名称。
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="rename-name" className="text-right">
+                    新名称
+                  </Label>
+                  <Input
+                    id="rename-name"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    className="col-span-3"
+                    placeholder="输入新的目录名称"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleConfirmRename();
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setRenameDialogOpen(false)}
+                >
+                  取消
+                </Button>
+                <Button type="button" onClick={handleConfirmRename}>
+                  确认重命名
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Button
             variant="ghost"
             size="sm"
@@ -260,46 +349,78 @@ export function ProjectSidebar({
               const isSelected = selectedDirectory === dir.path;
 
               return (
-                <li key={dir.id}>
-                  {/* 目录项 */}
-                  <button
-                    onClick={() => handleDirectoryClick(dir)}
+                <li key={dir.id} className="group">
+                  {/* 🔥 整体包裹的目录项：[📁 项目名称 [⚡] [✏️] [🗑️]] */}
+                  <div
                     className={cn(
-                      'w-full flex items-center gap-2 px-3 py-2.5 rounded-md text-sm transition-colors',
-                      'hover:bg-accent hover:text-accent-foreground',
-                      isSelected && 'bg-accent text-accent-foreground font-medium',
-                      !dir.is_active && 'opacity-50 cursor-not-allowed'
+                      // 整体布局：边框包裹所有元素
+                      'flex items-center gap-2 px-3 py-2 border rounded-md text-sm transition-all',
+                      // 选中状态：高亮边框和背景
+                      isSelected
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'border-border bg-card hover:border-primary/50 hover:bg-accent/5',
+                      // 禁用状态
+                      !dir.is_active && 'opacity-50'
                     )}
-                    title={dir.path}
-                    disabled={!dir.is_active}
                   >
-                    <Folder className="h-4 w-4 shrink-0 text-blue-500" />
-                    <span className="flex-1 text-left truncate text-foreground">
-                      {dir.name}
-                    </span>
-                    {!dir.is_active && (
-                      <span className="text-xs text-muted-foreground">已禁用</span>
-                    )}
-                  </button>
-
-                  {/* 操作按钮（悬停时显示） */}
-                  <div className="flex items-center gap-1 ml-6 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {/* 目录图标和名称 */}
                     <button
-                      onClick={() => handleToggleDirectory(dir.id!)}
-                      className={cn(
-                        'p-1 rounded hover:bg-accent text-xs',
-                        dir.is_active ? 'text-green-500' : 'text-muted-foreground'
-                      )}
-                      title={dir.is_active ? '禁用' : '启用'}
+                      onClick={() => handleDirectoryClick(dir)}
+                      className="flex items-center gap-2 flex-1 min-w-0"
+                      title={dir.path}
+                      disabled={!dir.is_active}
                     >
-                      <Power className="h-3 w-3" />
+                      <Folder className="h-4 w-4 shrink-0 text-blue-500" />
+                      <span className={cn(
+                        "flex-1 text-left truncate",
+                        isSelected ? "text-foreground font-medium" : "text-foreground"
+                      )}>
+                        {dir.name}
+                      </span>
+                    </button>
+
+                    {/* 操作按钮：使用 !important 确保颜色显示 */}
+                    <button
+                      onClick={(e) => handleToggleDirectory(dir.id!, e)}
+                      className={cn(
+                        // 🔥 使用 !important 确保颜色显示（参考Checkbox组件）
+                        'flex items-center justify-center p-1.5 border rounded-md',
+                        'transition-all hover:scale-105 active:scale-95',
+                        // 语义化颜色：橙色（警告/状态）- 使用 !important
+                        dir.is_active
+                          ? '!bg-orange-500 !border-orange-600 !text-white hover:!bg-orange-600'
+                          : 'bg-muted border-muted-foreground/20 text-muted-foreground hover:bg-muted/80'
+                      )}
+                      title={dir.is_active ? '禁用此目录' : '启用此目录'}
+                    >
+                      <Power className="h-3.5 w-3.5" />
                     </button>
                     <button
-                      onClick={() => handleRemoveDirectory(dir.id!)}
-                      className="p-1 rounded hover:bg-accent text-red-500 text-xs"
-                      title="删除"
+                      onClick={(e) => handleOpenRenameDialog(dir.id!, dir.name, e)}
+                      className={cn(
+                        // 🔥 蓝色：编辑操作 - 使用 !important
+                        'flex items-center justify-center p-1.5 border rounded-md',
+                        'transition-all hover:scale-105 active:scale-95',
+                        '!bg-blue-500 !border-blue-600 !text-white hover:!bg-blue-600'
+                      )}
+                      title="重命名"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveDirectory(dir.id!);
+                      }}
+                      className={cn(
+                        // 🔥 红色：危险操作 - 使用 !important
+                        'flex items-center justify-center p-1.5 border rounded-md',
+                        'transition-all hover:scale-105 active:scale-95',
+                        '!bg-red-500 !border-red-600 !text-white hover:!bg-red-600'
+                      )}
+                      title="删除此目录"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </li>

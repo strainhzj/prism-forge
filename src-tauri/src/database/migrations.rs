@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 10;
+const CURRENT_DB_VERSION: i32 = 11;
 
 /// 初始化数据库
 ///
@@ -79,6 +79,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             8 => migrate_v8(conn)?,
             9 => migrate_v9(conn)?,
             10 => migrate_v10(conn)?,
+            11 => migrate_v11(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -375,18 +376,41 @@ fn migrate_v6(conn: &mut Connection) -> Result<()> {
     migrate_v6_impl(conn)
 }
 
-fn migrate_v6_impl(conn: &mut Connection) -> Result<()> {
-    // 创建 message_embeddings 虚拟表 (vec0)
-    // 注意: 使用 sqlite-vec 的 vec0 虚拟表语法
-    // 向量维度为 384 (BGE-small-en-v1.5)
-//     conn.execute(
-//         "CREATE VIRTUAL TABLE IF NOT EXISTS message_embeddings
-//             USING vec0(
-//                 embedding FLOAT(384),
-//                 summary TEXT
-//             );",
-//         [],
-//     )?;
+pub fn migrate_v6_impl(conn: &mut Connection) -> Result<()> {
+    // 创建 session_embeddings 表（用于存储会话向量）
+    // 使用 JSON 序列化存储向量，支持可变维度
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS session_embeddings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            embedding JSON NOT NULL,
+            summary TEXT NOT NULL,
+            dimension INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+
+            FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE,
+            UNIQUE(session_id)
+        );",
+        [],
+    )?;
+
+    // 索引: 按会话 ID 查找
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_session_embeddings_session_id
+            ON session_embeddings(session_id);",
+        [],
+    )?;
+
+    // 索引: 按创建时间排序
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_session_embeddings_created_at
+            ON session_embeddings(created_at);",
+        [],
+    )?;
+
+    // 注释：保留 message_embedding_map 表（用于未来的消息级别向量）
+    // 当前版本先实现会话级别的向量搜索
 
     // 关联表: 存储 message_id 到 vec0 行 ID 的映射
     conn.execute(
@@ -588,6 +612,51 @@ fn migrate_v10_impl(conn: &mut Connection) -> Result<()> {
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_monitored_directories_is_active
             ON monitored_directories(is_active);",
+        [],
+    )?;
+
+    Ok(())
+}
+
+/// 迁移到版本 11: 添加向量功能配置字段
+///
+/// # 功能
+/// - 向 settings 表添加向量数据库相关配置
+/// - vector_search_enabled: 是否启用向量搜索功能
+/// - embedding_provider: Embedding 提供商（openai/fastembed）
+/// - embedding_model: Embedding 模型名称（默认使用对话分析的相同模型）
+#[cfg(test)]
+pub fn migrate_v11(conn: &mut Connection) -> Result<()> {
+    migrate_v11_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v11(conn: &mut Connection) -> Result<()> {
+    migrate_v11_impl(conn)
+}
+
+pub fn migrate_v11_impl(conn: &mut Connection) -> Result<()> {
+    // 添加向量搜索启用字段（默认禁用）
+    conn.execute(
+        "ALTER TABLE settings ADD COLUMN vector_search_enabled INTEGER NOT NULL DEFAULT 0;",
+        [],
+    )?;
+
+    // 添加 embedding 提供商字段（默认 openai）
+    conn.execute(
+        "ALTER TABLE settings ADD COLUMN embedding_provider TEXT NOT NULL DEFAULT 'openai';",
+        [],
+    )?;
+
+    // 添加 embedding 模型字段（默认与对话分析一致）
+    conn.execute(
+        "ALTER TABLE settings ADD COLUMN embedding_model TEXT NOT NULL DEFAULT 'text-embedding-3-small';",
+        [],
+    )?;
+
+    // 添加向量同步批次大小（默认 10）
+    conn.execute(
+        "ALTER TABLE settings ADD COLUMN embedding_batch_size INTEGER NOT NULL DEFAULT 10;",
         [],
     )?;
 

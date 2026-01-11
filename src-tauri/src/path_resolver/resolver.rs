@@ -127,12 +127,15 @@ impl ClaudePathResolver {
 
             // 检查是否为 .jsonl 文件
             if path.extension().and_then(|s| s.to_str()) == Some("jsonl") {
-                // 过滤掉快照文件（file-history-snapshot）
+                // 不再过滤快照文件，允许所有 .jsonl 文件（包括 file-history-snapshot）
+                // 这样可以确保不会遗漏任何会话文件，由智能命名功能处理显示名称
+                /*
                 if is_snapshot_file(&path) {
                     #[cfg(debug_assertions)]
                     eprintln!("[PathResolver] 过滤掉快照文件: {:?}", path.file_name());
                     continue;
                 }
+                */
 
                 let metadata = entry.metadata()?;
 

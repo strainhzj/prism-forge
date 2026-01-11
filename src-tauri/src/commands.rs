@@ -3,7 +3,7 @@
 //! 暴露给前端调用的命令接口
 
 use tauri::State;
-use secrecy::SecretString;
+use secrecy::{SecretString, ExposeSecret};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use std::fs;
@@ -13,6 +13,8 @@ use crate::llm::LLMClientManager;
 use crate::llm::interface::TestConnectionResult;
 use crate::database::{ApiProvider, ApiProviderType, ApiProviderRepository};
 use crate::llm::security::ApiKeyStorage;
+use crate::embedding::{EmbeddingSyncManager, OpenAIEmbeddings};
+use crate::database::vector_repository::VectorRepository;
 use crate::tokenizer::{TokenCounter, TokenEncodingType};
 use crate::optimizer::compressor::CompressionResult;
 use crate::optimizer::prompt_generator::{EnhancedPromptRequest, EnhancedPrompt};
@@ -2108,96 +2110,422 @@ pub struct SessionFileInfo {
     pub file_size: u64,
     /// 修改时间（RFC3339）
     pub modified_time: String,
-    /// 会话摘要（从 .jsonl 文件读取）
+    /// 会话摘要（从 .jsonl 文件读取，向后兼容）
     #[serde(rename = "summary")]
     pub summary: Option<String>,
+    /// 显示名称（智能提取，优先使用）
+    #[serde(rename = "displayName")]
+    pub display_name: Option<String>,
+    /// 名称来源
+    #[serde(rename = "nameSource")]
+    pub name_source: Option<String>,
     /// 会话文件类型
     #[serde(rename = "fileType")]
     pub file_type: SessionFileType,
 }
 
-/// 获取监控目录对应的会话文件列表（异步版本，包含 summary 和类型筛选）
+/// 获取监控目录对应的会话文件列表（异步版本，包含智能命名和类型筛选）
 ///
 /// 根据监控目录的路径，查找 ~/.claude/projects/ 下对应的会话文件
-/// 并异步加载每个会话的 summary 信息
+/// 并使用多级 fallback 策略获取每个会话的显示名称
 ///
 /// # 参数
 /// * `monitored_path` - 监控目录路径
 /// * `include_agent` - 是否包含 Agent 类型的会话（默认只显示 Main 类型）
+/// * `limit` - 返回的会话数量限制（用于分批加载，默认 20）
+/// * `offset` - 跳过的会话数量（用于分批加载，默认 0）
 #[tauri::command]
 pub async fn get_sessions_by_monitored_directory(
     monitored_path: String,
     include_agent: Option<bool>,
+    limit: Option<usize>,
+    offset: Option<usize>,
 ) -> Result<Vec<SessionFileInfo>, CommandError> {
     use crate::path_resolver::list_session_files;
-    use crate::session_reader::SummaryCache;
+    use crate::session_reader::{SessionDisplayName, load_default_history_cache};
     use std::path::Path;
 
     // 提供默认值
     let include_agent = include_agent.unwrap_or(false);
+    let limit = limit.unwrap_or(20);
+    let offset = offset.unwrap_or(0);
 
     #[cfg(debug_assertions)]
-    eprintln!("[get_sessions_by_monitored_directory] 监控路径: {}, include_agent: {}", monitored_path, include_agent);
+    eprintln!("[get_sessions_by_monitored_directory] 监控路径: {}, include_agent: {}, limit: {}, offset: {}",
+        monitored_path, include_agent, limit, offset);
 
     // 将监控路径转换为项目路径
     let project_path = Path::new(&monitored_path);
 
     // 使用路径解析器获取会话文件列表（已按修改时间倒序排序）
-    let session_files = list_session_files(project_path)
+    let all_session_files = list_session_files(project_path)
         .map_err(|e| CommandError {
             message: format!("获取会话文件失败: {}", e),
         })?;
 
     #[cfg(debug_assertions)]
-    eprintln!("[get_sessions_by_monitored_directory] 找到 {} 个会话文件", session_files.len());
+    eprintln!("[get_sessions_by_monitored_directory] 总共找到 {} 个会话文件", all_session_files.len());
 
-    // 创建缓存管理器
-    let cache = SummaryCache::new();
-
-    // 并行加载所有会话的 summary
-    use futures::future::join_all;
-    let summary_futures: Vec<_> = session_files
-        .iter()
-        .map(|info| {
-            let cache = &cache;
-            async move {
-                // 尝试从缓存或文件加载 summary
-                cache.get_or_load(&info.full_path).await
+    // 先应用类型筛选，再分页
+    let filtered_session_files: Vec<_> = all_session_files
+        .into_iter()
+        .filter(|info| {
+            // 如果不包含 Agent，则过滤掉 Agent 类型的会话
+            if !include_agent && info.file_type.is_agent() {
+                #[cfg(debug_assertions)]
+                eprintln!("[get_sessions_by_monitored_directory] 过滤掉 Agent 会话: {}", info.file_name);
+                false
+            } else {
+                true
             }
         })
         .collect();
 
-    let summaries = join_all(summary_futures).await;
+    #[cfg(debug_assertions)]
+    eprintln!("[get_sessions_by_monitored_directory] 类型筛选后剩余 {} 个会话", filtered_session_files.len());
 
-    // 转换为前端格式并应用类型筛选
-    let result: Vec<SessionFileInfo> = session_files
+    // 应用分页：跳过 offset，取 limit 个
+    let session_files: Vec<_> = filtered_session_files
         .into_iter()
-        .zip(summaries)
-        .filter_map(|(info, summary_result)| {
-            // 应用类型筛选
-            if info.file_type.is_agent() && !include_agent {
-                #[cfg(debug_assertions)]
-                eprintln!("[get_sessions_by_monitored_directory] 过滤掉 Agent 会话: {}", info.file_name);
-                return None;
-            }
+        .skip(offset)
+        .take(limit)
+        .collect();
 
-            let summary = summary_result
-                .ok()
-                .map(|s| s.summary);
+    #[cfg(debug_assertions)]
+    eprintln!("[get_sessions_by_monitored_directory] 本批处理 {} 个会话文件", session_files.len());
+
+    // 预加载 history.jsonl 缓存
+    let history_cache = load_default_history_cache().await.unwrap_or_default();
+    #[cfg(debug_assertions)]
+    eprintln!("[get_sessions_by_monitored_directory] history 缓存加载完成，共 {} 个条目", history_cache.len());
+
+    // 并行加载会话显示名称（使用并发控制和超时机制）
+    use futures::stream::{self, StreamExt};
+    use std::time::Duration;
+
+    let name_stream = stream::iter(session_files)
+        .map(|info| {
+            let history_cache = &history_cache;
+            async move {
+                // 添加超时机制：单个会话名称获取最多 100ms
+                let timeout_result = tokio::time::timeout(
+                    Duration::from_millis(100),
+                    SessionDisplayName::get_display_name(&info.full_path, Some(history_cache))
+                ).await;
+
+                match timeout_result {
+                    Ok(Ok(display)) => (info, Some(display)),
+                    Ok(Err(_)) | Err(_) => (info, None), // 超时或错误都返回 None
+                }
+            }
+        })
+        .buffer_unordered(10); // 限制并发数为 10
+
+    let display_names: Vec<(crate::path_resolver::SessionFileInfo, Option<SessionDisplayName>)> = name_stream.collect().await;
+
+    // 转换为前端格式（类型筛选已在前面完成）
+    let mut result: Vec<SessionFileInfo> = display_names
+        .into_iter()
+        .filter_map(|(info, name_result)| {
+            // 处理显示名称结果
+            let (display_name, name_source, summary) = match name_result {
+                Some(display) => (
+                    Some(display.name.clone()),
+                    Some(format!("{:?}", display.source)),
+                    Some(display.name),
+                ),
+                None => (None, None, None), // 失败时使用完整的会话ID
+            };
 
             Some(SessionFileInfo {
                 session_id: info.file_name,
                 file_path: info.full_path.to_string_lossy().to_string(),
                 file_size: info.file_size,
-                modified_time: info.modified_time,
-                summary,
+                modified_time: info.modified_time.clone(),
+                summary, // 向后兼容
+                display_name,
+                name_source,
                 file_type: info.file_type,
             })
         })
         .collect();
+
+    // 🔥 修复：并行加载后重新按修改时间倒序排序
+    result.sort_by(|a, b| b.modified_time.cmp(&a.modified_time));
+
+    #[cfg(debug_assertions)]
+    eprintln!("[get_sessions_by_monitored_directory] 排序完成，返回 {} 个会话", result.len());
 
     #[cfg(debug_assertions)]
     eprintln!("[get_sessions_by_monitored_directory] 返回 {} 个会话（筛选后）", result.len());
 
     Ok(result)
 }
+
+// ==================== 向量搜索命令 ====================
+
+/// 语义搜索请求参数
+#[derive(Debug, Deserialize)]
+pub struct SemanticSearchRequest {
+    /// 搜索查询文本
+    pub query: String,
+    /// 返回结果数量（默认 10）
+    #[serde(default)]
+    pub top_k: Option<usize>,
+    /// 最小相似度阈值（0.0-1.0，默认 0.0）
+    #[serde(default)]
+    pub min_similarity: Option<f64>,
+}
+
+/// 语义搜索结果
+#[derive(Debug, Serialize)]
+pub struct SemanticSearchResult {
+    /// 会话信息
+    pub session: SessionInfo,
+    /// 相似度分数（0.0-1.0）
+    pub similarity_score: f64,
+    /// 会话摘要
+    pub summary: String,
+}
+
+/// 会话信息
+#[derive(Debug, Serialize)]
+pub struct SessionInfo {
+    pub session_id: String,
+    pub project_path: String,
+    pub project_name: String,
+    pub file_path: String,
+    pub rating: Option<i32>,
+    pub tags: Vec<String>,
+}
+
+/// 语义搜索命令
+#[tauri::command]
+pub async fn semantic_search(
+    request: SemanticSearchRequest,
+    manager: State<'_, LLMClientManager>,
+) -> Result<Vec<SemanticSearchResult>, String> {
+    use crate::database::get_connection_shared;
+
+    let top_k = request.top_k.unwrap_or(10);
+    let min_similarity = request.min_similarity.unwrap_or(0.0);
+
+    // 检查向量搜索是否启用
+    let conn = get_connection_shared().map_err(|e| format!("获取数据库连接失败: {}", e))?;
+    let repo = VectorRepository::with_conn(conn);
+
+    // 获取当前设置
+    let settings = crate::database::repository::SettingsRepository::new()
+        .get_settings()
+        .map_err(|e| format!("获取设置失败: {}", e))?;
+
+    if !settings.vector_search_enabled {
+        return Err("向量搜索功能未启用。请在设置中启用向量搜索。".to_string());
+    }
+
+    // 获取 API Key（从活跃的 LLM provider）
+    let active_provider = manager.get_active_provider_config()
+        .map_err(|e| format!("获取活跃提供商失败: {}", e))?;
+
+    let provider_id = active_provider.id.ok_or_else(|| "提供商 ID 无效".to_string())?;
+
+    let api_key = crate::llm::security::ApiKeyStorage::get_api_key(provider_id)
+        .map_err(|e| format!("获取 API Key 失败: {}", e))?;
+
+    let api_key = api_key.expose_secret().to_string();
+
+    // 生成查询向量
+    let embedding_client = OpenAIEmbeddings::new(
+        &api_key,
+        Some(settings.embedding_model.clone()),
+    ).map_err(|e| format!("创建 Embedding 客户端失败: {}", e))?;
+
+    let query_vector = embedding_client.generate_embedding(&request.query).await
+        .map_err(|e| format!("生成查询向量失败: {}", e))?;
+
+    // 执行向量搜索
+    let search_results = repo.vector_search_sessions(
+        &query_vector,
+        top_k,
+        min_similarity,
+    ).map_err(|e| format!("向量搜索失败: {}", e))?;
+
+    // 转换结果格式
+    let results: Vec<SemanticSearchResult> = search_results
+        .into_iter()
+        .map(|r| {
+            let session = r.session;
+            SemanticSearchResult {
+                session: SessionInfo {
+                    session_id: session.session_id,
+                    project_path: session.project_path,
+                    project_name: session.project_name,
+                    file_path: session.file_path,
+                    rating: session.rating,
+                    tags: serde_json::from_str(&session.tags).unwrap_or_default(),
+                },
+                similarity_score: r.similarity_score,
+                summary: r.summary,
+            }
+        })
+        .collect();
+
+    Ok(results)
+}
+
+/// 查找相似会话
+#[tauri::command]
+pub async fn find_similar_sessions(
+    session_id: String,
+    top_k: Option<usize>,
+    min_similarity: Option<f64>,
+    manager: State<'_, LLMClientManager>,
+) -> Result<Vec<SemanticSearchResult>, String> {
+    use crate::database::get_connection_shared;
+
+    let top_k = top_k.unwrap_or(10);
+    let min_similarity = min_similarity.unwrap_or(0.0);
+
+    // 检查向量搜索是否启用
+    let conn = get_connection_shared().map_err(|e| format!("获取数据库连接失败: {}", e))?;
+    let repo = VectorRepository::with_conn(conn);
+
+    let settings = crate::database::repository::SettingsRepository::new()
+        .get_settings()
+        .map_err(|e| format!("获取设置失败: {}", e))?;
+
+    if !settings.vector_search_enabled {
+        return Err("向量搜索功能未启用".to_string());
+    }
+
+    // 获取目标会话的向量
+    let target_embedding = repo.get_session_embedding(&session_id)
+        .map_err(|e| format!("查询会话向量失败: {}", e))?
+        .ok_or_else(|| format!("未找到会话 {} 的向量", session_id))?;
+
+    let target_vector = target_embedding.get_embedding()
+        .map_err(|e| format!("解析向量失败: {}", e))?;
+
+    // 执行向量搜索
+    let search_results = repo.vector_search_sessions(
+        &target_vector,
+        top_k + 1, // +1 因为结果会包含自己
+        min_similarity,
+    ).map_err(|e| format!("向量搜索失败: {}", e))?;
+
+    // 过滤掉自己并转换结果格式
+    let results: Vec<SemanticSearchResult> = search_results
+        .into_iter()
+        .filter(|r| r.session.session_id != session_id)
+        .take(top_k)
+        .map(|r| {
+            let session = r.session;
+            SemanticSearchResult {
+                session: SessionInfo {
+                    session_id: session.session_id,
+                    project_path: session.project_path,
+                    project_name: session.project_name,
+                    file_path: session.file_path,
+                    rating: session.rating,
+                    tags: serde_json::from_str(&session.tags).unwrap_or_default(),
+                },
+                similarity_score: r.similarity_score,
+                summary: r.summary,
+            }
+        })
+        .collect();
+
+    Ok(results)
+}
+
+/// 向量设置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VectorSettings {
+    pub vector_search_enabled: bool,
+    pub embedding_provider: String,
+    pub embedding_model: String,
+    pub embedding_batch_size: i32,
+}
+
+/// 获取向量设置
+#[tauri::command]
+pub async fn get_vector_settings() -> Result<VectorSettings, String> {
+    let settings = crate::database::repository::SettingsRepository::new()
+        .get_settings()
+        .map_err(|e| format!("获取设置失败: {}", e))?;
+
+    Ok(VectorSettings {
+        vector_search_enabled: settings.vector_search_enabled,
+        embedding_provider: settings.embedding_provider,
+        embedding_model: settings.embedding_model,
+        embedding_batch_size: settings.embedding_batch_size,
+    })
+}
+
+/// 更新向量设置
+#[tauri::command]
+pub async fn update_vector_settings(
+    settings: VectorSettings,
+) -> Result<(), String> {
+    let mut repo_settings = crate::database::repository::SettingsRepository::new()
+        .get_settings()
+        .map_err(|e| format!("获取当前设置失败: {}", e))?;
+
+    repo_settings.vector_search_enabled = settings.vector_search_enabled;
+    repo_settings.embedding_provider = settings.embedding_provider;
+    repo_settings.embedding_model = settings.embedding_model;
+    repo_settings.embedding_batch_size = settings.embedding_batch_size;
+
+    repo_settings.validate()
+        .map_err(|e| format!("设置验证失败: {}", e))?;
+
+    crate::database::repository::SettingsRepository::new()
+        .update_settings(&repo_settings)
+        .map_err(|e| format!("更新设置失败: {}", e))?;
+
+    Ok(())
+}
+
+/// 手动触发向量同步
+#[tauri::command]
+pub async fn sync_embeddings_now(
+    manager: State<'_, LLMClientManager>,
+) -> Result<usize, String> {
+    use crate::database::get_connection_shared;
+
+    let conn = get_connection_shared().map_err(|e| format!("获取数据库连接失败: {}", e))?;
+    let repo = VectorRepository::with_conn(conn);
+
+    let settings = crate::database::repository::SettingsRepository::new()
+        .get_settings()
+        .map_err(|e| format!("获取设置失败: {}", e))?;
+
+    if !settings.vector_search_enabled {
+        return Err("向量搜索功能未启用".to_string());
+    }
+
+    // 获取 API Key
+    let active_provider = manager.get_active_provider_config()
+        .map_err(|e| format!("获取活跃提供商失败: {}", e))?;
+
+    let provider_id = active_provider.id.ok_or_else(|| "提供商 ID 无效".to_string())?;
+
+    let api_key = crate::llm::security::ApiKeyStorage::get_api_key(provider_id)
+        .map_err(|e| format!("获取 API Key 失败: {}", e))?;
+
+    let api_key = api_key.expose_secret().to_string();
+
+    // 创建同步管理器
+    let sync_manager = EmbeddingSyncManager::new(std::sync::Arc::new(repo));
+    sync_manager.set_api_key(api_key).await;
+    sync_manager.update_config(&settings).await
+        .map_err(|e| format!("更新配置失败: {}", e))?;
+
+    // 执行同步
+    let count = sync_manager.sync_all_sessions().await
+        .map_err(|e| format!("同步失败: {}", e))?;
+
+    Ok(count)
+}
+
+

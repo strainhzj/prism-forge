@@ -1,6 +1,7 @@
-//! 会话 Summary 读取模块
+//! 会话 Summary 读取模块（增强版）
 //!
 //! 从 Claude Code 会话文件（.jsonl）中提取 summary 信息
+//! 支持多级 fallback 策略获取会话显示名称
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -8,10 +9,38 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use thiserror::Error;
+use regex::Regex;
 
 // ==================== 数据结构定义 ====================
 
-/// 会话摘要信息
+/// 名称来源枚举
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum NameSource {
+    /// 从会话文件的 summary 字段
+    Summary,
+    /// 从第一个真正的 user message（local-command-stdout 之后）
+    FirstUserMessage,
+    /// 从 history.jsonl 的 display 字段
+    HistoryDisplay,
+    /// 从会话内容智能提取（Markdown 标题）
+    ContentExtraction,
+    /// 默认 fallback（会话 ID）
+    Fallback,
+}
+
+/// 会话显示名称（包含来源信息）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionDisplayName {
+    /// 显示名称
+    pub name: String,
+    /// 名称来源
+    pub source: NameSource,
+    /// 会话 ID
+    pub session_id: String,
+}
+
+/// 会话摘要信息（保留向后兼容）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionSummary {
     /// 摘要内容
@@ -32,6 +61,30 @@ struct SummaryRecord {
     leaf_uuid: String,
 }
 
+/// History 记录结构
+#[derive(Debug, Deserialize)]
+struct HistoryRecord {
+    #[serde(rename = "sessionId")]
+    session_id: String,
+    display: String,
+    project: String,
+    timestamp: u64,
+}
+
+/// 消息结构（用于内容提取）
+#[derive(Debug, Deserialize)]
+struct Message {
+    #[serde(rename = "type")]
+    msg_type: String,
+    message: Option<MsgContent>,
+}
+
+#[derive(Debug, Deserialize)]
+struct MsgContent {
+    role: String,
+    content: Option<serde_json::Value>,
+}
+
 /// 错误类型
 #[derive(Error, Debug)]
 pub enum SessionReaderError {
@@ -49,6 +102,9 @@ pub enum SessionReaderError {
 
     #[error("会话文件为空")]
     EmptyFile,
+
+    #[error("无法获取用户主目录")]
+    HomeDirNotFound,
 }
 
 // ==================== Summary 读取实现 ====================
@@ -91,6 +147,292 @@ pub async fn read_summary_from_file(file_path: &Path) -> Result<SessionSummary, 
         leaf_uuid: record.leaf_uuid,
         session_id,
     })
+}
+
+// ==================== 多级 Fallback 策略实现 ====================
+
+impl SessionDisplayName {
+    /// 获取会话的显示名称（使用多级 fallback 策略）
+    ///
+    /// # 命名优先级
+    /// 1. **Summary**（优先）：从会话文件第一行的 summary 字段
+    /// 2. **First Real User Message**：找到第一个 `<local-command-stdout>` 标签后的 user message
+    /// 3. **History Display**：从 history.jsonl 的 display 字段
+    /// 4. **Content Extraction**：从会话内容智能提取 Markdown 标题
+    /// 5. **Fallback**：使用会话 ID 的前 8 位
+    ///
+    /// # 参数
+    /// * `file_path` - 会话文件的完整路径
+    /// * `history_cache` - history.jsonl 的缓存（可选，建议提供以提高性能）
+    ///
+    /// # 返回
+    /// 返回 `SessionDisplayName`，包含名称及其来源
+    pub async fn get_display_name(
+        file_path: impl AsRef<Path>,
+        history_cache: Option<&HashMap<String, String>>,
+    ) -> Result<Self, SessionReaderError> {
+        let file_path = file_path.as_ref();
+        let session_id = extract_session_id(file_path)?;
+
+        // 策略 1: 优先从 summary 读取
+        if let Ok(name) = Self::try_read_summary(file_path, &session_id).await {
+            #[cfg(debug_assertions)]
+            eprintln!("[SessionDisplayName] 使用 summary: {}", name.name);
+
+            return Ok(name);
+        }
+
+        // 策略 2: 提取第一个真正的 user message（在 local-command-stdout 之后）
+        if let Ok(name) = Self::extract_first_real_user_message(file_path, &session_id).await {
+            #[cfg(debug_assertions)]
+            eprintln!("[SessionDisplayName] 使用第一个真正的 user message: {}", name.name);
+
+            return Ok(name);
+        }
+
+        // 策略 3: 从 history.jsonl 获取
+        if let Some(history) = history_cache {
+            if let Some(display) = history.get(&session_id) {
+                #[cfg(debug_assertions)]
+                eprintln!("[SessionDisplayName] 使用 history display: {}", display);
+
+                return Ok(Self {
+                    name: display.clone(),
+                    source: NameSource::HistoryDisplay,
+                    session_id,
+                });
+            }
+        }
+
+        // 策略 4: 从会话内容智能提取
+        if let Ok(name) = Self::extract_from_content(file_path, &session_id).await {
+            #[cfg(debug_assertions)]
+            eprintln!("[SessionDisplayName] 从内容提取: {} (来源: 智能提取)", name.name);
+
+            return Ok(name);
+        }
+
+        // 策略 5: 使用会话 ID 作为 fallback
+        #[cfg(debug_assertions)]
+        eprintln!("[SessionDisplayName] 无法获取显示名称，使用会话 ID 作为 fallback");
+
+        Ok(Self {
+            name: format!("会话 {}", &session_id[..8.min(session_id.len())]),
+            source: NameSource::Fallback,
+            session_id,
+        })
+    }
+
+    /// 策略 2: 尝试从 summary 读取
+    async fn try_read_summary(
+        file_path: &Path,
+        session_id: &str,
+    ) -> Result<Self, SessionReaderError> {
+        let content = tokio::fs::read_to_string(file_path).await?;
+        let first_line = content.lines().next().ok_or(SessionReaderError::EmptyFile)?;
+
+        let record: SummaryRecord = serde_json::from_str(first_line)?;
+
+        if record.record_type == "summary" {
+            Ok(Self {
+                name: record.summary,
+                source: NameSource::Summary,
+                session_id: session_id.to_string(),
+            })
+        } else {
+            Err(SessionReaderError::InvalidFormat)
+        }
+    }
+
+    /// 策略 2: 提取第一个真正的 user message（在 local-command-stdout 之后）
+    ///
+    /// 这个方法专门处理由 `/clear` 命令开始的会话。
+    /// 逻辑：找到第一个包含 `<local-command-stdout>` 标签的消息，
+    /// 然后取其下一个 role 为 "user" 的消息内容作为会话名称。
+    async fn extract_first_real_user_message(
+        file_path: &Path,
+        session_id: &str,
+    ) -> Result<Self, SessionReaderError> {
+        let content = tokio::fs::read_to_string(file_path).await?;
+
+        // 读取前 200 行，避免处理大文件
+        let lines: Vec<&str> = content.lines().take(200).collect();
+
+        // 查找第一个包含 <local-command-stdout> 的行索引
+        let mut found_command_stdout = false;
+        let mut command_stdout_index = 0;
+
+        for (i, line) in lines.iter().enumerate() {
+            if line.contains("<local-command-stdout>") {
+                found_command_stdout = true;
+                command_stdout_index = i;
+                break;
+            }
+        }
+
+        if !found_command_stdout {
+            return Err(SessionReaderError::InvalidFormat);
+        }
+
+        // 从 local-command-stdout 之后开始查找第一个 user message
+        for line in lines.iter().skip(command_stdout_index + 1) {
+            if let Ok(msg) = serde_json::from_str::<Message>(line) {
+                if msg.role() == "user" {
+                    let content = msg.content();
+
+                    // 提取前 50 个字符（按字符数，不是字节数）
+                    let char_count = content.chars().count();
+                    let truncated = if char_count > 50 {
+                        // 找到第 50 个字符的字节边界位置
+                        let byte_end = content
+                            .char_indices()
+                            .nth(50)
+                            .map(|(i, _)| i)
+                            .unwrap_or(content.len());
+
+                        format!("{}...", &content[..byte_end])
+                    } else {
+                        content.to_string()
+                    };
+
+                    // 清理内容：去除 Markdown 符号和多余空白
+                    let cleaned = Self::clean_user_message_content(&truncated);
+
+                    // 如果清理后的内容太短，继续查找下一个 user message
+                    if cleaned.chars().count() < 5 {
+                        continue;
+                    }
+
+                    return Ok(Self {
+                        name: cleaned,
+                        source: NameSource::FirstUserMessage,
+                        session_id: session_id.to_string(),
+                    });
+                }
+            }
+        }
+
+        Err(SessionReaderError::InvalidFormat)
+    }
+
+    /// 清理 user message 内容
+    ///
+    /// 去除 Markdown 符号、多余空白和特殊字符
+    fn clean_user_message_content(content: &str) -> String {
+        // 去除常见的 Markdown 符号
+        let cleaned = content
+            .replace("#", "")
+            .replace("*", "")
+            .replace("`", "")
+            .replace("[", "")
+            .replace("]", "")
+            .replace("(", "")
+            .replace(")", "")
+            .replace("<", "")
+            .replace(">", "")
+            .replace("|", "")
+            // 去除多余空白
+            .split_whitespace()
+            .collect::<Vec<&str>>()
+            .join(" ");
+
+        cleaned
+    }
+
+    /// 策略 3: 从会话内容智能提取（Markdown 标题）
+    async fn extract_from_content(
+        file_path: &Path,
+        session_id: &str,
+    ) -> Result<Self, SessionReaderError> {
+        let content = tokio::fs::read_to_string(file_path).await?;
+
+        // 读取最后 N 条消息（不需要 ?，因为它直接返回 Vec）
+        let messages: Vec<Message> = Self::read_last_n_messages(&content, 10);
+
+        // 优先从助手消息中提取 Markdown 标题
+        for msg in messages.iter().rev() {
+            if msg.role() == "assistant" {
+                if let Some(title) = Self::extract_markdown_title(&msg.content()) {
+                    let simplified = Self::simplify_title(title);
+                    if !simplified.is_empty() {
+                        return Ok(Self {
+                            name: simplified,
+                            source: NameSource::ContentExtraction,
+                            session_id: session_id.to_string(),
+                        });
+                    }
+                }
+            }
+        }
+
+        Err(SessionReaderError::InvalidFormat)
+    }
+
+    /// 提取 Markdown 标题
+    fn extract_markdown_title(content: &str) -> Option<String> {
+        let title_re = Regex::new(r"^#+\s*(.+?)\s*$").unwrap();
+
+        for line in content.lines().take(20) {
+            if let Some(caps) = title_re.captures(line) {
+                let title = caps.get(1)?.as_str().trim();
+                // 过滤掉过短的标题
+                if title.len() >= 4 {
+                    return Some(title.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    /// 简化标题（去除符号，限制长度）
+    fn simplify_title(title: String) -> String {
+        // 移除 Markdown 符号和表情符号
+        let simplified = title
+            .replace("## ", "")
+            .replace("# ", "")
+            .replace("✅", "")
+            .replace("❌", "")
+            .replace("⚠️", "")
+            .replace("！", "")
+            .replace("。", "")
+            .trim()
+            .to_string();
+
+        // 限制长度
+        if simplified.len() > 50 {
+            format!("{}...", &simplified[..47.min(simplified.len())])
+        } else {
+            simplified
+        }
+    }
+
+    /// 读取最后 N 条消息
+    fn read_last_n_messages(content: &str, n: usize) -> Vec<Message> {
+        content
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Message>(line).ok())
+            .rev()
+            .take(n)
+            .collect()
+    }
+}
+
+impl Message {
+    fn role(&self) -> &str {
+        self.message
+            .as_ref()
+            .map(|m| m.role.as_str())
+            .unwrap_or("unknown")
+    }
+
+    fn content(&self) -> String {
+        self.message
+            .as_ref()
+            .and_then(|m| m.content.as_ref())
+            .and_then(|c| c.as_str())
+            .unwrap_or("")
+            .to_string()
+    }
 }
 
 /// 从文件路径提取会话 ID
@@ -210,6 +552,67 @@ pub async fn batch_read_summaries(
         .map(|path| read_summary_from_file(path));
 
     join_all(futures).await
+}
+
+// ==================== History.jsonl 读取功能 ====================
+
+/// 从 history.jsonl 读取会话的显示名称映射
+///
+/// # 参数
+/// * `claude_dir` - Claude 配置目录（通常是 `~/.claude`）
+///
+/// # 返回
+/// 返回 HashMap<session_id, display_name>
+///
+/// # 示例
+/// ```no_run
+/// use crate::session_reader::load_history_cache;
+/// use std::path::Path;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let history = load_history_cache(Path::new("/home/user/.claude")).await?;
+/// println!("Loaded {} history entries", history.len());
+/// # Ok(())
+/// # }
+/// ```
+pub async fn load_history_cache(
+    claude_dir: impl AsRef<Path>,
+) -> Result<HashMap<String, String>, SessionReaderError> {
+    let history_file = claude_dir.as_ref().join("history.jsonl");
+
+    if !history_file.exists() {
+        #[cfg(debug_assertions)]
+        eprintln!("[HistoryCache] history.jsonl 不存在，返回空缓存");
+
+        return Ok(HashMap::new());
+    }
+
+    let content = tokio::fs::read_to_string(&history_file).await?;
+    let mut display_names = HashMap::new();
+
+    #[cfg(debug_assertions)]
+    eprintln!("[HistoryCache] 开始读取 history.jsonl: {:?}", history_file);
+
+    for line in content.lines() {
+        if let Ok(record) = serde_json::from_str::<HistoryRecord>(line) {
+            // 只保留每个会话的第一次记录（最早的）
+            display_names.entry(record.session_id).or_insert(record.display);
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    eprintln!("[HistoryCache] 加载完成，共 {} 个会话", display_names.len());
+
+    Ok(display_names)
+}
+
+/// 便捷函数：从默认路径加载 history 缓存
+///
+/// 自动查找 `~/.claude/history.jsonl`
+pub async fn load_default_history_cache() -> Result<HashMap<String, String>, SessionReaderError> {
+    let home = dirs::home_dir().ok_or(SessionReaderError::HomeDirNotFound)?;
+    let claude_dir = home.join(".claude");
+    load_history_cache(claude_dir).await
 }
 
 #[cfg(test)]

@@ -96,8 +96,8 @@ export function SessionsPage({ className }: SessionsPageProps) {
 
       {/* 主内容区域 */}
       <div className="flex-1 flex overflow-hidden bg-background">
-        {/* 左侧：目录侧边栏 */}
-        <div className="w-64 border-r shrink-0 bg-card">
+        {/* 左侧：目录侧边栏 (356px = 256px + 100px) */}
+        <div className="w-[356px] border-r shrink-0 bg-card">
           <ProjectSidebar
             onDirectorySelect={handleDirectorySelect}
             selectedDirectory={selectedDirectory?.path}
