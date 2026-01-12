@@ -193,37 +193,6 @@ function App() {
           />
         </div>
 
-        <div className="info-note">
-          <small>
-            ℹ️ API 配置已移至设置页 (F6)。请确保已配置活跃的 LLM 提供商。
-          </small>
-        </div>
-
-        <div className="info-note" style={{ marginTop: '15px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <span style={{ fontSize: '1.2em' }}>📂</span>
-            <strong>会话管理功能</strong>
-          </div>
-          <small style={{ display: 'block', marginBottom: '8px' }}>
-            查看所有 Claude Code 会话历史，按项目分组浏览，支持搜索、过滤和评分。
-          </small>
-          <button
-            onClick={() => navigate('/sessions')}
-            style={{
-              padding: '6px 12px',
-              background: 'var(--color-app-primary-blue)',
-              color: 'var(--color-app-primary-blue-foreground)',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-              fontSize: '0.9em',
-              fontWeight: 'bold'
-            }}
-          >
-            前往会话管理 →
-          </button>
-        </div>
-
         <button
           className="primary-btn"
           onClick={handleAnalyze}
