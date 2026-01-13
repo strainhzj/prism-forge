@@ -355,13 +355,17 @@ export function ProjectSidebar({
                     className={cn(
                       // 整体布局：边框包裹所有元素
                       'flex items-center gap-2 px-3 py-2 border rounded-md text-sm transition-all',
-                      // 选中状态：高亮边框和背景
+                      // 选中状态：橙色高亮边框和背景
                       isSelected
-                        ? 'border-primary bg-primary/5 shadow-sm'
-                        : 'border-border bg-card hover:border-primary/50 hover:bg-accent/5',
+                        ? 'shadow-sm'
+                        : 'hover:border-[#FF6B6B]/30',
                       // 禁用状态
                       !dir.is_active && 'opacity-50'
                     )}
+                    style={{
+                      borderColor: isSelected ? 'rgba(255, 107, 107, 0.5)' : '#333',
+                      backgroundColor: isSelected ? 'rgba(255, 107, 107, 0.1)' : '#1E1E1E'
+                    }}
                   >
                     {/* 目录图标和名称 */}
                     <button
@@ -370,10 +374,10 @@ export function ProjectSidebar({
                       title={dir.path}
                       disabled={!dir.is_active}
                     >
-                      <Folder className="h-4 w-4 shrink-0 text-blue-500" />
+                      <Folder className="h-4 w-4 shrink-0" style={{ color: '#FF6B6B' }} />
                       <span className={cn(
                         "flex-1 text-left truncate",
-                        isSelected ? "text-foreground font-medium" : "text-foreground"
+                        isSelected ? "text-white font-medium" : "text-gray-300"
                       )}>
                         {dir.name}
                       </span>
