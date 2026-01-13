@@ -218,16 +218,17 @@ export function ProjectSidebar({
     <div className={cn('flex flex-col h-full bg-card', className)}>
       {/* 头部 */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
-        <h2 className="text-sm font-semibold text-white">项目</h2>
+        <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>项目</h2>
         <div className="flex items-center gap-2">
           {/* 添加目录按钮 */}
           <Button
             variant="ghost"
             size="sm"
             onClick={handleSelectDirectory}
-            className="h-7 px-2 text-white hover:bg-white/10"
+            className="h-7 px-2 hover:bg-[var(--color-app-secondary)]"
+            style={{ color: 'var(--color-text-primary)' }}
           >
-            <Plus className="h-4 w-4 mr-1 text-white" />
+            <Plus className="h-4 w-4 mr-1" style={{ color: 'var(--color-text-primary)' }} />
             添加目录
           </Button>
           {/* 对话框 */}
@@ -327,7 +328,8 @@ export function ProjectSidebar({
             variant="ghost"
             size="sm"
             onClick={handleRefresh}
-            className="h-7 px-2 text-white hover:bg-white/10"
+            className="h-7 px-2 hover:bg-[var(--color-app-secondary)]"
+            style={{ color: 'var(--color-text-primary)' }}
           >
             刷新
           </Button>
@@ -358,13 +360,13 @@ export function ProjectSidebar({
                       // 选中状态：橙色高亮边框和背景
                       isSelected
                         ? 'shadow-sm'
-                        : 'hover:border-[#FF6B6B]/30',
+                        : 'hover:opacity-80',
                       // 禁用状态
                       !dir.is_active && 'opacity-50'
                     )}
                     style={{
-                      borderColor: isSelected ? 'rgba(255, 107, 107, 0.5)' : '#333',
-                      backgroundColor: isSelected ? 'rgba(255, 107, 107, 0.1)' : '#1E1E1E'
+                      borderColor: isSelected ? 'var(--color-accent-warm)' : 'var(--color-border-light)',
+                      backgroundColor: isSelected ? 'rgba(245, 158, 11, 0.1)' : 'transparent'
                     }}
                   >
                     {/* 目录图标和名称 */}
@@ -374,10 +376,10 @@ export function ProjectSidebar({
                       title={dir.path}
                       disabled={!dir.is_active}
                     >
-                      <Folder className="h-4 w-4 shrink-0" style={{ color: '#FF6B6B' }} />
+                      <Folder className="h-4 w-4 shrink-0" style={{ color: 'var(--color-accent-warm)' }} />
                       <span className={cn(
-                        "flex-1 text-left truncate",
-                        isSelected ? "text-white font-medium" : "text-gray-300"
+                        "flex-1 text-left truncate font-medium",
+                        isSelected ? "text-foreground" : "text-muted-foreground"
                       )}>
                         {dir.name}
                       </span>

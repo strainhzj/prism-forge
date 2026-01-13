@@ -3,132 +3,173 @@
 /* ==================== 浅色模式（默认） ==================== */
 :root,
 :root.light {
-  /* Tailwind 基础颜色变量 */
-  --color-background: oklch(100% 0 0);
-  --color-foreground: oklch(11% 0.02 285);
-  --color-card: oklch(100% 0 0);
-  --color-card-foreground: oklch(11% 0.02 285);
-  --color-popover: oklch(100% 0 0);
-  --color-popover-foreground: oklch(11% 0.02 285);
-  --color-primary: oklch(11% 0.04 285);
-  --color-primary-foreground: oklch(98% 0.01 285);
-  --color-secondary: oklch(96% 0.01 285);
-  --color-secondary-foreground: oklch(11% 0.04 285);
-  --color-muted: oklch(96% 0.01 285);
-  --color-muted-foreground: oklch(47% 0.02 285);
-  --color-accent: oklch(96% 0.01 285);
-  --color-accent-foreground: oklch(11% 0.04 285);
-  --color-destructive: oklch(60% 0.22 25);
-  --color-destructive-foreground: oklch(98% 0.01 285);
-  --color-border: oklch(91% 0.01 285);
-  --color-input: oklch(91% 0.01 285);
-  --color-ring: oklch(11% 0.02 285);
+  /* ==================== 主题色定义（基于提示词设计） ==================== */
+  /* 背景色：非常浅的灰色背景 #F8F9FA */
+  --color-bg-primary: #F8F9FA;
+  /* 面板/卡片色：纯白色 #FFFFFF */
+  --color-bg-card: #FFFFFF;
+  /* 主强调色：暖橙色 #F59E0B */
+  --color-accent-warm: #F59E0B;
+  /* 次强调色：专业蓝色 #2563EB */
+  --color-accent-blue: #2563EB;
+  /* 主文本色：深灰色 #1F2937 */
+  --color-text-primary: #1F2937;
+  /* 次文本色：中灰色 #6B7280 */
+  --color-text-secondary: #6B7280;
+  /* 边框色：浅灰色 #E5E7EB */
+  --color-border-light: #E5E7EB;
+
+  /* Tailwind 基础颜色变量（使用 HEX 值替代 oklch） */
+  --color-background: #F8F9FA;
+  --color-foreground: #1F2937;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #1F2937;
+  --color-popover: #FFFFFF;
+  --color-popover-foreground: #1F2937;
+  --color-primary: #1F2937;
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: #F3F4F6;
+  --color-secondary-foreground: #1F2937;
+  --color-muted: #F3F4F6;
+  --color-muted-foreground: #6B7280;
+  --color-accent: #F3F4F6;
+  --color-accent-foreground: #1F2937;
+  --color-destructive: #EF4444;
+  --color-destructive-foreground: #FFFFFF;
+  --color-border: #E5E7EB;
+  --color-input: #E5E7EB;
+  --color-ring: #1F2937;
 
   /* App.css 扩展颜色变量 - 浅色模式 */
-  --color-app-foreground: oklch(20% 0.02 285);          /* #333 -> 更深的灰色 */
-  --color-app-secondary: oklch(96% 0.01 285);          /* #f5f5f5 */
-  --color-app-button-bg: oklch(42% 0.02 285);          /* #6c757d */
-  --color-app-button-hover: oklch(38% 0.02 285);       /* #5a6268 */
-  --color-app-white: oklch(100% 0 0);                 /* white */
-  --color-app-border-light: oklch(85% 0.01 285);      /* #ccc, #ddd, #dee2e6 */
-  --color-app-button-default: oklch(93% 0.01 285);    /* #eee */
-  --color-app-primary-blue: oklch(55% 0.15 250);      /* #007bff */
-  --color-app-primary-blue-foreground: oklch(98% 0.01 285); /* white */
-  --color-app-info-bg: oklch(92% 0.05 230);           /* #e7f3ff */
-  --color-app-info-text: oklch(45% 0.15 250);         /* #004085 */
-  --color-app-result-bg: oklch(97% 0.02 150);         /* #f9fdfc */
-  --color-app-success: oklch(60% 0.15 145);           /* #28a745 */
-  --color-app-error-bg: oklch(92% 0.08 25);           /* #f8d7da */
-  --color-app-error-border: oklch(75% 0.12 25);       /* #f5c6cb */
-  --color-app-error-text: oklch(40% 0.15 25);         /* #721c24 */
-  --color-app-error-accent: oklch(55% 0.18 25);       /* #dc3545 */
+  --color-app-foreground: #1F2937;                    /* 深灰色文字 */
+  --color-app-secondary: #F3F4F6;                    /* 浅灰色背景 */
+  --color-app-button-bg: #F59E0B;                     /* 暖橙色按钮 */
+  --color-app-button-hover: #D97706;                  /* 暖橙色悬停 */
+  --color-app-white: #FFFFFF;                         /* 白色 */
+  --color-app-border-light: #E5E7EB;                  /* 浅灰色边框 */
+  --color-app-button-default: #F3F4F6;               /* 默认按钮背景 */
+  --color-app-primary-blue: #2563EB;                  /* 专业蓝色 */
+  --color-app-primary-blue-foreground: #FFFFFF;       /* 白色文字 */
+  --color-app-info-bg: #DBEAFE;                       /* 浅蓝色信息背景 */
+  --color-app-info-text: #1E40AF;                     /* 深蓝色信息文字 */
+  --color-app-result-bg: #FFFFFF;                     /* 白色结果背景 */
+  --color-app-success: #10B981;                       /* 绿色成功 */
+  --color-app-error-bg: #FEE2E2;                      /* 浅红色错误背景 */
+  --color-app-error-border: #FCA5A5;                  /* 浅红色错误边框 */
+  --color-app-error-text: #991B1B;                    /* 深红色错误文字 */
+  --color-app-error-accent: #EF4444;                  /* 红色错误强调 */
 }
 
 /* ==================== 暗色模式 ==================== */
 :root.dark {
-  /* Tailwind 基础颜色变量 */
-  --color-background: oklch(11% 0.02 285);
-  --color-foreground: oklch(98% 0.01 285);
-  --color-card: oklch(11% 0.02 285);
-  --color-card-foreground: oklch(98% 0.01 285);
-  --color-popover: oklch(11% 0.02 285);
-  --color-popover-foreground: oklch(98% 0.01 285);
-  --color-primary: oklch(98% 0.01 285);
-  --color-primary-foreground: oklch(11% 0.04 285);
-  --color-secondary: oklch(17% 0.03 285);
-  --color-secondary-foreground: oklch(98% 0.01 285);
-  --color-muted: oklch(17% 0.03 285);
-  --color-muted-foreground: oklch(65% 0.02 285);
-  --color-accent: oklch(17% 0.03 285);
-  --color-accent-foreground: oklch(98% 0.01 285);
-  --color-destructive: oklch(31% 0.15 25);
-  --color-destructive-foreground: oklch(98% 0.01 285);
-  --color-border: oklch(17% 0.03 285);
-  --color-input: oklch(17% 0.03 285);
-  --color-ring: oklch(83% 0.01 285);
+  /* ==================== 主题色定义（暗色模式） ==================== */
+  /* 背景色：深色 #121212 */
+  --color-bg-primary: #121212;
+  /* 面板/卡片色：深灰色 #1E1E1E */
+  --color-bg-card: #1E1E1E;
+  /* 主强调色：珊瑚橙色 #FF6B6B */
+  --color-accent-warm: #FF6B6B;
+  /* 次强调色：天空蓝色 #4A9EFF */
+  --color-accent-blue: #4A9EFF;
+  /* 主文本色：浅灰色 #E0E0E0 */
+  --color-text-primary: #E0E0E0;
+  /* 次文本色：中灰色 #9CA3AF */
+  --color-text-secondary: #9CA3AF;
+  /* 边框色：深灰色 #333333 */
+  --color-border-light: #333333;
+
+  /* Tailwind 基础颜色变量（使用 HEX 值替代 oklch） */
+  --color-background: #121212;
+  --color-foreground: #E0E0E0;
+  --color-card: #1E1E1E;
+  --color-card-foreground: #E0E0E0;
+  --color-popover: #1E1E1E;
+  --color-popover-foreground: #E0E0E0;
+  --color-primary: #E0E0E0;
+  --color-primary-foreground: #121212;
+  --color-secondary: #2D2D2D;
+  --color-secondary-foreground: #E0E0E0;
+  --color-muted: #2D2D2D;
+  --color-muted-foreground: #9CA3AF;
+  --color-accent: #2D2D2D;
+  --color-accent-foreground: #E0E0E0;
+  --color-destructive: #DC2626;
+  --color-destructive-foreground: #FFFFFF;
+  --color-border: #333333;
+  --color-input: #333333;
+  --color-ring: #E0E0E0;
 
   /* App.css 扩展颜色变量 - 暗色模式 */
-  --color-app-foreground: oklch(90% 0.01 285);           /* 浅色文字 */
-  --color-app-secondary: oklch(20% 0.02 285);           /* 深灰色背景 */
-  --color-app-button-bg: oklch(45% 0.02 285);           /* 按钮背景 */
-  --color-app-button-hover: oklch(50% 0.02 285);        /* 按钮悬停 */
-  --color-app-white: oklch(15% 0.02 285);               /* 深色"白色" */
-  --color-app-border-light: oklch(25% 0.02 285);        /* 深色边框 */
-  --color-app-button-default: oklch(22% 0.02 285);      /* 默认按钮 */
-  --color-app-primary-blue: oklch(60% 0.18 250);        /* 主蓝色 */
-  --color-app-primary-blue-foreground: oklch(98% 0.01 285); /* 白色文字 */
-  --color-app-info-bg: oklch(25% 0.08 230);             /* 信息背景 */
-  --color-app-info-text: oklch(75% 0.12 250);           /* 信息文字 */
-  --color-app-result-bg: oklch(18% 0.02 150);           /* 结果背景 */
-  --color-app-success: oklch(65% 0.15 145);             /* 成功色 */
-  --color-app-error-bg: oklch(30% 0.10 25);             /* 错误背景 */
-  --color-app-error-border: oklch(40% 0.12 25);         /* 错误边框 */
-  --color-app-error-text: oklch(85% 0.10 25);           /* 错误文字 */
-  --color-app-error-accent: oklch(60% 0.15 25);         /* 错误强调 */
+  --color-app-foreground: #E0E0E0;                    /* 浅色文字 */
+  --color-app-secondary: #2D2D2D;                    /* 深灰色背景 */
+  --color-app-button-bg: #FF6B6B;                     /* 珊瑚橙色按钮 */
+  --color-app-button-hover: #FF8E8E;                  /* 珊瑚橙色悬停 */
+  --color-app-white: #1E1E1E;                         /* 深色"白色" */
+  --color-app-border-light: #333333;                  /* 深色边框 */
+  --color-app-button-default: #2D2D2D;               /* 默认按钮背景 */
+  --color-app-primary-blue: #4A9EFF;                  /* 天空蓝色 */
+  --color-app-primary-blue-foreground: #FFFFFF;       /* 白色文字 */
+  --color-app-info-bg: #1E3A5F;                       /* 深蓝色信息背景 */
+  --color-app-info-text: #60A5FA;                     /* 浅蓝色信息文字 */
+  --color-app-result-bg: #0A0A0A;                     /* 深色结果背景 */
+  --color-app-success: #34D399;                       /* 绿色成功 */
+  --color-app-error-bg: #3F1515;                      /* 深红色错误背景 */
+  --color-app-error-border: #B91C1C;                  /* 深红色错误边框 */
+  --color-app-error-text: #FCA5A5;                    /* 浅红色错误文字 */
+  --color-app-error-accent: #EF4444;                  /* 红色错误强调 */
 }
 
 /* ==================== 系统主题检测（降级支持） ==================== */
 @media (prefers-color-scheme: dark) {
   :root:not(.light):not(.dark) {
-    /* Tailwind 基础颜色变量 */
-    --color-background: oklch(11% 0.02 285);
-    --color-foreground: oklch(98% 0.01 285);
-    --color-card: oklch(11% 0.02 285);
-    --color-card-foreground: oklch(98% 0.01 285);
-    --color-popover: oklch(11% 0.02 285);
-    --color-popover-foreground: oklch(98% 0.01 285);
-    --color-primary: oklch(98% 0.01 285);
-    --color-primary-foreground: oklch(11% 0.04 285);
-    --color-secondary: oklch(17% 0.03 285);
-    --color-secondary-foreground: oklch(98% 0.01 285);
-    --color-muted: oklch(17% 0.03 285);
-    --color-muted-foreground: oklch(65% 0.02 285);
-    --color-accent: oklch(17% 0.03 285);
-    --color-accent-foreground: oklch(98% 0.01 285);
-    --color-destructive: oklch(31% 0.15 25);
-    --color-destructive-foreground: oklch(98% 0.01 285);
-    --color-border: oklch(17% 0.03 285);
-    --color-input: oklch(17% 0.03 285);
-    --color-ring: oklch(83% 0.01 285);
+    /* ==================== 主题色定义（暗色模式） ==================== */
+    --color-bg-primary: #121212;
+    --color-bg-card: #1E1E1E;
+    --color-accent-warm: #FF6B6B;
+    --color-accent-blue: #4A9EFF;
+    --color-text-primary: #E0E0E0;
+    --color-text-secondary: #9CA3AF;
+    --color-border-light: #333333;
+
+    /* Tailwind 基础颜色变量（使用 HEX 值替代 oklch） */
+    --color-background: #121212;
+    --color-foreground: #E0E0E0;
+    --color-card: #1E1E1E;
+    --color-card-foreground: #E0E0E0;
+    --color-popover: #1E1E1E;
+    --color-popover-foreground: #E0E0E0;
+    --color-primary: #E0E0E0;
+    --color-primary-foreground: #121212;
+    --color-secondary: #2D2D2D;
+    --color-secondary-foreground: #E0E0E0;
+    --color-muted: #2D2D2D;
+    --color-muted-foreground: #9CA3AF;
+    --color-accent: #2D2D2D;
+    --color-accent-foreground: #E0E0E0;
+    --color-destructive: #DC2626;
+    --color-destructive-foreground: #FFFFFF;
+    --color-border: #333333;
+    --color-input: #333333;
+    --color-ring: #E0E0E0;
 
     /* App.css 扩展颜色变量 - 暗色模式 */
-    --color-app-foreground: oklch(90% 0.01 285);
-    --color-app-secondary: oklch(20% 0.02 285);
-    --color-app-button-bg: oklch(45% 0.02 285);
-    --color-app-button-hover: oklch(50% 0.02 285);
-    --color-app-white: oklch(15% 0.02 285);
-    --color-app-border-light: oklch(25% 0.02 285);
-    --color-app-button-default: oklch(22% 0.02 285);
-    --color-app-primary-blue: oklch(60% 0.18 250);
-    --color-app-primary-blue-foreground: oklch(98% 0.01 285);
-    --color-app-info-bg: oklch(25% 0.08 230);
-    --color-app-info-text: oklch(75% 0.12 250);
-    --color-app-result-bg: oklch(18% 0.02 150);
-    --color-app-success: oklch(65% 0.15 145);
-    --color-app-error-bg: oklch(30% 0.10 25);
-    --color-app-error-border: oklch(40% 0.12 25);
-    --color-app-error-text: oklch(85% 0.10 25);
-    --color-app-error-accent: oklch(60% 0.15 25);
+    --color-app-foreground: #E0E0E0;
+    --color-app-secondary: #2D2D2D;
+    --color-app-button-bg: #FF6B6B;
+    --color-app-button-hover: #FF8E8E;
+    --color-app-white: #1E1E1E;
+    --color-app-border-light: #333333;
+    --color-app-button-default: #2D2D2D;
+    --color-app-primary-blue: #4A9EFF;
+    --color-app-primary-blue-foreground: #FFFFFF;
+    --color-app-info-bg: #1E3A5F;
+    --color-app-info-text: #60A5FA;
+    --color-app-result-bg: #0A0A0A;
+    --color-app-success: #34D399;
+    --color-app-error-bg: #3F1515;
+    --color-app-error-border: #B91C1C;
+    --color-app-error-text: #FCA5A5;
+    --color-app-error-accent: #EF4444;
   }
 }
 
