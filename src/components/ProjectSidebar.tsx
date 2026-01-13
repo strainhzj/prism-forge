@@ -218,16 +218,16 @@ export function ProjectSidebar({
     <div className={cn('flex flex-col h-full bg-card', className)}>
       {/* 头部 */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
-        <h2 className="text-sm font-semibold text-foreground">项目</h2>
+        <h2 className="text-sm font-semibold text-white">项目</h2>
         <div className="flex items-center gap-2">
           {/* 添加目录按钮 */}
           <Button
             variant="ghost"
             size="sm"
             onClick={handleSelectDirectory}
-            className="h-7 px-2"
+            className="h-7 px-2 text-white hover:bg-white/10"
           >
-            <Plus className="h-4 w-4 mr-1" />
+            <Plus className="h-4 w-4 mr-1 text-white" />
             添加目录
           </Button>
           {/* 对话框 */}
@@ -327,7 +327,7 @@ export function ProjectSidebar({
             variant="ghost"
             size="sm"
             onClick={handleRefresh}
-            className="h-7 px-2"
+            className="h-7 px-2 text-white hover:bg-white/10"
           >
             刷新
           </Button>

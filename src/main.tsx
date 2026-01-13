@@ -19,8 +19,14 @@ const SessionsPage = lazy(() =>
 const SessionDetailPage = lazy(() =>
   import("./pages/SessionDetailPage").then(m => ({ default: m.SessionDetailPage }))
 );
+const SessionDetailPageV2 = lazy(() =>
+  import("./pages/SessionDetailPageV2").then(m => ({ default: m.SessionDetailPageV2 }))
+);
 const PromptLab = lazy(() =>
   import("./pages/PromptLab").then(m => ({ default: m.PromptLab }))
+);
+const DiagnosticPage = lazy(() =>
+  import("./pages/DiagnosticPage").then(m => ({ default: m.DiagnosticPage }))
 );
 
 // 加载中组件
@@ -73,8 +79,11 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/settings/v2" element={<SettingsPage />} />
                 <Route path="/sessions" element={<SessionsPage />} />
-                <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
+                <Route path="/sessions/:sessionId" element={<SessionDetailPageV2 />} />
+                {/* 保留旧版本路由以备回退 */}
+                <Route path="/sessions/:sessionId/legacy" element={<SessionDetailPage />} />
                 <Route path="/prompt-lab" element={<PromptLab />} />
+                <Route path="/diagnostic" element={<DiagnosticPage />} />
               </Routes>
             </Suspense>
           </RouteDebugger>
