@@ -74,20 +74,20 @@ export function SessionsPage({ className }: SessionsPageProps) {
   }, []);
 
   return (
-    <div className={cn('flex flex-col h-screen bg-background', className)}>
+    <div className={cn('flex flex-col h-screen', className)} style={{ backgroundColor: '#121212' }}>
       {/* 顶部导航栏 */}
-      <div className="flex items-center gap-4 px-6 py-4 border-b bg-background">
+      <div className="flex items-center gap-4 px-6 py-4 border-b" style={{ backgroundColor: '#1E1E1E', borderColor: '#333' }}>
         <Button
           variant="ghost"
           size="icon"
           onClick={handleBack}
-          className="shrink-0"
+          className="shrink-0 hover:bg-[#333]"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <ArrowLeft className="h-5 w-5 text-gray-400" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-foreground">会话管理</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-xl font-bold text-white">会话管理</h1>
+          <p className="text-sm text-gray-400">
             浏览和管理 Claude Code 会话历史
           </p>
         </div>
@@ -95,9 +95,9 @@ export function SessionsPage({ className }: SessionsPageProps) {
       </div>
 
       {/* 主内容区域 */}
-      <div className="flex-1 flex overflow-hidden bg-background">
+      <div className="flex-1 flex overflow-hidden" style={{ backgroundColor: '#121212' }}>
         {/* 左侧：目录侧边栏 (356px = 256px + 100px) */}
-        <div className="w-[356px] border-r shrink-0 bg-card">
+        <div className="w-[356px] border-r shrink-0" style={{ backgroundColor: '#1E1E1E', borderColor: '#333' }}>
           <ProjectSidebar
             onDirectorySelect={handleDirectorySelect}
             selectedDirectory={selectedDirectory?.path}
@@ -105,7 +105,7 @@ export function SessionsPage({ className }: SessionsPageProps) {
         </div>
 
         {/* 右侧：内容区域（根据状态切换） */}
-        <div className="flex-1 min-w-0 bg-background">
+        <div className="flex-1 min-w-0" style={{ backgroundColor: '#121212' }}>
           {viewState === 'directory_list' && selectedDirectory ? (
             // 目录列表视图
             <SessionFileList
@@ -122,8 +122,8 @@ export function SessionsPage({ className }: SessionsPageProps) {
           ) : (
             // 空状态（未选择目录）
             <div className="flex flex-col items-center justify-center h-full text-center p-4">
-              <p className="text-foreground font-medium text-lg">请选择一个监控目录</p>
-              <p className="text-sm text-muted-foreground mt-2">
+              <p className="text-white font-medium text-lg">请选择一个监控目录</p>
+              <p className="text-sm text-gray-400 mt-2">
                 从左侧列表中选择一个目录查看其会话文件
               </p>
             </div>
