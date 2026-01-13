@@ -219,13 +219,13 @@ export function SessionDetailPageV2({ className }: { className?: string }) {
   // 会话不存在
   if (!session) {
     return (
-      <div className={cn('flex flex-col h-full items-center justify-center', className)} style={{ backgroundColor: '#121212' }}>
+      <div className={cn('flex flex-col h-full items-center justify-center', className)} style={{ backgroundColor: 'var(--color-bg-primary)' }}>
         <Alert variant="destructive" className="max-w-md">
           <AlertDescription>
             会话不存在或已被删除
           </AlertDescription>
         </Alert>
-        <Button variant="outline" onClick={handleBack} className="mt-4 text-white border-gray-600 hover:bg-white/10">
+        <Button variant="outline" onClick={handleBack} className="mt-4">
           返回会话列表
         </Button>
       </div>
@@ -233,20 +233,20 @@ export function SessionDetailPageV2({ className }: { className?: string }) {
   }
 
   return (
-    <div className={cn('flex flex-col h-screen', className)} style={{ backgroundColor: '#121212' }}>
+    <div className={cn('flex flex-col h-screen', className)} style={{ backgroundColor: 'var(--color-bg-primary)' }}>
       {/* 顶部导航栏 */}
-      <div className="flex items-center gap-4 px-6 py-4 border-b" style={{ backgroundColor: '#1E1E1E', borderColor: '#333' }}>
+      <div className="flex items-center gap-4 px-6 py-4 border-b" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
         <Button
           variant="ghost"
           size="icon"
           onClick={handleBack}
-          className="shrink-0 hover:bg-white/10"
+          className="shrink-0 hover:bg-[var(--color-app-secondary)]"
         >
-          <ArrowLeft className="h-5 w-5 text-white" />
+          <ArrowLeft className="h-5 w-5" style={{ color: 'var(--color-text-primary)' }} />
         </Button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-white shrink-0" />
+            <FileText className="h-5 w-5 shrink-0" style={{ color: 'var(--color-text-primary)' }} />
             <h1 className="text-xl font-bold truncate text-foreground">
               {session.projectName}
             </h1>
@@ -259,9 +259,9 @@ export function SessionDetailPageV2({ className }: { className?: string }) {
           variant="outline"
           size="sm"
           onClick={() => setShowExportDialog(true)}
-          className="shrink-0 border-gray-600 text-white hover:bg-white/10 hover:text-white"
+          className="shrink-0"
         >
-          <Download className="h-4 w-4 mr-2 text-white" />
+          <Download className="h-4 w-4 mr-2" />
           导出
         </Button>
         <Button
@@ -269,10 +269,10 @@ export function SessionDetailPageV2({ className }: { className?: string }) {
           size="icon"
           onClick={loadSessionContent}
           disabled={loading}
-          className="shrink-0 hover:bg-white/10"
+          className="shrink-0 hover:bg-[var(--color-app-secondary)]"
           title="刷新"
         >
-          <RefreshCw className={cn('h-4 w-4 text-white', loading && 'animate-spin')} />
+          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} style={{ color: 'var(--color-text-primary)' }} />
         </Button>
         <ThemeToggle />
       </div>
@@ -281,11 +281,11 @@ export function SessionDetailPageV2({ className }: { className?: string }) {
       <div className="flex-1 min-h-0 overflow-hidden">
         <div className="flex h-full">
           {/* 左侧：消息列表 */}
-          <div className="flex-1 min-w-0 overflow-y-auto" style={{ backgroundColor: '#0A0A0A' }}>
+          <div className="flex-1 min-w-0 overflow-y-auto" style={{ backgroundColor: 'var(--color-app-result-bg)' }}>
             <div className="max-w-4xl mx-auto p-6 space-y-4">
               {/* 消息列表标题 */}
               <div className="flex items-center justify-between sticky top-0 z-10 py-3">
-                <h2 className="text-lg font-semibold text-white">
+                <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
                   Messages ({messageList.length})
                 </h2>
               </div>
@@ -294,8 +294,8 @@ export function SessionDetailPageV2({ className }: { className?: string }) {
               {loading && (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center space-y-2">
-                    <RefreshCw className="h-8 w-8 animate-spin text-white mx-auto" />
-                    <p className="text-sm text-gray-400">加载中...</p>
+                    <RefreshCw className="h-8 w-8 animate-spin mx-auto" style={{ color: 'var(--color-text-primary)' }} />
+                    <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>加载中...</p>
                   </div>
                 </div>
               )}
@@ -325,9 +325,9 @@ export function SessionDetailPageV2({ className }: { className?: string }) {
               {/* 空状态 */}
               {!loading && !error && messageList.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <FileText className="h-12 w-12 text-gray-400 mb-4" />
-                  <p className="text-white font-medium">暂无消息</p>
-                  <p className="text-sm text-gray-400 mt-2">
+                  <FileText className="h-12 w-12 mb-4" style={{ color: 'var(--color-text-secondary)' }} />
+                  <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>暂无消息</p>
+                  <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>
                     该会话文件为空或格式不正确
                   </p>
                 </div>
@@ -336,7 +336,7 @@ export function SessionDetailPageV2({ className }: { className?: string }) {
           </div>
 
           {/* 右侧：统计信息边栏 */}
-          <div className="w-[30%] min-w-[280px] max-w-md shrink-0 border-l overflow-y-auto" style={{ backgroundColor: '#1E1E1E', borderColor: '#333' }}>
+          <div className="w-[30%] min-w-[280px] max-w-md shrink-0 border-l overflow-y-auto" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
             <div className="sticky top-0 p-4">
               <SessionStatsSidebar
                 sessionId={session.sessionId}

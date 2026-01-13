@@ -107,9 +107,9 @@ export function SettingsPage({ className }: SettingsPageProps) {
   }, []);
 
   return (
-    <div className={cn('flex flex-col h-screen', className)} style={{ backgroundColor: '#121212' }}>
+    <div className={cn('flex flex-col h-screen', className)} style={{ backgroundColor: 'var(--color-bg-primary)' }}>
       {/* 顶部导航栏 */}
-      <div className="flex items-center gap-4 px-6 py-4 border-b" style={{ backgroundColor: '#1E1E1E', borderColor: '#333' }}>
+      <div className="flex items-center gap-4 px-6 py-4 border-b" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
         <Button
           variant="ghost"
           size="icon"
@@ -119,7 +119,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-white">设置</h1>
+          <h1 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>设置</h1>
         </div>
         {activeTab === 'providers' && (
           <Button onClick={handleCreate} className="shrink-0">
@@ -131,7 +131,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
       </div>
 
       {/* 主内容区域 */}
-      <div className="flex-1 overflow-y-auto p-6" style={{ backgroundColor: '#0A0A0A' }}>
+      <div className="flex-1 overflow-y-auto p-6" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
         <div className="max-w-4xl mx-auto space-y-6">
           {/* 错误提示 */}
           {error && (
@@ -152,7 +152,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
 
           {/* 标签页 */}
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SettingsTab)}>
-            <TabsList className="grid w-full grid-cols-2" style={{ backgroundColor: '#1E1E1E' }}>
+            <TabsList className="grid w-full grid-cols-2" style={{ backgroundColor: 'var(--color-bg-card)' }}>
               <TabsTrigger value="providers">API 提供商</TabsTrigger>
               <TabsTrigger value="vector">语义搜索</TabsTrigger>
             </TabsList>
@@ -166,11 +166,11 @@ export function SettingsPage({ className }: SettingsPageProps) {
 
               {/* 空状态提示 */}
               {!loading && providers.length === 0 && (
-                <Card className="p-12 text-center" style={{ backgroundColor: '#1E1E1E', borderColor: '#333' }}>
+                <Card className="p-12 text-center" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
                   <div className="space-y-4">
                     <div className="text-6xl">⚙️</div>
-                    <h3 className="text-lg font-semibold text-white">暂无 API 提供商</h3>
-                    <p className="text-gray-400 max-w-md mx-auto">
+                    <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>暂无 API 提供商</h3>
+                    <p className="max-w-md mx-auto" style={{ color: 'var(--color-text-secondary)' }}>
                       配置 LLM API 提供商以使用 AI 功能。支持 OpenAI、Anthropic、Ollama、xAI、Google 等多种提供商。
                     </p>
                     <Button onClick={handleCreate}>

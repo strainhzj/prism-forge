@@ -248,21 +248,21 @@ export function SessionFileList({
   );
 
   return (
-    <div className={cn('flex flex-col h-full', className)} style={{ backgroundColor: '#121212' }}>
+    <div className={cn('flex flex-col h-full', className)} style={{ backgroundColor: 'var(--color-bg-primary)' }}>
       {/* 头部 */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b" style={{ backgroundColor: '#1E1E1E', borderColor: '#333' }}>
+      <div className="flex items-center gap-3 px-6 py-4 border-b" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
         <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-semibold text-white truncate">{directoryName}</h2>
-          <p className="text-xs text-gray-400 truncate">
+          <h2 className="text-lg font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>{directoryName}</h2>
+          <p className="text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>
             {directoryPath}
           </p>
         </div>
 
         {/* 类型筛选复选框 */}
         <div className="flex items-center gap-2 px-3 py-1.5 border rounded-md transition-colors"
-             style={{ backgroundColor: '#1E1E1E', borderColor: '#333' }}
-             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#333'}
-             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1E1E1E'}
+             style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}
+             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-app-secondary)'}
+             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-bg-card)'}
         >
           <Checkbox
             id="include-agent"
@@ -275,7 +275,8 @@ export function SessionFileList({
           />
           <label
             htmlFor="include-agent"
-            className="text-sm cursor-pointer select-none user-select-none flex items-center gap-2 text-gray-300"
+            className="text-sm cursor-pointer select-none user-select-none flex items-center gap-2"
+            style={{ color: 'var(--color-text-secondary)' }}
             onClick={(e) => {
               // 点击 label 也触发 Checkbox 切换
               e.preventDefault();
@@ -288,18 +289,18 @@ export function SessionFileList({
           </label>
         </div>
 
-        <div className="text-sm text-gray-400">
+        <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
           {sessions.length} 个会话
         </div>
       </div>
 
       {/* 会话列表 */}
-      <div className="flex-1 overflow-y-auto" style={{ backgroundColor: '#121212' }}>
+      <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
         {loading ? (
           // 初始加载：完整骨架屏
           <div className="p-4 space-y-3">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="flex items-center gap-3 p-4 border rounded-xl" style={{ backgroundColor: '#1E1E1E', borderColor: '#333' }}>
+              <div key={i} className="flex items-center gap-3 p-4 border rounded-xl" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
                 <Skeleton className="h-4 w-4" />
                 <div className="flex-1 space-y-2">
                   {/* 完整骨架：模拟文本和元数据 */}
@@ -313,8 +314,8 @@ export function SessionFileList({
         ) : error ? (
           // 错误状态
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
-            <p className="text-red-400 font-medium">加载失败</p>
-            <p className="text-sm text-gray-400 mt-2">{error}</p>
+            <p className="font-medium" style={{ color: 'var(--color-app-error-accent)' }}>加载失败</p>
+            <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>{error}</p>
             <Button variant="outline" size="sm" onClick={() => loadSessions(false)} className="mt-4">
               重试
             </Button>
@@ -322,9 +323,9 @@ export function SessionFileList({
         ) : sessions.length === 0 ? (
           // 空状态
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
-            <FileText className="h-12 w-12 text-gray-500 mb-3" />
-            <p className="text-white font-medium">暂无会话文件</p>
-            <p className="text-sm text-gray-400 mt-2">
+            <FileText className="h-12 w-12 mb-3" style={{ color: 'var(--color-text-secondary)' }} />
+            <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>暂无会话文件</p>
+            <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>
               该目录下还没有 Claude Code 会话记录
             </p>
           </div>
@@ -337,30 +338,31 @@ export function SessionFileList({
                   onClick={() => handleSessionClick(session)}
                   className="w-full flex items-center gap-4 px-5 py-4 rounded-xl border transition-all text-left"
                   style={{
-                    backgroundColor: '#1E1E1E',
-                    borderColor: '#333',
+                    backgroundColor: 'var(--color-bg-card)',
+                    borderColor: 'var(--color-border-light)',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.boxShadow = '0 0 20px rgba(255, 107, 107, 0.2)';
-                    e.currentTarget.style.borderColor = 'rgba(255, 107, 107, 0.3)';
+                    e.currentTarget.style.boxShadow = '0 0 20px rgba(245, 158, 11, 0.2)';
+                    e.currentTarget.style.borderColor = 'rgba(245, 158, 11, 0.3)';
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.borderColor = '#333';
+                    e.currentTarget.style.borderColor = 'var(--color-border-light)';
                   }}
                   title={`修改时间: ${formatFullTime(session.modified_time)}`}
                 >
-                  <FileText className="h-4 w-4 text-gray-500 shrink-0" />
+                  <FileText className="h-4 w-4 shrink-0" style={{ color: 'var(--color-text-secondary)' }} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span
-                        className="text-sm font-semibold text-white truncate max-w-[200px]"
+                        className="text-sm font-semibold truncate max-w-[200px]"
+                        style={{ color: 'var(--color-text-primary)' }}
                         title={session.displayName || session.summary || session.session_id}
                       >
                         {session.displayName || session.summary || session.session_id}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                    <div className="flex items-center gap-3 mt-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                       <span className="flex items-center gap-1">
                         <Clock className="h-3 w-3" />
                         {formatRelativeTime(session.modified_time)}
@@ -377,7 +379,7 @@ export function SessionFileList({
               <li ref={observerTarget}>
                 {loadingMore ? (
                   // 加载更多的骨架屏（完整骨架）
-                  <div className="flex items-center gap-3 p-4 border rounded-xl" style={{ backgroundColor: '#1E1E1E', borderColor: '#333' }}>
+                  <div className="flex items-center gap-3 p-4 border rounded-xl" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
                     <Skeleton className="h-4 w-4" />
                     <div className="flex-1 space-y-2">
                       <Skeleton className="h-4 w-3/4" />
@@ -387,7 +389,7 @@ export function SessionFileList({
                   </div>
                 ) : (
                   // 懒加载触发器（不可见，用于 Intersection Observer）
-                  <div className="p-4 text-center text-sm text-gray-500">
+                  <div className="p-4 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                     加载更多...
                   </div>
                 )}
@@ -399,8 +401,8 @@ export function SessionFileList({
 
       {/* 底部统计信息 */}
       {!loading && !error && sessions.length > 0 && (
-        <div className="px-6 py-3 border-t text-xs text-gray-500 flex items-center justify-between"
-             style={{ backgroundColor: '#1E1E1E', borderColor: '#333' }}
+        <div className="px-6 py-3 border-t text-xs flex items-center justify-between"
+             style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)', color: 'var(--color-text-secondary)' }}
         >
           <span>共 {sessions.length} 个会话</span>
           {!hasMore && <span>已全部加载</span>}
