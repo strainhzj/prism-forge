@@ -4,4 +4,5 @@
 
 export { ProjectSwitcher } from './ProjectSwitcher';
 export { ProjectSwitcherDialog } from './ProjectSwitcherDialog';
-export type { ProjectSwitcherProps, ProjectSwitcherDialogProps } from './ProjectSwitcherDialog';
+export { ProjectCard } from './ProjectCard';
+export type { ProjectSwitcherProps, ProjectSwitcherDialogProps, ProjectCardProps } from './ProjectCard';

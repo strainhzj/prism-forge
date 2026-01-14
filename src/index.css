@@ -58,6 +58,13 @@
   --color-app-error-border: #FCA5A5;                  /* 浅红色错误边框 */
   --color-app-error-text: #991B1B;                    /* 深红色错误文字 */
   --color-app-error-accent: #EF4444;                  /* 红色错误强调 */
+
+  /* 项目卡片颜色变量 - 浅色模式 */
+  --color-project-card-bg: #FFF7ED;                   /* 浅橙色渐变起始 */
+  --color-project-card-border: #FED7AA;               /* 橙色边框 */
+  --color-project-card-empty-bg: #FAFAFA;             /* 空状态背景 */
+  --color-project-card-empty-border: #E5E7EB;         /* 空状态虚线边框 */
+  --color-project-card-pulse: rgba(245, 158, 11, 0.4); /* 脉冲动画光晕 */
 }
 
 /* ==================== 暗色模式 ==================== */
@@ -117,6 +124,13 @@
   --color-app-error-border: #B91C1C;                  /* 深红色错误边框 */
   --color-app-error-text: #FCA5A5;                    /* 浅红色错误文字 */
   --color-app-error-accent: #EF4444;                  /* 红色错误强调 */
+
+  /* 项目卡片颜色变量 - 暗色模式 */
+  --color-project-card-bg: #5C3A25;                   /* 亮橙色渐变起始 */
+  --color-project-card-border: #7A5035;               /* 亮橙色边框 */
+  --color-project-card-empty-bg: #1A1A1A;             /* 空状态背景 */
+  --color-project-card-empty-border: #333333;         /* 空状态虚线边框 */
+  --color-project-card-pulse: rgba(255, 107, 107, 0.4); /* 脉冲动画光晕（珊瑚红） */
 }
 
 /* ==================== 系统主题检测（降级支持） ==================== */
@@ -170,6 +184,13 @@
     --color-app-error-border: #B91C1C;
     --color-app-error-text: #FCA5A5;
     --color-app-error-accent: #EF4444;
+
+    /* 项目卡片颜色变量 - 暗色模式（系统主题） */
+    --color-project-card-bg: #5C3A25;
+    --color-project-card-border: #7A5035;
+    --color-project-card-empty-bg: #1A1A1A;
+    --color-project-card-empty-border: #333333;
+    --color-project-card-pulse: rgba(255, 107, 107, 0.4);
   }
 }
 
