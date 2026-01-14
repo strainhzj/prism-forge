@@ -155,7 +155,7 @@ function App() {
           <div className="flex flex-col p-6" style={{ height: '40%', backgroundColor: 'var(--color-bg-primary)' }}>
             {/* 暖橙色/珊瑚橙色发光标题 */}
             <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--color-accent-warm)' }}>
-              1. NEXT GOAL
+              1. 下一步目标
             </h2>
 
             {/* 目标输入区域 */}
@@ -214,7 +214,7 @@ function App() {
           <div className="flex flex-col p-6 overflow-hidden" style={{ height: '50%', backgroundColor: 'var(--color-app-result-bg)' }}>
             {/* 专业蓝色/天空蓝色发光标题 */}
             <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--color-accent-blue)' }}>
-              2. AI ANALYSIS RESULT
+              2. AI 分析结果
             </h2>
 
             {/* 结构化输出画布 */}
