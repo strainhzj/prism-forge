@@ -13,8 +13,7 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
+.vscode/
 .idea
 .DS_Store
 *.suo
@@ -22,6 +21,10 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Development documentation and plans
+docs/
+.kiro/
 
 # Development plans and temporary files
 dev_plans/
