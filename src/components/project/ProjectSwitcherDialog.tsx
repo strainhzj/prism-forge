@@ -111,16 +111,9 @@ export function ProjectSwitcherDialog({
     setSelectedSessionFile(null);
   }, [currentProject]);
 
-  // 弹窗打开时重置状态
-  useEffect(() => {
-    if (open) {
-      resetState();
-    }
-  }, [open, resetState]);
-
-  // 选择项目时加载会话文件
-  const handleProjectSelect = useCallback(async (project: MonitoredDirectory) => {
-    debugLog('handleProjectSelect', project.name);
+  // 加载会话文件并选择第一个（提取为独立函数）
+  const loadAndSelectFirstFile = useCallback(async (project: MonitoredDirectory) => {
+    debugLog('loadAndSelectFirstFile', project.name);
     setSelectedProject(project);
     setSelectedSessionFile(null);
     setLoadingFiles(true);
@@ -128,13 +121,35 @@ export function ProjectSwitcherDialog({
     try {
       const files = await getSessionFiles(project.path, false);
       setSessionFiles(files);
+      // 自动选择第一个会话文件
+      if (files.length > 0) {
+        setSelectedSessionFile(files[0].file_path);
+        debugLog('loadAndSelectFirstFile', 'auto selected first file', files[0].file_path);
+      }
     } catch (error) {
-      debugLog('handleProjectSelect', 'error', error);
+      debugLog('loadAndSelectFirstFile', 'error', error);
       setSessionFiles([]);
     } finally {
       setLoadingFiles(false);
     }
   }, [getSessionFiles]);
+
+  // 弹窗打开时重置状态，并自动加载当前项目的会话文件
+  useEffect(() => {
+    if (open) {
+      resetState();
+      // 如果存在当前项目，自动加载会话文件并选择第一个
+      if (currentProject) {
+        loadAndSelectFirstFile(currentProject);
+      }
+    }
+  }, [open, resetState, currentProject, loadAndSelectFirstFile]);
+
+  // 选择项目时加载会话文件
+  const handleProjectSelect = useCallback(async (project: MonitoredDirectory) => {
+    debugLog('handleProjectSelect', project.name);
+    loadAndSelectFirstFile(project);
+  }, [loadAndSelectFirstFile]);
 
   // 搜索过滤
   const filteredProjects = useMemo(() => {

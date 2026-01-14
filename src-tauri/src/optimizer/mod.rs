@@ -23,6 +23,8 @@ pub struct ParsedEvent {
     pub time: String,
     pub role: String,
     pub content: String,
+    #[serde(rename = "fullContent")]
+    pub full_content: String,  // 完整内容用于详情弹窗
     pub event_type: String,
 }
 
@@ -255,7 +257,8 @@ impl PromptOptimizer {
                     events.push(ParsedEvent {
                         time: timestamp.clone(),
                         role,
-                        content: final_text,
+                        content: final_text.clone(),
+                        full_content: final_text,  // 普通消息的完整内容和截断内容相同
                         event_type: "message".to_string(),
                     });
                 }
@@ -264,25 +267,43 @@ impl PromptOptimizer {
             // 2. 提取 ToolResult (上下文关键)
             if let Some(tool_res) = json.get("toolUseResult") {
                 let mut res_str = String::new();
+                let mut full_res_str = String::new();
 
                 if let Some(filenames) = tool_res.get("filenames").and_then(|v| v.as_array()) {
+                    // 截断版本：只显示前3个文件
                     let preview: Vec<String> = filenames.iter()
                         .take(3)
                         .map(|v| v.as_str().unwrap_or("").to_string())
                         .collect();
                     res_str = format!("[工具结果] 找到 {} 个文件: {:?}...", filenames.len(), preview);
+                    // 完整版本：显示所有文件
+                    let all_files: Vec<String> = filenames.iter()
+                        .map(|v| v.as_str().unwrap_or("").to_string())
+                        .collect();
+                    full_res_str = format!("[工具结果] 找到 {} 个文件:\n{}", filenames.len(),
+                        all_files.join("\n"));
                 } else if let Some(file_info) = tool_res.get("file") {
                     let path = file_info["filePath"].as_str().unwrap_or("unknown");
                     let content = file_info["content"].as_str().unwrap_or("");
+                    // 截断版本：只显示前300字符
                     let snippet: String = content.chars().take(300).collect();
                     res_str = format!("[工具结果] 已读取文件 {}。\n文件片段: {}...", path, snippet.replace('\n', " "));
+                    // 完整版本：显示完整内容
+                    full_res_str = format!("[工具结果] 已读取文件: {}\n完整内容:\n{}", path, content);
                 } else if let Some(result) = tool_res.get("result") {
                     let raw = result.as_str().unwrap_or("");
+                    // 截断版本
                     let limit = if raw.to_lowercase().contains("error") { 800 } else { 300 };
                     let snippet: String = raw.chars().take(limit).collect();
                     res_str = format!("[工具结果] 输出: {}...", snippet);
+                    // 完整版本
+                    full_res_str = format!("[工具结果] 完整输出:\n{}", raw);
                 } else {
-                    res_str = format!("[工具结果] {}", tool_res.to_string().chars().take(200).collect::<String>());
+                    // 其他情况
+                    let raw = tool_res.to_string();
+                    let snippet: String = raw.chars().take(200).collect();
+                    res_str = format!("[工具结果] {}...", snippet);
+                    full_res_str = format!("[工具结果] 完整数据:\n{}", raw);
                 }
 
                 if !res_str.is_empty() {
@@ -290,6 +311,7 @@ impl PromptOptimizer {
                         time: timestamp,
                         role: "system".to_string(),
                         content: res_str,
+                        full_content: full_res_str,  // 保存完整内容
                         event_type: "tool_result".to_string(),
                     });
                 }
