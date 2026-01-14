@@ -4,7 +4,7 @@
  * 项目切换器按钮，显示当前项目名称，点击打开切换弹窗
  */
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { ChevronDown, FolderOpen } from 'lucide-react';
 import { useCurrentProject, useCurrentSessionFile } from '@/stores/useProjectStore';
 import { ProjectSwitcherDialog } from './ProjectSwitcherDialog';

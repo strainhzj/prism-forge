@@ -8,15 +8,6 @@ import { Home, Folder, Settings } from 'lucide-react';
 import { NavItem } from './NavItem';
 import { cn } from '@/lib/utils';
 
-// ==================== 调试模式 ====================
-const DEBUG = import.meta.env.DEV;
-
-function debugLog(action: string, ...args: unknown[]) {
-  if (DEBUG) {
-    console.log(`[SideNav] ${action}`, ...args);
-  }
-}
-
 export interface SideNavProps {
   /**
    * 自定义类名
