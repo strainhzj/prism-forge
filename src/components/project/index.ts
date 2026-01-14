@@ -3,6 +3,8 @@
  */
 
 export { ProjectSwitcher } from './ProjectSwitcher';
+export type { ProjectSwitcherProps } from './ProjectSwitcher';
 export { ProjectSwitcherDialog } from './ProjectSwitcherDialog';
+export type { ProjectSwitcherDialogProps } from './ProjectSwitcherDialog';
 export { ProjectCard } from './ProjectCard';
-export type { ProjectSwitcherProps, ProjectSwitcherDialogProps, ProjectCardProps } from './ProjectCard';
+export type { ProjectCardProps } from './ProjectCard';

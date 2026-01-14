@@ -3,5 +3,6 @@
  */
 
 export { NavItem } from './NavItem';
+export type { NavItemProps } from './NavItem';
 export { SideNav } from './SideNav';
-export type { NavItemProps, SideNavProps } from './NavItem';
+export type { SideNavProps } from './SideNav';

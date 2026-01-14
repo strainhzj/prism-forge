@@ -77,6 +77,17 @@ export interface Session {
 }
 
 /**
+ * 会话文件信息接口
+ */
+export interface SessionFileInfo {
+  session_id: string;
+  file_path: string;
+  display_name?: string;
+  summary?: string;
+  modified_time: string;
+}
+
+/**
  * 项目分组（包含会话列表）
  */
 export interface ProjectGroup {

@@ -10,6 +10,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Search, Plus, Trash2, Folder, FileText, Clock } from 'lucide-react';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { useProjectStore, useProjectActions, useCurrentProject } from '@/stores/useProjectStore';
 import type { MonitoredDirectory, SessionFileInfo } from '@/stores/useSessionStore';
 import { cn } from '@/lib/utils';
@@ -149,7 +150,7 @@ export function ProjectSwitcherDialog({
   // 新建项目
   const handleAddProject = useCallback(async () => {
     try {
-      const selected = await open({
+      const selected = await openDialog({
         directory: true,
         multiple: false,
         title: '选择要监控的项目目录',
@@ -370,7 +371,7 @@ export function ProjectSwitcherDialog({
                         />
                         <div className="flex-1 min-w-0 overflow-hidden">
                           <p className="text-sm truncate" style={{ color: 'var(--color-text-primary)' }}>
-                            {file.displayName || file.summary || file.session_id}
+                            {file.display_name || file.summary || file.session_id}
                           </p>
                           <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                             <span className="flex items-center gap-1 shrink-0">

@@ -62,15 +62,6 @@ interface ProjectState {
 // ==================== 辅助函数 ====================
 
 /**
- * 从路径中提取目录名称
- */
-function extractDirectoryName(path: string): string {
-  const normalizedPath = path.replace(/\\/g, '/');
-  const parts = normalizedPath.split('/').filter(Boolean);
-  return parts[parts.length - 1] || path;
-}
-
-/**
  * 解析错误信息
  */
 function parseError(error: unknown): string {
@@ -261,14 +252,14 @@ export const useProjectStore = create<ProjectState>()(
       name: 'prism-forge-project-storage',
       // 持久化当前项目ID和会话文件路径
       partialize: (state) => ({
-        currentProjectId: state.currentProject?.id,
+        currentProject: state.currentProject,
         currentSessionFile: state.currentSessionFile,
       }),
       // 从持久化数据恢复
       onRehydrateStorage: () => (state) => {
         if (state) {
           debugLog('onRehydrateStorage', 'restored state', {
-            currentProjectId: state.currentProjectId,
+            currentProject: state.currentProject?.name,
             currentSessionFile: state.currentSessionFile,
           });
           // 注意：currentProject 需要从 projects 列表中重新查找
