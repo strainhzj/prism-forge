@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 11;
+const CURRENT_DB_VERSION: i32 = 12;
 
 /// 初始化数据库
 ///
@@ -80,6 +80,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             9 => migrate_v9(conn)?,
             10 => migrate_v10(conn)?,
             11 => migrate_v11(conn)?,
+            12 => migrate_v12(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -657,6 +658,31 @@ pub fn migrate_v11_impl(conn: &mut Connection) -> Result<()> {
     // 添加向量同步批次大小（默认 10）
     conn.execute(
         "ALTER TABLE settings ADD COLUMN embedding_batch_size INTEGER NOT NULL DEFAULT 10;",
+        [],
+    )?;
+
+    Ok(())
+}
+
+/// 迁移到版本 12: 添加提供商别名支持
+///
+/// # 功能
+/// - 为 api_providers 表添加 aliases 字段
+/// - 支持通过别名快速查找提供商
+#[cfg(test)]
+pub fn migrate_v12(conn: &mut Connection) -> Result<()> {
+    migrate_v12_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v12(conn: &mut Connection) -> Result<()> {
+    migrate_v12_impl(conn)
+}
+
+pub fn migrate_v12_impl(conn: &mut Connection) -> Result<()> {
+    // 添加别名字段（JSON 数组格式，存储别名列表）
+    conn.execute(
+        "ALTER TABLE api_providers ADD COLUMN aliases TEXT DEFAULT '[]';",
         [],
     )?;
 

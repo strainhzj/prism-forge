@@ -26,6 +26,7 @@ interface ProviderFormData {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  aliases?: string; // JSON 数组格式
 }
 
 // ==================== Props ====================
@@ -60,12 +61,14 @@ interface ProviderFormProps {
 // ==================== 常量 ====================
 
 const PROVIDER_TYPE_OPTIONS = [
-  { value: ApiProviderType.OPENAI, label: 'OpenAI', description: 'OpenAI 或兼容接口（OneAPI、中转服务等）' },
+  { value: ApiProviderType.OPENAI, label: 'OpenAI', description: 'OpenAI 官方 API' },
   { value: ApiProviderType.ANTHROPIC, label: 'Anthropic', description: 'Claude (Anthropic)' },
   { value: ApiProviderType.OLLAMA, label: 'Ollama', description: '本地 Ollama 服务' },
   { value: ApiProviderType.XAI, label: 'X AI', description: 'X AI (Grok)' },
   { value: ApiProviderType.GOOGLE, label: 'Google', description: 'Google Gemini ML Dev API (API Key 认证)' },
   { value: ApiProviderType.GOOGLE_VERTEX, label: 'Google Vertex', description: 'Google Vertex AI Public Preview (API Key URL 参数)' },
+  { value: ApiProviderType.AZURE_OPENAI, label: 'Azure OpenAI', description: 'Microsoft Azure OpenAI 服务' },
+  { value: ApiProviderType.OPENAI_COMPATIBLE, label: 'OpenAI Compatible', description: '第三方兼容接口（OneAPI、中转服务等）' },
 ];
 
 const DEFAULT_BASE_URLS: Record<ApiProviderType, string> = {
@@ -75,6 +78,8 @@ const DEFAULT_BASE_URLS: Record<ApiProviderType, string> = {
   [ApiProviderType.XAI]: 'https://api.x.ai/v1',
   [ApiProviderType.GOOGLE]: 'https://generativelanguage.googleapis.com',
   [ApiProviderType.GOOGLE_VERTEX]: 'https://aiplatform.googleapis.com',
+  [ApiProviderType.AZURE_OPENAI]: 'https://{your-resource-name}.openai.azure.com/openai/deployments/{deployment}?api-version=2024-02-01',
+  [ApiProviderType.OPENAI_COMPATIBLE]: 'https://api.example.com/v1',
 };
 
 // ==================== 组件 ====================
@@ -104,6 +109,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
       model: '',
       temperature: 0.7,
       maxTokens: 2000,
+      aliases: '[]',
     },
   });
 
@@ -130,6 +136,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
         model: provider.model || '',
         temperature: provider.temperature ?? 0.7,
         maxTokens: provider.maxTokens ?? 2000,
+        aliases: provider.aliases || '[]',
       });
     }
   }, [provider, reset]);
@@ -223,6 +230,8 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
         />
         <small className="help-text">
           留空使用默认模型: {DEFAULT_MODELS[providerType]}
+          <br />
+          <strong>提示：</strong>支持命名空间格式，如 "openai:gpt-4o"、"anthropic:claude-3-5-sonnet"
         </small>
       </div>
 
@@ -280,26 +289,48 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
               </span>
             )}
           </label>
-          <input
+          <textarea
             id="apiKey"
-            type="password"
             className="form-control"
-            placeholder={provider?.hasApiKey ? '留空以保持现有密钥' : 'sk-... 或 sk-ant-...'}
+            rows={provider?.hasApiKey ? 1 : 3}
+            placeholder={
+              provider?.hasApiKey
+                ? '留空以保持现有密钥'
+                : '输入单个密钥：sk-...\n或多个密钥（逗号分隔）：\nsk-key1,sk-key2,sk-key3'
+            }
             autoComplete="off"
             {...register('apiKey', {
               required: provider?.hasApiKey ? false : '请输入 API Key',
-              minLength: {
-                value: 10,
-                message: 'API Key 长度不能少于 10 个字符',
+              validate: (value) => {
+                if (!value || value.trim() === '') {
+                  return provider?.hasApiKey ? true : '请输入 API Key';
+                }
+                // 检查最小长度
+                const trimmed = value.trim();
+                if (trimmed.length < 10) {
+                  return 'API Key 长度不能少于 10 个字符';
+                }
+                // 如果包含逗号，验证多密钥格式
+                if (trimmed.includes(',')) {
+                  const keys = trimmed.split(',').map(k => k.trim()).filter(k => k);
+                  if (keys.length < 2) {
+                    return '多密钥格式无效，请使用逗号分隔至少2个密钥';
+                  }
+                  if (keys.some(k => k.length < 10)) {
+                    return '每个密钥长度不能少于 10 个字符';
+                  }
+                }
+                return true;
               },
             })}
           />
           {errors.apiKey && <span className="error-text">{errors.apiKey.message}</span>}
-          {!provider?.hasApiKey && (
-            <small className="help-text">
-              API Key 将被安全存储在系统密钥库中
-            </small>
-          )}
+          <small className="help-text">
+            {provider?.hasApiKey
+              ? '留空以保持现有密钥，或输入新密钥以更新'
+              : '支持多密钥轮换（逗号分隔），系统将自动轮换使用以实现负载均衡'
+            }
+          </small>
         </div>
       )}
 
@@ -326,6 +357,40 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
         {errors.configJson && <span className="error-text">{errors.configJson.message}</span>}
         <small className="help-text">
           高级配置，例如 model、temperature 等（JSON 格式）
+        </small>
+      </div>
+
+      {/* 别名（可选） */}
+      <div className="form-group">
+        <label htmlFor="aliases">别名（可选）</label>
+        <input
+          id="aliases"
+          type="text"
+          className="form-control"
+          placeholder='["claude", "anthropic-api"]'
+          {...register('aliases', {
+            validate: (value) => {
+              if (!value || value.trim() === '' || value === '[]') {
+                return true;
+              }
+              try {
+                const parsed = JSON.parse(value);
+                if (!Array.isArray(parsed)) {
+                  return '别名必须是数组格式';
+                }
+                if (!parsed.every((item: unknown) => typeof item === 'string')) {
+                  return '别名数组中的每个元素必须是字符串';
+                }
+                return true;
+              } catch {
+                return 'JSON 格式无效，例如: ["alias1", "alias2"]';
+              }
+            },
+          })}
+        />
+        {errors.aliases && <span className="error-text">{errors.aliases.message}</span>}
+        <small className="help-text">
+          为此提供商设置别名，JSON 数组格式，例如: ["claude", "anthropic"]
         </small>
       </div>
 

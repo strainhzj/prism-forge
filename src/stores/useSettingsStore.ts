@@ -63,6 +63,8 @@ export enum ApiProviderType {
   XAI = 'xai',
   GOOGLE = 'google',
   GOOGLE_VERTEX = 'googlevertex',
+  AZURE_OPENAI = 'azureopenai',
+  OPENAI_COMPATIBLE = 'openai-compatible',
 }
 
 /**
@@ -96,6 +98,7 @@ export interface ProviderResponse {
   hasApiKey: boolean;
   apiKeyMask?: string;
   model?: string;
+  aliases?: string; // JSON 数组格式，如 ["claude", "anthropic-api"]
 }
 
 /**
@@ -112,6 +115,7 @@ export interface SaveProviderRequest {
   maxTokens?: number;
   isActive: boolean;
   model?: string;
+  aliases?: string; // JSON 数组格式
 }
 
 /**
@@ -124,6 +128,8 @@ export const DEFAULT_MODELS: Record<ApiProviderType, string> = {
   [ApiProviderType.XAI]: 'grok-4-1-fast-reasoning',
   [ApiProviderType.GOOGLE]: 'gemini-2.5-flash-lite',
   [ApiProviderType.GOOGLE_VERTEX]: 'gemini-2.5-flash-lite',
+  [ApiProviderType.AZURE_OPENAI]: 'gpt-4o-mini',
+  [ApiProviderType.OPENAI_COMPATIBLE]: 'gpt-4o-mini',
 };
 
 /**

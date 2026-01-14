@@ -5,11 +5,14 @@
 //! - 统一的 LLM 服务接口
 //! - 多厂商适配器 (OpenAI, Anthropic, Ollama)
 //! - 客户端管理器
+//! - API Key 轮换机制
 
 pub mod security;
 pub mod interface;
 pub mod providers;
 pub mod manager;
+pub mod key_rotation;
+pub mod model_resolver;
 
 pub use security::{ApiKeyStorage, ApiKeyValidator, APP_NAME};
 pub use interface::{
@@ -18,3 +21,5 @@ pub use interface::{
 };
 pub use providers::{OpenAIProvider, AnthropicProvider, OllamaProvider};
 pub use manager::LLMClientManager;
+pub use key_rotation::{ApiKeyRotator, KeyRotationConfig, KeyStats};
+pub use model_resolver::{ModelResolver, ResolvedModel};

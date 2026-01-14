@@ -484,6 +484,7 @@ pub async fn cmd_save_provider(
             temperature: request.temperature,
             max_tokens: request.max_tokens,
             is_active: request.is_active,
+            aliases: existing.aliases,
         }
     } else {
         // 创建新提供商

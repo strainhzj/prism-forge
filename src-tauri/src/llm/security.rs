@@ -248,6 +248,16 @@ impl ApiKeyValidator {
                     // 这里只做警告不报错
                 }
             }
+            crate::database::ApiProviderType::AzureOpenAI => {
+                // Azure OpenAI Key 通常以 sk- 开头（与 OpenAI 格式相同）
+                if !key.starts_with("sk-") {
+                    // 某些中转服务可能不以 sk- 开头，这里只做警告不报错
+                }
+            }
+            crate::database::ApiProviderType::OpenAICompatible => {
+                // OpenAI 兼容接口的 API Key 格式不确定
+                // 不做格式验证，只检查长度
+            }
         }
 
         Ok(())

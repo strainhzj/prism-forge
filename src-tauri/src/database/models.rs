@@ -9,7 +9,7 @@ use anyhow::Result;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ApiProviderType {
-    /// OpenAI 兼容接口 (包括 OneAPI、中转服务等)
+    /// OpenAI 官方 API
     OpenAI,
     /// Anthropic Claude
     Anthropic,
@@ -21,6 +21,10 @@ pub enum ApiProviderType {
     Google,
     /// Google Vertex AI Public Preview (API Key via URL parameter)
     GoogleVertex,
+    /// Azure OpenAI 服务
+    AzureOpenAI,
+    /// OpenAI 兼容接口（OneAPI、中转服务等第三方服务）
+    OpenAICompatible,
 }
 
 impl ApiProviderType {
@@ -33,6 +37,8 @@ impl ApiProviderType {
             ApiProviderType::XAI => "https://api.x.ai/v1",
             ApiProviderType::Google => "https://generativelanguage.googleapis.com",
             ApiProviderType::GoogleVertex => "https://aiplatform.googleapis.com",
+            ApiProviderType::AzureOpenAI => "https://{your-resource-name}.openai.azure.com",
+            ApiProviderType::OpenAICompatible => "https://api.example.com/v1",
         }
     }
 
@@ -45,6 +51,8 @@ impl ApiProviderType {
             ApiProviderType::XAI => "grok-4-1-fast-reasoning",
             ApiProviderType::Google => "gemini-2.5-flash-lite",
             ApiProviderType::GoogleVertex => "gemini-2.5-flash-lite",
+            ApiProviderType::AzureOpenAI => "gpt-4o-mini",
+            ApiProviderType::OpenAICompatible => "gpt-4o-mini",
         }
     }
 
@@ -116,6 +124,14 @@ pub struct ApiProvider {
     /// 同一时间只能有一个活跃提供商
     #[serde(rename = "is_active")]
     pub is_active: bool,
+
+    /// 别名列表（JSON 数组格式）
+    ///
+    /// 用于快速查找和引用提供商，例如：
+    /// - ["claude", "anthropic-api"] 对应 Anthropic 提供商
+    /// - ["oai", "openai-official"] 对应 OpenAI 提供商
+    #[serde(rename = "aliases")]
+    pub aliases: Option<String>,
 }
 
 impl ApiProvider {
@@ -136,6 +152,7 @@ impl ApiProvider {
             temperature: Some(0.7),
             max_tokens: Some(2000),
             is_active: false,
+            aliases: Some("[]".to_string()),
         }
     }
 
@@ -162,6 +179,44 @@ impl ApiProvider {
             Some(json_str) => Ok(Some(serde_json::from_str(json_str)?)),
             None => Ok(None),
         }
+    }
+
+    /// 获取别名列表
+    pub fn get_aliases(&self) -> Result<Vec<String>> {
+        match &self.aliases {
+            Some(json_str) => {
+                if json_str.trim().is_empty() || json_str == "[]" {
+                    Ok(Vec::new())
+                } else {
+                    Ok(serde_json::from_str(json_str)?)
+                }
+            }
+            None => Ok(Vec::new()),
+        }
+    }
+
+    /// 设置别名列表
+    pub fn set_aliases(&mut self, aliases: Vec<String>) -> Result<()> {
+        self.aliases = Some(serde_json::to_string(&aliases)?);
+        Ok(())
+    }
+
+    /// 添加单个别名
+    pub fn add_alias(&mut self, alias: String) -> Result<()> {
+        let mut aliases = self.get_aliases()?;
+        if !aliases.contains(&alias) {
+            aliases.push(alias);
+            self.set_aliases(aliases)?;
+        }
+        Ok(())
+    }
+
+    /// 移除别名
+    pub fn remove_alias(&mut self, alias: &str) -> Result<()> {
+        let mut aliases = self.get_aliases()?;
+        aliases.retain(|a| a != alias);
+        self.set_aliases(aliases)?;
+        Ok(())
     }
 
     /// 验证配置是否有效

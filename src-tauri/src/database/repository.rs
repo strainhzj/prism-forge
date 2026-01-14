@@ -64,12 +64,15 @@ impl ApiProviderRepository {
         let now = Utc::now().to_rfc3339();
         let provider_type_str = serde_json::to_string(&provider.provider_type)?;
 
+        // 提取 aliases 值，避免闭包中的部分移动
+        let aliases_value = provider.aliases.as_ref().unwrap_or(&"[]".to_string()).clone();
+
         self.with_conn_inner(|conn| {
             conn.execute(
                 "INSERT INTO api_providers (
                     provider_type, name, base_url, api_key_ref,
-                    model, config_json, temperature, max_tokens, is_active, created_at, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    model, config_json, temperature, max_tokens, is_active, aliases, created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     provider_type_str,
                     provider.name,
@@ -80,6 +83,7 @@ impl ApiProviderRepository {
                     provider.temperature,
                     provider.max_tokens,
                     if provider.is_active { 1 } else { 0 },
+                    aliases_value,
                     now,
                     now,
                 ],
@@ -103,7 +107,7 @@ impl ApiProviderRepository {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, provider_type, name, base_url, api_key_ref,
-                        model, config_json, temperature, max_tokens, is_active, created_at, updated_at
+                        model, config_json, temperature, max_tokens, is_active, aliases, created_at, updated_at
                  FROM api_providers
                  ORDER BY created_at DESC"
             )?;
@@ -124,6 +128,7 @@ impl ApiProviderRepository {
                     temperature: row.get(7)?,
                     max_tokens: row.get(8)?,
                     is_active: row.get::<_, i32>(9)? == 1,
+                    aliases: row.get(10)?,
                 })
             })?;
 
@@ -139,7 +144,7 @@ impl ApiProviderRepository {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, provider_type, name, base_url, api_key_ref,
-                        model, config_json, temperature, max_tokens, is_active, created_at, updated_at
+                        model, config_json, temperature, max_tokens, is_active, aliases, created_at, updated_at
                  FROM api_providers
                  WHERE id = ?1"
             )?;
@@ -162,6 +167,7 @@ impl ApiProviderRepository {
                     temperature: row.get(7)?,
                     max_tokens: row.get(8)?,
                     is_active: row.get::<_, i32>(9)? == 1,
+                    aliases: row.get(10)?,
                 }))
             } else {
                 Ok(None)
@@ -177,7 +183,7 @@ impl ApiProviderRepository {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, provider_type, name, base_url, api_key_ref,
-                        model, config_json, temperature, max_tokens, is_active, created_at, updated_at
+                        model, config_json, temperature, max_tokens, is_active, aliases, created_at, updated_at
                  FROM api_providers
                  WHERE is_active = 1
                  LIMIT 1"
@@ -201,6 +207,7 @@ impl ApiProviderRepository {
                     temperature: row.get(7)?,
                     max_tokens: row.get(8)?,
                     is_active: row.get::<_, i32>(9)? == 1,
+                    aliases: row.get(10)?,
                 }))
             } else {
                 Ok(None)
@@ -226,8 +233,8 @@ impl ApiProviderRepository {
                  SET provider_type = ?1, name = ?2, base_url = ?3,
                      api_key_ref = ?4, model = ?5, config_json = ?6,
                      temperature = ?7, max_tokens = ?8, is_active = ?9,
-                     updated_at = ?10
-                 WHERE id = ?11",
+                     aliases = ?10, updated_at = ?11
+                 WHERE id = ?12",
                 params![
                     provider_type_str,
                     provider.name,
@@ -238,6 +245,7 @@ impl ApiProviderRepository {
                     provider.temperature,
                     provider.max_tokens,
                     if provider.is_active { 1 } else { 0 },
+                    provider.aliases.as_ref().unwrap_or(&"[]".to_string()),
                     now,
                     id,
                 ],
@@ -298,7 +306,7 @@ impl ApiProviderRepository {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, provider_type, name, base_url, api_key_ref,
-                        model, config_json, temperature, max_tokens, is_active, created_at, updated_at
+                        model, config_json, temperature, max_tokens, is_active, aliases, created_at, updated_at
                  FROM api_providers
                  WHERE provider_type = ?1
                  ORDER BY created_at DESC"
@@ -320,6 +328,7 @@ impl ApiProviderRepository {
                     temperature: row.get(7)?,
                     max_tokens: row.get(8)?,
                     is_active: row.get::<_, i32>(9)? == 1,
+                    aliases: row.get(10)?,
                 })
             })?;
 
