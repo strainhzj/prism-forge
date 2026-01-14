@@ -270,10 +270,22 @@ export function ProjectSidebar({
                   type="button"
                   variant="outline"
                   onClick={() => setDirectoryDialogOpen(false)}
+                  style={{
+                    borderColor: 'var(--color-border-light)',
+                    backgroundColor: 'var(--color-bg-card)',
+                    color: 'var(--color-text-primary)',
+                  }}
                 >
                   取消
                 </Button>
-                <Button type="button" onClick={handleAddDirectory}>
+                <Button
+                  type="button"
+                  onClick={handleAddDirectory}
+                  style={{
+                    backgroundColor: 'var(--color-accent-warm)',
+                    color: '#FFFFFF',
+                  }}
+                >
                   添加
                 </Button>
               </DialogFooter>
@@ -314,10 +326,22 @@ export function ProjectSidebar({
                   type="button"
                   variant="outline"
                   onClick={() => setRenameDialogOpen(false)}
+                  style={{
+                    borderColor: 'var(--color-border-light)',
+                    backgroundColor: 'var(--color-bg-card)',
+                    color: 'var(--color-text-primary)',
+                  }}
                 >
                   取消
                 </Button>
-                <Button type="button" onClick={handleConfirmRename}>
+                <Button
+                  type="button"
+                  onClick={handleConfirmRename}
+                  style={{
+                    backgroundColor: 'var(--color-accent-warm)',
+                    color: '#FFFFFF',
+                  }}
+                >
                   确认重命名
                 </Button>
               </DialogFooter>

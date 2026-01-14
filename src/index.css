@@ -199,6 +199,24 @@
   border-color: var(--color-border);
 }
 
+/* Placeholder 样式 - 自动适配深浅色模式 */
+::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+/* Firefox 特殊处理 */
+::-moz-placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+/* Internet Explorer 10+ */
+:-ms-input-placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
 body {
   background-color: var(--color-background);
   color: var(--color-foreground);
