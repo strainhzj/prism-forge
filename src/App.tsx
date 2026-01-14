@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import { SideNav } from "./components/navigation";
-import { ProjectSwitcher } from "./components/project";
+import { ProjectCard } from "./components/project";
 import { TimelineSidebar } from "./components/timeline";
 import { ThemeToggle } from "./components/ThemeToggle";
 import {
@@ -136,21 +136,23 @@ function App() {
       {/* ==================== 中心工作区 ==================== */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* 顶部标题栏 */}
-        <header className="px-6 py-4 border-b" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
-          <div className="flex items-center gap-4">
-            {/* 项目切换器 */}
-            <div className="flex-1">
-              <ProjectSwitcher onConfirm={handleProjectChange} />
-            </div>
-            {/* 主题切换 */}
-            <ThemeToggle />
-          </div>
+        <header className="px-6 py-4 border-b flex justify-end" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
+          {/* 主题切换 */}
+          <ThemeToggle />
         </header>
 
-        {/* 上下分栏：输入区 + 输出区 */}
+        {/* 上下分栏：项目卡片 + 输入区 + 输出区 */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* 上半区：Next Goal 输入区 (45%) */}
-          <div className="flex flex-col p-6" style={{ height: '45%', backgroundColor: 'var(--color-bg-primary)' }}>
+          {/* 项目卡片区 (10%) */}
+          <div className="p-6" style={{ height: '15%', backgroundColor: 'var(--color-bg-primary)' }}>
+            <ProjectCard onConfirm={handleProjectChange} />
+          </div>
+
+          {/* 分隔线 */}
+          <div className="h-px" style={{ backgroundColor: 'var(--color-border-light)' }}></div>
+
+          {/* Next Goal 输入区 (40%) */}
+          <div className="flex flex-col p-6" style={{ height: '40%', backgroundColor: 'var(--color-bg-primary)' }}>
             {/* 暖橙色/珊瑚橙色发光标题 */}
             <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--color-accent-warm)' }}>
               1. NEXT GOAL
@@ -208,8 +210,8 @@ function App() {
           {/* 分隔线 */}
           <div className="h-px" style={{ backgroundColor: 'var(--color-border-light)' }}></div>
 
-          {/* 下半区：AI Analysis Result 输出区 (55%) */}
-          <div className="flex flex-col p-6 overflow-hidden" style={{ height: '55%', backgroundColor: 'var(--color-app-result-bg)' }}>
+          {/* 下半区：AI Analysis Result 输出区 (50%) */}
+          <div className="flex flex-col p-6 overflow-hidden" style={{ height: '50%', backgroundColor: 'var(--color-app-result-bg)' }}>
             {/* 专业蓝色/天空蓝色发光标题 */}
             <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--color-accent-blue)' }}>
               2. AI ANALYSIS RESULT
