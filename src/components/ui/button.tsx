@@ -68,6 +68,17 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         className={cn(buttonVariants({ variant, size, className }))}
+        style={{
+          ...(variant === 'primary' && {
+            backgroundColor: 'var(--color-accent-warm)',
+            color: '#FFFFFF',
+          }),
+          ...(variant === 'outline' && {
+            borderColor: 'var(--color-border-light)',
+            backgroundColor: 'var(--color-bg-card)',
+            color: 'var(--color-text-primary)',
+          }),
+        }}
         ref={ref}
         {...props}
       />
