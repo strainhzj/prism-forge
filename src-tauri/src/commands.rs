@@ -2579,6 +2579,9 @@ pub async fn cmd_get_messages_by_level(
     let entries = parser.parse_all()
         .map_err(|e| format!("解析 JSONL 文件失败: {}", e))?;
 
+    #[cfg(debug_assertions)]
+    eprintln!("[DEBUG] 解析到 {} 个 JSONL 条目", entries.len());
+
     // 转换为 Message 对象
     let messages: Vec<crate::database::models::Message> = entries
         .into_iter()
@@ -2622,9 +2625,23 @@ pub async fn cmd_get_messages_by_level(
         })
         .collect();
 
+    #[cfg(debug_assertions)]
+    eprintln!("[DEBUG] 转换后得到 {} 个消息对象 (view_level: {:?})", messages.len(), view_level);
+
     // 根据等级过滤消息
     let filter = MessageFilter::new(view_level);
-    let filtered_messages = filter.filter_messages(messages);
+    let filtered_messages = filter.filter_messages(messages.clone());
+
+    #[cfg(debug_assertions)]
+    {
+        eprintln!("[DEBUG] 过滤后得到 {} 个消息", filtered_messages.len());
+        if filtered_messages.is_empty() && !messages.is_empty() {
+            eprintln!("[DEBUG] 原始消息示例:");
+            for (i, msg) in messages.iter().take(3).enumerate() {
+                eprintln!("  [{}]: msg_type={}, uuid={}", i, msg.msg_type, &msg.uuid[..8]);
+            }
+        }
+    }
 
     Ok(filtered_messages)
 }
