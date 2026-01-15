@@ -2583,13 +2583,41 @@ pub async fn cmd_get_messages_by_level(
     eprintln!("[DEBUG] 解析到 {} 个 JSONL 条目", entries.len());
 
     #[cfg(debug_assertions)]
-    if !entries.is_empty() {
-        eprintln!("[DEBUG] 第一条 JSONL 条目结构:");
-        if let Some(first_entry) = entries.first() {
-            eprintln!("  type: {:?}", first_entry.message_type());
-            eprintln!("  role: {:?}", first_entry.role());
-            eprintln!("  uuid: {:?}", first_entry.data.get("uuid").and_then(|v| v.as_str()));
-            eprintln!("  data keys: {:?}", first_entry.data.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+    {
+        // 统计所有 type 类型的分布
+        use std::collections::HashMap;
+        let mut type_counts: HashMap<String, usize> = HashMap::new();
+
+        for entry in &entries {
+            if let Some(msg_type) = entry.message_type() {
+                *type_counts.entry(msg_type).or_insert(0) += 1;
+            }
+        }
+
+        eprintln!("[DEBUG] 类型统计:");
+        for (msg_type, count) in type_counts.iter() {
+            eprintln!("  {}: {} 条", msg_type, count);
+        }
+
+        // 找到第一条 "message" 类型的条目
+        if let Some(first_message) = entries.iter().find(|e| e.message_type().as_deref() == Some("message")) {
+            eprintln!("[DEBUG] 第一条 message 类型条目:");
+            eprintln!("  type: {:?}", first_message.message_type());
+            eprintln!("  role: {:?}", first_message.role());
+            eprintln!("  uuid: {:?}", first_message.data.get("uuid").and_then(|v| v.as_str()));
+            eprintln!("  data keys: {:?}", first_message.data.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+        } else {
+            eprintln!("[DEBUG] ⚠️  没有找到 'message' 类型的条目!");
+            eprintln!("[DEBUG] 显示前 3 条不同类型的条目:");
+            let mut seen_types = std::collections::HashSet::new();
+            for entry in entries.iter() {
+                if let Some(msg_type) = entry.message_type() {
+                    if seen_types.insert(msg_type.clone()) && seen_types.len() <= 3 {
+                        eprintln!("  类型 '{}': keys = {:?}", msg_type,
+                            entry.data.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+                    }
+                }
+            }
         }
     }
 
