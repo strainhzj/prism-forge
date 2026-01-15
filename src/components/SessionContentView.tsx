@@ -290,9 +290,10 @@ export function SessionContentView({
           <div className="p-4 space-y-3">
             {messages && messages.length > 0 ? (
               messages.map((msg) => {
-                const isUser = msg.msg_type === 'user';
-                const isAssistant = msg.msg_type === 'assistant';
-                const isThinking = msg.msg_type === 'thinking';
+                const msgType = msg.msg_type || 'unknown';
+                const isUser = msgType === 'user';
+                const isAssistant = msgType === 'assistant';
+                const isThinking = msgType === 'thinking';
 
                 return (
                   <div
@@ -317,7 +318,7 @@ export function SessionContentView({
                           boxShadow: isUser ? '0 0 10px rgba(245, 158, 11, 0.4)' : '0 0 10px rgba(37, 99, 235, 0.4)'
                         }}
                       >
-                        {msg.msg_type.toUpperCase()}
+                        {msgType.toUpperCase()}
                       </span>
                       <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                         {msg.timestamp.split('T')[1]?.substring(0, 8) || msg.timestamp}
