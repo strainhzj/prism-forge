@@ -36,6 +36,7 @@
     "react-diff-viewer-continued": "^3.4.0",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.69.0",
+    "react-resizable-panels": "^4.4.1",
     "react-router-dom": "^6.30.2",
     "tailwind-merge": "^3.4.0",
     "zustand": "^5.0.9"

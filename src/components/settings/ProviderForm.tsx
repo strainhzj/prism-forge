@@ -95,7 +95,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
     watch,
     setValue,
     reset,
-    formState: { errors, isDirty },
+    formState: { errors, isDirty: _isDirty },
   } = useForm<ProviderFormData>({
     defaultValues: {
       providerType: ApiProviderType.OPENAI,

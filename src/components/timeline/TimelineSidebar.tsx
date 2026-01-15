@@ -6,7 +6,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { ChevronRight, RefreshCw } from 'lucide-react';
+import { ChevronRight, ChevronLeft, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
@@ -115,8 +115,9 @@ export function TimelineSidebar({
   filePath,
   autoRefreshInterval = DEFAULT_AUTO_REFRESH_INTERVAL,
   className,
+  collapsed = false,
+  onToggleCollapse,
 }: TimelineSidebarProps) {
-  const [rightCollapsed, setRightCollapsed] = useState(false);
   const [parsedEvents, setParsedEvents] = useState<ParsedEvent[]>([]);
   const [parseError, setParseError] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -183,18 +184,20 @@ export function TimelineSidebar({
     setAutoRefresh((prev) => !prev);
   };
 
-  if (rightCollapsed) {
-    // 折叠状态
+  if (collapsed) {
+    // 折叠状态 - 显示展开按钮
     return (
       <>
-        <button
-          onClick={() => setRightCollapsed(false)}
-          className="w-8 border-l transition-colors flex items-center justify-center hover:bg-[var(--color-bg-card)]"
-          style={{ borderColor: 'var(--color-border-light)' }}
-          title="展开时间线"
-        >
-          <ChevronRight className="h-4 w-4" style={{ color: 'var(--color-text-secondary)' }} />
-        </button>
+        <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--color-bg-card)' }}>
+          <button
+            onClick={() => onToggleCollapse?.()}
+            className="flex-1 w-8 border-l transition-colors flex items-center justify-center hover:bg-[var(--color-bg-card)]"
+            style={{ borderColor: 'var(--color-border-light)' }}
+            title="展开时间线"
+          >
+            <ChevronLeft className="h-4 w-4" style={{ color: 'var(--color-text-secondary)' }} />
+          </button>
+        </div>
         {/* 折叠状态下也保留对话框 */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
@@ -254,8 +257,11 @@ export function TimelineSidebar({
   return (
     <>
       <aside
-        className={cn('w-[240px] border-l shrink-0 flex flex-col', className)}
-        style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}
+        className={cn('border-l shrink-0 flex flex-col', className)}
+        style={{
+          backgroundColor: 'var(--color-bg-card)',
+          borderColor: 'var(--color-border-light)',
+        }}
       >
       {/* 头部 */}
       <div
@@ -311,7 +317,7 @@ export function TimelineSidebar({
             </button>
           </div>
           <button
-            onClick={() => setRightCollapsed(true)}
+            onClick={() => onToggleCollapse?.()}
             className="p-1 rounded transition-colors hover:bg-[var(--color-app-secondary)]"
             title="折叠侧边栏"
           >

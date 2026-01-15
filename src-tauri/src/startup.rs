@@ -236,58 +236,68 @@ pub fn get_all_command_definitions() -> Vec<(String, Vec<String>)> {
     vec![
         // Core commands
         ("greet".to_string(), vec![]),
-        
-        // Provider management commands
-        ("cmd_get_providers".to_string(), vec!["database".to_string(), "llm".to_string()]),
-        ("cmd_save_provider".to_string(), vec!["database".to_string(), "llm".to_string()]),
-        ("cmd_delete_provider".to_string(), vec!["database".to_string(), "llm".to_string()]),
-        ("cmd_set_active_provider".to_string(), vec!["database".to_string(), "llm".to_string()]),
-        ("cmd_test_provider_connection".to_string(), vec!["llm".to_string()]),
-        
-        // Token counting
+
+        // Provider management commands - 无模块依赖（内部使用 LLMClientManager）
+        ("cmd_get_providers".to_string(), vec![]),
+        ("cmd_save_provider".to_string(), vec![]),
+        ("cmd_delete_provider".to_string(), vec![]),
+        ("cmd_set_active_provider".to_string(), vec![]),
+        ("cmd_test_provider_connection".to_string(), vec![]),
+
+        // Token counting - 无依赖
         ("count_prompt_tokens".to_string(), vec![]),
-        
-        // Session management commands
-        ("scan_sessions".to_string(), vec!["database".to_string(), "monitor".to_string()]),
-        ("scan_directory".to_string(), vec!["database".to_string(), "monitor".to_string()]),
-        ("parse_session_tree".to_string(), vec!["parser".to_string()]),
-        
-        // Session metadata commands
-        ("set_session_rating".to_string(), vec!["database".to_string()]),
-        ("set_session_tags".to_string(), vec!["database".to_string()]),
-        ("get_session_rating".to_string(), vec!["database".to_string()]),
-        ("get_session_tags".to_string(), vec!["database".to_string()]),
-        ("archive_session".to_string(), vec!["database".to_string()]),
-        ("unarchive_session".to_string(), vec!["database".to_string()]),
-        ("get_archived_sessions".to_string(), vec!["database".to_string()]),
-        
-        // File monitoring commands
-        ("start_file_watcher".to_string(), vec!["monitor".to_string()]),
-        
-        // Log extraction commands
-        ("extract_session_log".to_string(), vec!["parser".to_string()]),
-        ("export_session_log".to_string(), vec!["parser".to_string()]),
-        
-        // Vector search commands
-        ("vector_search".to_string(), vec!["database".to_string(), "embedding".to_string()]),
-        
-        // Optimization commands
-        ("compress_context".to_string(), vec!["optimizer".to_string()]),
-        ("optimize_prompt".to_string(), vec!["optimizer".to_string(), "llm".to_string()]),
-        
-        // Template commands
-        ("get_meta_template".to_string(), vec!["database".to_string()]),
-        ("update_meta_template".to_string(), vec!["database".to_string()]),
-        
-        // Monitored directory commands
-        ("get_monitored_directories".to_string(), vec!["database".to_string()]),
-        ("add_monitored_directory".to_string(), vec!["database".to_string()]),
-        ("remove_monitored_directory".to_string(), vec!["database".to_string()]),
-        ("toggle_monitored_directory".to_string(), vec!["database".to_string()]),
-        ("update_monitored_directory".to_string(), vec!["database".to_string()]),
-        
-        // Benchmark commands
-        ("run_benchmarks".to_string(), vec!["database".to_string()]),
+
+        // Session management commands - 内部使用数据库，但不需要 Tauri State
+        ("scan_sessions".to_string(), vec![]),
+        ("scan_directory".to_string(), vec![]),
+        ("parse_session_tree".to_string(), vec![]),
+
+        // Session metadata commands - 内部使用数据库
+        ("set_session_rating".to_string(), vec![]),
+        ("set_session_tags".to_string(), vec![]),
+        ("get_session_rating".to_string(), vec![]),
+        ("get_session_tags".to_string(), vec![]),
+        ("archive_session".to_string(), vec![]),
+        ("unarchive_session".to_string(), vec![]),
+        ("get_archived_sessions".to_string(), vec![]),
+
+        // File monitoring commands - 内部使用 monitor 模块
+        ("start_file_watcher".to_string(), vec![]),
+
+        // Log extraction commands - 内部使用 parser
+        ("extract_session_log".to_string(), vec![]),
+        ("export_session_log".to_string(), vec![]),
+
+        // Vector search commands - 内部使用 database 和 embedding
+        ("vector_search".to_string(), vec![]),
+
+        // Optimization commands - 内部使用 optimizer 和 llm
+        ("compress_context".to_string(), vec![]),
+        ("optimize_prompt".to_string(), vec![]),
+
+        // Template commands - 内部使用数据库
+        ("get_meta_template".to_string(), vec![]),
+        ("update_meta_template".to_string(), vec![]),
+
+        // Monitored directory commands - 内部使用数据库
+        ("get_monitored_directories".to_string(), vec![]),
+        ("add_monitored_directory".to_string(), vec![]),
+        ("remove_monitored_directory".to_string(), vec![]),
+        ("toggle_monitored_directory".to_string(), vec![]),
+        ("update_monitored_directory".to_string(), vec![]),
+
+        // Benchmark commands - 内部使用数据库
+        ("run_benchmarks".to_string(), vec![]),
+
+        // Additional monitored directory commands
+        ("get_sessions_by_monitored_directory".to_string(), vec![]),
+
+        // Additional vector search commands
+        ("semantic_search".to_string(), vec![]),
+        ("find_similar_sessions".to_string(), vec![]),
+        ("get_vector_settings".to_string(), vec![]),
+        ("update_vector_settings".to_string(), vec![]),
+        ("sync_embeddings_now".to_string(), vec![]),
     ]
 }
 

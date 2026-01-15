@@ -256,3 +256,56 @@ body {
   background-color: var(--color-background);
   color: var(--color-foreground);
 }
+
+/* ==================== React Resizable Panels 样式 ==================== */
+
+/* Panel group 容器 */
+[data-panel-group] {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+/* Panel 容器 */
+[data-panel] {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Separator/拖动条基础样式 */
+[data-separator] {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 10;
+  outline: none;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+/* 水平方向的拖动条（垂直线） */
+[data-panel-group-orientation="horizontal"] > [data-separator] {
+  cursor: col-resize;
+  width: 4px;
+  min-width: 4px;
+}
+
+[data-panel-group-orientation="horizontal"] > [data-separator]:hover {
+  width: 8px;
+}
+
+/* 垂直方向的拖动条（水平线） */
+[data-panel-group-orientation="vertical"] > [data-separator] {
+  cursor: row-resize;
+  height: 4px;
+  min-height: 4px;
+}
+
+[data-panel-group-orientation="vertical"] > [data-separator]:hover {
+  height: 8px;
+}
+
+/* 拖动条激活状态 */
+[data-separator][data-resizing] {
+  background-color: var(--color-accent-blue) !important;
+  opacity: 0.5;
+}
