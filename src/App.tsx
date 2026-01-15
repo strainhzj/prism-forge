@@ -28,49 +28,6 @@ function debugLog(action: string, ...args: unknown[]) {
   }
 }
 
-// ==================== Layout Persistence ====================
-
-const LAYOUT_STORAGE_KEY = 'prism-forge-layout';
-
-interface LayoutSizes {
-  leftPanel: number; // 像素值
-  rightPanel: number; // 像素值
-}
-
-const DEFAULT_LAYOUT: LayoutSizes = {
-  leftPanel: 200, // 左侧导航栏宽度 (像素)
-  rightPanel: 240, // 右侧时间线宽度 (像素)
-};
-
-/**
- * 从 localStorage 加载布局配置
- */
-function loadLayoutSizes(): LayoutSizes {
-  try {
-    const saved = localStorage.getItem(LAYOUT_STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved) as LayoutSizes;
-      debugLog('loadLayoutSizes', '从 localStorage 加载布局:', parsed);
-      return parsed;
-    }
-  } catch (e) {
-    console.error('加载布局配置失败:', e);
-  }
-  return DEFAULT_LAYOUT;
-}
-
-/**
- * 保存布局配置到 localStorage
- */
-function saveLayoutSizes(sizes: LayoutSizes) {
-  try {
-    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(sizes));
-    debugLog('saveLayoutSizes', '保存布局到 localStorage:', sizes);
-  } catch (e) {
-    console.error('保存布局配置失败:', e);
-  }
-}
-
 // ==================== 主组件 ====================
 
 function App() {

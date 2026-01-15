@@ -56,6 +56,14 @@ export interface TimelineSidebarProps {
    * 自定义类名
    */
   className?: string;
+  /**
+   * 是否折叠
+   */
+  collapsed?: boolean;
+  /**
+   * 切换折叠状态的回调
+   */
+  onToggleCollapse?: () => void;
 }
 
 // 自动刷新间隔（毫秒）
@@ -63,6 +71,72 @@ const DEFAULT_AUTO_REFRESH_INTERVAL = 3000;
 
 // Tooltip 内容最大长度
 const TOOLTIP_MAX_LENGTH = 500;
+
+/**
+ * 日志详情对话框组件
+ * 提取为独立组件以避免代码重复
+ */
+interface LogDetailDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  log: TimelineLog | null;
+}
+
+function LogDetailDialog({ open, onOpenChange, log }: LogDetailDialogProps) {
+  if (!log) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle>日志详情</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto">
+          {/* 元信息 */}
+          <div className="flex items-center gap-2 mb-4 pb-3 border-b" style={{ borderColor: 'var(--color-border-light)' }}>
+            <div
+              className="w-2 h-2 rounded-full"
+              style={{
+                backgroundColor:
+                  log.type === 'user' ? 'var(--color-accent-warm)' : 'var(--color-accent-blue)',
+                boxShadow:
+                  log.type === 'user'
+                    ? '0 0 8px rgba(245, 158, 11, 0.5)'
+                    : '0 0 8px rgba(37, 99, 235, 0.5)',
+              }}
+            />
+            <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+              {log.type === 'user' ? '用户' : '助手'}
+            </span>
+            <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+              {new Date(log.timestamp).toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+              })}
+            </span>
+          </div>
+
+          {/* 完整内容 */}
+          <pre
+            className="text-sm whitespace-pre-wrap break-words leading-relaxed"
+            style={{
+              color: 'var(--color-text-primary)',
+              fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+              fontSize: '13px',
+              lineHeight: '1.6',
+            }}
+          >
+            {formatJsonContent(log.fullContent)}
+          </pre>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 /**
  * 尝试格式化 JSON 内容
@@ -142,7 +216,7 @@ export function TimelineSidebar({
 
   // 初始加载
   useEffect(() => {
-    loadParsedEvents(filePath);
+    void loadParsedEvents(filePath);
   }, [filePath, loadParsedEvents]);
 
   // 自动刷新定时器
@@ -151,7 +225,7 @@ export function TimelineSidebar({
       debugLog('auto-refresh', '启动自动刷新，间隔:', autoRefreshInterval);
       const intervalId = setInterval(() => {
         debugLog('auto-refresh', '自动刷新中...');
-        loadParsedEvents(filePath);
+        void loadParsedEvents(filePath);
       }, autoRefreshInterval);
 
       return () => {
@@ -199,57 +273,11 @@ export function TimelineSidebar({
           </button>
         </div>
         {/* 折叠状态下也保留对话框 */}
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-            <DialogHeader>
-              <DialogTitle>日志详情</DialogTitle>
-            </DialogHeader>
-            {selectedLog && (
-              <div className="flex-1 overflow-y-auto">
-                {/* 元信息 */}
-                <div className="flex items-center gap-2 mb-4 pb-3 border-b" style={{ borderColor: 'var(--color-border-light)' }}>
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{
-                      backgroundColor:
-                        selectedLog.type === 'user' ? 'var(--color-accent-warm)' : 'var(--color-accent-blue)',
-                      boxShadow:
-                        selectedLog.type === 'user'
-                          ? '0 0 8px rgba(245, 158, 11, 0.5)'
-                          : '0 0 8px rgba(37, 99, 235, 0.5)',
-                    }}
-                  />
-                  <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                    {selectedLog.type === 'user' ? '用户' : '助手'}
-                  </span>
-                  <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                    {new Date(selectedLog.timestamp).toLocaleString('zh-CN', {
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                    })}
-                  </span>
-                </div>
-
-                {/* 完整内容 */}
-                <pre
-                  className="text-sm whitespace-pre-wrap break-words leading-relaxed"
-                  style={{
-                    color: 'var(--color-text-primary)',
-                    fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-                    fontSize: '13px',
-                    lineHeight: '1.6',
-                  }}
-                >
-                  {formatJsonContent(selectedLog.fullContent)}
-                </pre>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
+        <LogDetailDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          log={selectedLog}
+        />
       </>
     );
   }
@@ -280,7 +308,7 @@ export function TimelineSidebar({
           {/* 刷新控制 */}
           <div className="flex gap-1">
             <button
-              onClick={() => loadParsedEvents(filePath)}
+              onClick={() => void loadParsedEvents(filePath)}
               className="p-1.5 rounded transition-colors hover:bg-[var(--color-app-secondary)]"
               title="刷新"
               disabled={autoRefresh}
@@ -428,57 +456,11 @@ export function TimelineSidebar({
     </aside>
 
     {/* 详情对话框 */}
-    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle>日志详情</DialogTitle>
-        </DialogHeader>
-        {selectedLog && (
-          <div className="flex-1 overflow-y-auto">
-            {/* 元信息 */}
-            <div className="flex items-center gap-2 mb-4 pb-3 border-b" style={{ borderColor: 'var(--color-border-light)' }}>
-              <div
-                className="w-2 h-2 rounded-full"
-                style={{
-                  backgroundColor:
-                    selectedLog.type === 'user' ? 'var(--color-accent-warm)' : 'var(--color-accent-blue)',
-                  boxShadow:
-                    selectedLog.type === 'user'
-                      ? '0 0 8px rgba(245, 158, 11, 0.5)'
-                      : '0 0 8px rgba(37, 99, 235, 0.5)',
-                }}
-              />
-              <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                {selectedLog.type === 'user' ? '用户' : '助手'}
-              </span>
-              <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                {new Date(selectedLog.timestamp).toLocaleString('zh-CN', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit',
-                })}
-              </span>
-            </div>
-
-            {/* 完整内容 */}
-            <pre
-              className="text-sm whitespace-pre-wrap break-words leading-relaxed"
-              style={{
-                color: 'var(--color-text-primary)',
-                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-                fontSize: '13px',
-                lineHeight: '1.6',
-              }}
-            >
-              {formatJsonContent(selectedLog.fullContent)}
-            </pre>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+    <LogDetailDialog
+      open={dialogOpen}
+      onOpenChange={setDialogOpen}
+      log={selectedLog}
+    />
     </>
   );
 }

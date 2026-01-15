@@ -619,7 +619,7 @@ pub async fn load_default_history_cache() -> Result<HashMap<String, String>, Ses
 mod tests {
     use super::*;
     use tokio::fs;
-    use std::io::Write;
+    use tokio::io::AsyncWriteExt;
 
     #[tokio::test]
     async fn test_read_summary_from_file() {
