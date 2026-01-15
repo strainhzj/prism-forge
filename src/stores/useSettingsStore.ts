@@ -339,6 +339,34 @@ export function getProviderDisplayInfo(providerType: ApiProviderType): ProviderD
 }
 
 /**
+ * 获取提供商类型的翻译键映射
+ * 用于在组件中动态获取翻译
+ */
+export const PROVIDER_TYPE_KEYS: Record<ApiProviderType, string> = {
+  [ApiProviderType.OPENAI]: 'openai',
+  [ApiProviderType.ANTHROPIC]: 'anthropic',
+  [ApiProviderType.GOOGLE]: 'google',
+  [ApiProviderType.GOOGLE_VERTEX]: 'googleVertex',
+  [ApiProviderType.AZURE_OPENAI]: 'azureOpenai',
+  [ApiProviderType.OLLAMA]: 'ollama',
+  [ApiProviderType.XAI]: 'xai',
+  [ApiProviderType.OPENAI_COMPATIBLE]: 'openaiCompatible',
+};
+
+/**
+ * 第三方提供商的翻译键映射
+ */
+export const THIRD_PARTY_PROVIDER_KEYS: Record<string, string> = {
+  'deepseek': 'deepseek',
+  'silicon': 'silicon',
+  'zhipu': 'zhipu',
+  'moonshot': 'moonshot',
+  'groq': 'groq',
+  'openrouter': 'openrouter',
+  'together': 'together',
+};
+
+/**
  * 连接错误类型
  */
 export enum ConnectionErrorType {

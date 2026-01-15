@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ChevronLeft, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -77,6 +78,7 @@ export function SessionContentView({
   onBack,
   className,
 }: SessionContentViewProps) {
+  const { t } = useTranslation('sessions');
   // 状态管理
   const [events, setEvents] = useState<ParsedEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -125,7 +127,7 @@ export function SessionContentView({
         </Button>
         <div className="flex-1 min-w-0">
           <h2 className="text-lg font-semibold truncate" style={{ color: 'var(--color-text-primary)' }}>
-            会话详情
+            {t('detailView.title')}
           </h2>
           <p className="text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>
             {sessionInfo.session_id.slice(0, 8)}...
@@ -137,7 +139,7 @@ export function SessionContentView({
           onClick={loadContent}
           disabled={loading}
           className="shrink-0 hover:bg-[var(--color-app-secondary)]"
-          title="刷新"
+          title={t('detailView.refresh')}
         >
           <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} style={{ color: 'var(--color-text-primary)' }} />
         </Button>
@@ -161,18 +163,18 @@ export function SessionContentView({
         ) : error ? (
           // 错误状态
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
-            <p className="font-medium" style={{ color: 'var(--color-app-error-accent)' }}>加载失败</p>
+            <p className="font-medium" style={{ color: 'var(--color-app-error-accent)' }}>{t('detailView.loadFailed')}</p>
             <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>{error}</p>
             <Button variant="outline" size="sm" onClick={loadContent} className="mt-4">
-              重试
+              {t('buttons.retry')}
             </Button>
           </div>
         ) : events.length === 0 ? (
           // 空状态
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
-            <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>暂无内容</p>
+            <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{t('detailView.noContent')}</p>
             <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>
-              该会话文件为空或格式不正确
+              {t('detailView.noContentHint')}
             </p>
           </div>
         ) : (
@@ -231,7 +233,7 @@ export function SessionContentView({
       {/* 底部统计信息 */}
       {!loading && !error && events.length > 0 && (
         <div className="px-6 py-3 border-t text-xs" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)', color: 'var(--color-text-secondary)' }}>
-          共 {events.length} 条消息
+          {t('detailView.messageCount', { count: events.length })}
         </div>
       )}
     </div>

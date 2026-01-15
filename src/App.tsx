@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { RefreshCw } from "lucide-react";
 import {
   ResizablePanelGroup,
@@ -11,6 +12,7 @@ import { SideNav } from "./components/navigation";
 import { ProjectCard } from "./components/project";
 import { TimelineSidebar } from "./components/timeline";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import {
   useProjectActions,
   useCurrentProject,
@@ -31,6 +33,7 @@ function debugLog(action: string, ...args: unknown[]) {
 // ==================== 主组件 ====================
 
 function App() {
+  const { t } = useTranslation('index');
   const navigate = useNavigate();
   const currentProject = useCurrentProject();
   const currentSessionFile = useCurrentSessionFile();
@@ -108,7 +111,7 @@ function App() {
   // 执行分析
   const handleAnalyze = async () => {
     if (!currentSessionFile || !goal) {
-      alert("请填写目标内容");
+      alert(t('alerts.fillGoal', { ns: 'common' }));
       return;
     }
 
@@ -152,7 +155,7 @@ function App() {
           >
             {/* Logo/标题 */}
             <div className="px-4 py-4 border-b" style={{ borderColor: 'var(--color-border-light)' }}>
-              <h1 className="text-lg font-bold" style={{ color: 'var(--color-accent-warm)' }}>PrismForge</h1>
+              <h1 className="text-lg font-bold" style={{ color: 'var(--color-accent-warm)' }}>{t('appTitle')}</h1>
             </div>
 
           {/* 导航菜单 */}
@@ -161,7 +164,7 @@ function App() {
           {/* 底部调试信息 */}
           {DEBUG && (
             <div className="px-3 py-2 mt-auto border-t text-xs" style={{ borderColor: 'var(--color-border-light)', color: 'var(--color-text-secondary)' }}>
-              调试模式
+              {t('debugMode')}
             </div>
           )}
           </div>
@@ -174,7 +177,9 @@ function App() {
         <ResizablePanel defaultSize={600}>
           <main className="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
             {/* 顶部标题栏 */}
-            <header className="px-6 py-4 border-b flex justify-end" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
+            <header className="px-6 py-4 border-b flex justify-end gap-2" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
+              {/* 语言切换 */}
+              <LanguageSwitcher />
               {/* 主题切换 */}
               <ThemeToggle />
             </header>
@@ -193,7 +198,7 @@ function App() {
               <div className="flex flex-col p-6" style={{ height: '40%', backgroundColor: 'var(--color-bg-primary)' }}>
                 {/* 暖橙色/珊瑚橙色发光标题 */}
                 <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--color-accent-warm)' }}>
-                  1. 下一步目标
+                  {t('sections.nextGoal')}
                 </h2>
 
                 {/* 目标输入区域 */}
@@ -202,7 +207,7 @@ function App() {
                   <textarea
                     value={goal}
                     onChange={(e) => setGoal(e.target.value)}
-                    placeholder="在此输入你的下一个目标...&#10;例如：修复用户服务中的空指针异常"
+                    placeholder={t('placeholders.goalInput')}
                     className="flex-1 min-h-[120px] px-4 py-3 rounded-lg focus:outline-none transition-colors resize-none"
                     style={{
                       fontSize: '16px',
@@ -238,9 +243,9 @@ function App() {
                     {analyzing ? (
                       <span className="flex items-center justify-center gap-2">
                         <RefreshCw className="h-4 w-4 animate-spin" />
-                        分析中...
+                        {t('status.analyzing')}
                       </span>
-                    ) : "Analyze & Generate Prompt ➔"}
+                    ) : t('buttons.analyzeButton')}
                   </button>
                 </div>
               </div>
@@ -252,7 +257,7 @@ function App() {
               <div className="flex flex-col p-6 overflow-hidden" style={{ height: '50%', backgroundColor: 'var(--color-app-result-bg)' }}>
                 {/* 专业蓝色/天空蓝色发光标题 */}
                 <h2 className="text-2xl font-bold mb-4" style={{ color: 'var(--color-accent-blue)' }}>
-                  2. AI 分析结果
+                  {t('sections.analysisResult')}
                 </h2>
 
                 {/* 结构化输出画布 */}
@@ -270,7 +275,7 @@ function App() {
                       </pre>
                     ) : (
                       <div className="flex items-center justify-center h-full">
-                        <p style={{ color: 'var(--color-text-secondary)' }}>分析结果将显示在这里...</p>
+                        <p style={{ color: 'var(--color-text-secondary)' }}>{t('messages.analysisResultPlaceholder')}</p>
                       </div>
                     )}
                   </div>

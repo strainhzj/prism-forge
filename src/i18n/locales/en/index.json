@@ -1,0 +1,37 @@
+{
+  "appTitle": "PrismForge",
+  "debugMode": "Debug Mode",
+  "sections": {
+    "nextGoal": "1. Next Goal",
+    "analysisResult": "2. AI Analysis Result"
+  },
+  "placeholders": {
+    "goalInput": "Enter your next goal here...\nE.g., Fix null pointer exception in user service"
+  },
+  "buttons": {
+    "analyzeAndGenerate": "Analyze & Generate Prompt",
+    "analyzeButton": "Analyze & Generate Prompt ➔"
+  },
+  "messages": {
+    "fillGoalAlert": "Please fill in the goal content",
+    "analysisResultPlaceholder": "Analysis results will be displayed here...",
+    "autoDetectFileError": "Auto-detect file failed: {{error}}"
+  },
+  "timeline": {
+    "title": "Timeline Log",
+    "expand": "Expand Timeline",
+    "collapse": "Collapse Sidebar",
+    "refresh": "Refresh",
+    "autoRefresh": "Auto Refresh",
+    "stopAutoRefresh": "Stop Auto Refresh",
+    "startAutoRefresh": "Start Auto Refresh",
+    "logDetail": "Log Details",
+    "user": "User",
+    "assistant": "Assistant",
+    "recordCount": "records"
+  },
+  "project": {
+    "switchProject": "Switch Project",
+    "selectProject": "Select Project"
+  }
+}

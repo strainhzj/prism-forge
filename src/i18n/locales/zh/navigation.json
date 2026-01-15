@@ -1,0 +1,9 @@
+{
+  "nav": {
+    "home": "首页",
+    "sessions": "会话历史",
+    "settings": "API 设置",
+    "promptLab": "提示词实验室",
+    "diagnostic": "诊断"
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "title": "会话管理",
+  "subtitle": "浏览和管理 Claude Code 会话历史",
+  "emptyState": {
+    "title": "请选择一个监控目录",
+    "description": "从左侧列表中选择一个目录查看其会话文件"
+  },
+  "buttons": {
+    "back": "返回",
+    "backToList": "返回列表",
+    "addDirectory": "添加目录",
+    "refresh": "刷新",
+    "cancel": "取消",
+    "add": "添加",
+    "confirm": "确认重命名",
+    "retry": "重试"
+  },
+  "sidebar": {
+    "title": "项目",
+    "noDirectories": "暂无监控目录",
+    "noDirectoriesHint": "点击\"添加目录\"选择要监控的项目目录",
+    "addDialog": {
+      "title": "添加监控目录",
+      "description": "确认要添加此目录到监控列表吗？应用将扫描该目录下的所有会话文件。",
+      "nameLabel": "名称",
+      "namePlaceholder": "目录显示名称",
+      "pathLabel": "路径"
+    },
+    "renameDialog": {
+      "title": "重命名监控目录",
+      "description": "为此监控目录设置一个新的显示名称。",
+      "newNameLabel": "新名称",
+      "newNamePlaceholder": "输入新的目录名称"
+    },
+    "tooltips": {
+      "disable": "禁用此目录",
+      "enable": "启用此目录",
+      "rename": "重命名",
+      "delete": "删除此目录"
+    },
+    "selectDirectory": "选择要监控的 Claude 会话目录"
+  },
+  "fileList": {
+    "title": "会话文件",
+    "emptyState": "此目录下暂无会话文件",
+    "emptyStateHint": "该目录下还没有 Claude Code 会话记录",
+    "showAgentSessions": "显示 Agent 会话记录",
+    "sessionCount": "个会话",
+    "totalSessions": "共 {{count}} 个会话",
+    "allLoaded": "已全部加载",
+    "loading": "加载中...",
+    "loadingMore": "加载更多...",
+    "loadFailed": "加载失败",
+    "lastModified": "修改时间",
+    "size": "大小"
+  },
+  "detailView": {
+    "title": "会话详情",
+    "refresh": "刷新",
+    "loadFailed": "加载失败",
+    "retry": "重试",
+    "noContent": "暂无内容",
+    "noContentHint": "该会话文件为空或格式不正确",
+    "messageCount": "共 {{count}} 条消息"
+  }
+}

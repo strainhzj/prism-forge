@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Folder, Plus, Trash2, Power, Edit2 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { invoke } from '@tauri-apps/api/core';
@@ -65,6 +66,7 @@ export function ProjectSidebar({
   selectedDirectory,
   className,
 }: ProjectSidebarProps) {
+  const { t } = useTranslation('sessions');
   const monitoredDirectories = useMonitoredDirectories();
   const { setActiveSessions } = useSessionActions();
   const {
@@ -95,7 +97,7 @@ export function ProjectSidebar({
       const selected = await open({
         directory: true,
         multiple: false,
-        title: '选择要监控的 Claude 会话目录',
+        title: t('sidebar.selectDirectory'),
       });
 
       if (selected) {
@@ -218,7 +220,7 @@ export function ProjectSidebar({
     <div className={cn('flex flex-col h-full bg-card', className)}>
       {/* 头部 */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
-        <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>项目</h2>
+        <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>{t('sidebar.title')}</h2>
         <div className="flex items-center gap-2">
           {/* 添加目录按钮 */}
           <Button
@@ -229,33 +231,33 @@ export function ProjectSidebar({
             style={{ color: 'var(--color-text-primary)' }}
           >
             <Plus className="h-4 w-4 mr-1" style={{ color: 'var(--color-text-primary)' }} />
-            添加目录
+            {t('buttons.addDirectory')}
           </Button>
           {/* 对话框 */}
           <Dialog open={directoryDialogOpen} onOpenChange={setDirectoryDialogOpen}>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>添加监控目录</DialogTitle>
+                <DialogTitle>{t('sidebar.addDialog.title')}</DialogTitle>
                 <DialogDescription>
-                  确认要添加此目录到监控列表吗？应用将扫描该目录下的所有会话文件。
+                  {t('sidebar.addDialog.description')}
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="directory-name" className="text-right">
-                    名称
+                    {t('sidebar.addDialog.nameLabel')}
                   </Label>
                   <Input
                     id="directory-name"
                     value={newDirectoryName}
                     onChange={(e) => setNewDirectoryName(e.target.value)}
                     className="col-span-3"
-                    placeholder="目录显示名称"
+                    placeholder={t('sidebar.addDialog.namePlaceholder')}
                   />
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="directory-path" className="text-right">
-                    路径
+                    {t('sidebar.addDialog.pathLabel')}
                   </Label>
                   <Input
                     id="directory-path"
@@ -276,7 +278,7 @@ export function ProjectSidebar({
                     color: 'var(--color-text-primary)',
                   }}
                 >
-                  取消
+                  {t('buttons.cancel')}
                 </Button>
                 <Button
                   type="button"
@@ -286,7 +288,7 @@ export function ProjectSidebar({
                     color: '#FFFFFF',
                   }}
                 >
-                  添加
+                  {t('buttons.add')}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -296,22 +298,22 @@ export function ProjectSidebar({
           <Dialog open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
             <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
-                <DialogTitle>重命名监控目录</DialogTitle>
+                <DialogTitle>{t('sidebar.renameDialog.title')}</DialogTitle>
                 <DialogDescription>
-                  为此监控目录设置一个新的显示名称。
+                  {t('sidebar.renameDialog.description')}
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4">
                   <Label htmlFor="rename-name" className="text-right">
-                    新名称
+                    {t('sidebar.renameDialog.newNameLabel')}
                   </Label>
                   <Input
                     id="rename-name"
                     value={renameValue}
                     onChange={(e) => setRenameValue(e.target.value)}
                     className="col-span-3"
-                    placeholder="输入新的目录名称"
+                    placeholder={t('sidebar.renameDialog.newNamePlaceholder')}
                     autoFocus
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
@@ -332,7 +334,7 @@ export function ProjectSidebar({
                     color: 'var(--color-text-primary)',
                   }}
                 >
-                  取消
+                  {t('buttons.cancel')}
                 </Button>
                 <Button
                   type="button"
@@ -342,7 +344,7 @@ export function ProjectSidebar({
                     color: '#FFFFFF',
                   }}
                 >
-                  确认重命名
+                  {t('buttons.confirm')}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -355,7 +357,7 @@ export function ProjectSidebar({
             className="h-7 px-2 hover:bg-[var(--color-app-secondary)]"
             style={{ color: 'var(--color-text-primary)' }}
           >
-            刷新
+            {t('buttons.refresh')}
           </Button>
         </div>
       </div>
@@ -364,9 +366,9 @@ export function ProjectSidebar({
       <div className="flex-1 overflow-y-auto">
         {monitoredDirectories.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-sm text-muted-foreground p-4">
-            <p className="text-foreground font-medium">暂无监控目录</p>
+            <p className="text-foreground font-medium">{t('sidebar.noDirectories')}</p>
             <p className="text-xs mt-2 text-center">
-              点击"添加目录"选择要监控的项目目录
+              {t('sidebar.noDirectoriesHint')}
             </p>
           </div>
         ) : (
@@ -421,7 +423,7 @@ export function ProjectSidebar({
                           ? '!bg-orange-500 !border-orange-600 !text-white hover:!bg-orange-600'
                           : 'bg-muted border-muted-foreground/20 text-muted-foreground hover:bg-muted/80'
                       )}
-                      title={dir.is_active ? '禁用此目录' : '启用此目录'}
+                      title={dir.is_active ? t('sidebar.tooltips.disable') : t('sidebar.tooltips.enable')}
                     >
                       <Power className="h-3.5 w-3.5" />
                     </button>
@@ -433,7 +435,7 @@ export function ProjectSidebar({
                         'transition-all hover:scale-105 active:scale-95',
                         '!bg-blue-500 !border-blue-600 !text-white hover:!bg-blue-600'
                       )}
-                      title="重命名"
+                      title={t('sidebar.tooltips.rename')}
                     >
                       <Edit2 className="h-3.5 w-3.5" />
                     </button>
@@ -448,7 +450,7 @@ export function ProjectSidebar({
                         'transition-all hover:scale-105 active:scale-95',
                         '!bg-red-500 !border-red-600 !text-white hover:!bg-red-600'
                       )}
-                      title="删除此目录"
+                      title={t('sidebar.tooltips.delete')}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>

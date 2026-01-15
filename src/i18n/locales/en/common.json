@@ -1,0 +1,55 @@
+{
+  "language": {
+    "zh": "中文",
+    "en": "English"
+  },
+  "theme": {
+    "light": "Light",
+    "dark": "Dark",
+    "toggle": "Toggle Theme"
+  },
+  "buttons": {
+    "analyze": "Analyze",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "confirm": "Confirm",
+    "submit": "Submit",
+    "search": "Search",
+    "refresh": "Refresh",
+    "loading": "Loading..."
+  },
+  "status": {
+    "loading": "Loading...",
+    "analyzing": "Analyzing...",
+    "success": "Success",
+    "error": "Error",
+    "empty": "No Data"
+  },
+  "alerts": {
+    "fillGoal": "Please fill in the goal content"
+  },
+  "projectSwitcher": {
+    "title": "Switch Project",
+    "description": "Select a project and optionally choose a session file to track",
+    "searchPlaceholder": "Search project name...",
+    "newProject": "New Project",
+    "createNew": "Create New",
+    "noProjectFound": "No matching projects found",
+    "noProjectEmpty": "No projects yet, click 'New Project' to add one",
+    "selectSession": "Select Session File (Optional)",
+    "noSessionInProject": "No session files in this project",
+    "confirmSelection": "Confirm Selection",
+    "selectDirectory": "Select Project Directory to Monitor",
+    "deleteConfirm": "Are you sure you want to delete project '{{name}}'?",
+    "disabled": "(Disabled)",
+    "time": {
+      "justNow": "Just now",
+      "minutesAgo": "{{count}} min ago",
+      "hoursAgo": "{{count}} hr ago",
+      "daysAgo": "{{count}} day ago"
+    }
+  }
+}

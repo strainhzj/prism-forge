@@ -7,6 +7,7 @@
 
 import { useState, useCallback } from 'react';
 import { FolderOpen, FolderPlus, ChevronRight } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useCurrentProject } from '@/stores/useProjectStore';
 import { ProjectSwitcherDialog } from './ProjectSwitcherDialog';
 import { cn } from '@/lib/utils';
@@ -42,6 +43,7 @@ export interface ProjectCardProps {
  * <ProjectCard onConfirm={handleProjectChange} />
  */
 export function ProjectCard({ onConfirm, className }: ProjectCardProps) {
+  const { t } = useTranslation('index');
   const currentProject = useCurrentProject();
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -108,7 +110,7 @@ export function ProjectCard({ onConfirm, className }: ProjectCardProps) {
               e.currentTarget.style.backgroundColor = 'var(--color-app-secondary)';
             }}
           >
-            切换项目
+            {t('project.switchProject')}
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
@@ -182,7 +184,7 @@ export function ProjectCard({ onConfirm, className }: ProjectCardProps) {
             }}
           >
             <FolderPlus className="h-4 w-4" />
-            选择项目
+            {t('project.selectProject')}
           </button>
         </div>
       </div>

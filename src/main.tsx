@@ -6,6 +6,7 @@ import App from "./App";
 import { getQueryClient } from "./lib/query-client";
 import { Loading } from "./components/ui/loading";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import "./i18n"; // 初始化 i18n
 import "./index.css";
 
 // 代码分割：路由级懒加载

@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { FileText, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -139,6 +140,7 @@ export function SessionFileList({
   onSessionClick,
   className,
 }: SessionFileListProps) {
+  const { t } = useTranslation('sessions');
   // 状态管理
   const [sessions, setSessions] = useState<SessionFileInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -285,12 +287,12 @@ export function SessionFileList({
               setIncludeAgent(newValue);
             }}
           >
-            显示 Agent 会话记录
+            {t('fileList.showAgentSessions')}
           </label>
         </div>
 
         <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-          {sessions.length} 个会话
+          {sessions.length} {t('fileList.sessionCount')}
         </div>
       </div>
 
@@ -314,19 +316,19 @@ export function SessionFileList({
         ) : error ? (
           // 错误状态
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
-            <p className="font-medium" style={{ color: 'var(--color-app-error-accent)' }}>加载失败</p>
+            <p className="font-medium" style={{ color: 'var(--color-app-error-accent)' }}>{t('fileList.loadFailed')}</p>
             <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>{error}</p>
             <Button variant="outline" size="sm" onClick={() => loadSessions(false)} className="mt-4">
-              重试
+              {t('buttons.retry')}
             </Button>
           </div>
         ) : sessions.length === 0 ? (
           // 空状态
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <FileText className="h-12 w-12 mb-3" style={{ color: 'var(--color-text-secondary)' }} />
-            <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>暂无会话文件</p>
+            <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{t('fileList.emptyState')}</p>
             <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>
-              该目录下还没有 Claude Code 会话记录
+              {t('fileList.emptyStateHint')}
             </p>
           </div>
         ) : (
@@ -390,7 +392,7 @@ export function SessionFileList({
                 ) : (
                   // 懒加载触发器（不可见，用于 Intersection Observer）
                   <div className="p-4 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                    加载更多...
+                    {t('fileList.loadingMore')}
                   </div>
                 )}
               </li>
@@ -404,8 +406,8 @@ export function SessionFileList({
         <div className="px-6 py-3 border-t text-xs flex items-center justify-between"
              style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)', color: 'var(--color-text-secondary)' }}
         >
-          <span>共 {sessions.length} 个会话</span>
-          {!hasMore && <span>已全部加载</span>}
+          <span>{t('fileList.totalSessions', { count: sessions.length })}</span>
+          {!hasMore && <span>{t('fileList.allLoaded')}</span>}
         </div>
       )}
     </div>

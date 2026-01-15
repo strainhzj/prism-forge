@@ -6,6 +6,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -46,6 +47,7 @@ export interface SettingsPageProps {
  * <SettingsPage />
  */
 export function SettingsPage({ className }: SettingsPageProps) {
+  const { t } = useTranslation('settings');
   const navigate = useNavigate();
 
   // Store
@@ -119,12 +121,12 @@ export function SettingsPage({ className }: SettingsPageProps) {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>设置</h1>
+          <h1 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>{t('title')}</h1>
         </div>
         {activeTab === 'providers' && (
           <Button onClick={handleCreate} className="shrink-0">
             <Plus className="h-4 w-4 mr-2" />
-            新建提供商
+            {t('buttons.create')}
           </Button>
         )}
         <ThemeToggle />
@@ -144,7 +146,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
                   onClick={clearError}
                   className="h-6 px-2"
                 >
-                  关闭
+                  {t('buttons.close')}
                 </Button>
               </AlertDescription>
             </Alert>
@@ -153,8 +155,8 @@ export function SettingsPage({ className }: SettingsPageProps) {
           {/* 标签页 */}
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SettingsTab)}>
             <TabsList className="grid w-full grid-cols-2" style={{ backgroundColor: 'var(--color-bg-card)' }}>
-              <TabsTrigger value="providers">API 提供商</TabsTrigger>
-              <TabsTrigger value="vector">语义搜索</TabsTrigger>
+              <TabsTrigger value="providers">{t('tabs.providers')}</TabsTrigger>
+              <TabsTrigger value="vector">{t('tabs.vector')}</TabsTrigger>
             </TabsList>
 
             {/* API 提供商标签页 */}
@@ -169,13 +171,13 @@ export function SettingsPage({ className }: SettingsPageProps) {
                 <Card className="p-12 text-center" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
                   <div className="space-y-4">
                     <div className="text-6xl">⚙️</div>
-                    <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>暂无 API 提供商</h3>
+                    <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>{t('emptyState.title')}</h3>
                     <p className="max-w-md mx-auto" style={{ color: 'var(--color-text-secondary)' }}>
-                      配置 LLM API 提供商以使用 AI 功能。支持 OpenAI、Anthropic、Ollama、xAI、Google 等多种提供商。
+                      {t('emptyState.description')}
                     </p>
                     <Button onClick={handleCreate}>
                       <Plus className="h-4 w-4 mr-2" />
-                      添加第一个提供商
+                      {t('buttons.addFirst')}
                     </Button>
                   </div>
                 </Card>
@@ -195,7 +197,7 @@ export function SettingsPage({ className }: SettingsPageProps) {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {viewMode === 'create' ? '新建提供商' : '编辑提供商'}
+              {viewMode === 'create' ? t('dialog.createTitle') : t('dialog.editTitle')}
             </DialogTitle>
           </DialogHeader>
 

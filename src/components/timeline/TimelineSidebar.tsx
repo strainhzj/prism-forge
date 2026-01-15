@@ -6,6 +6,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useTranslation } from 'react-i18next';
 import { ChevronRight, ChevronLeft, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -83,13 +84,15 @@ interface LogDetailDialogProps {
 }
 
 function LogDetailDialog({ open, onOpenChange, log }: LogDetailDialogProps) {
+  const { t } = useTranslation('index');
+
   if (!log) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>日志详情</DialogTitle>
+          <DialogTitle>{t('timeline.logDetail')}</DialogTitle>
         </DialogHeader>
         <div className="flex-1 overflow-y-auto">
           {/* 元信息 */}
@@ -106,7 +109,7 @@ function LogDetailDialog({ open, onOpenChange, log }: LogDetailDialogProps) {
               }}
             />
             <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-              {log.type === 'user' ? '用户' : '助手'}
+              {log.type === 'user' ? t('timeline.user') : t('timeline.assistant')}
             </span>
             <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
               {new Date(log.timestamp).toLocaleString('zh-CN', {
@@ -192,6 +195,7 @@ export function TimelineSidebar({
   collapsed = false,
   onToggleCollapse,
 }: TimelineSidebarProps) {
+  const { t } = useTranslation('index');
   const [parsedEvents, setParsedEvents] = useState<ParsedEvent[]>([]);
   const [parseError, setParseError] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -267,7 +271,7 @@ export function TimelineSidebar({
             onClick={() => onToggleCollapse?.()}
             className="flex-1 w-8 border-l transition-colors flex items-center justify-center hover:bg-[var(--color-bg-card)]"
             style={{ borderColor: 'var(--color-border-light)' }}
-            title="展开时间线"
+            title={t('timeline.expand')}
           >
             <ChevronLeft className="h-4 w-4" style={{ color: 'var(--color-text-secondary)' }} />
           </button>
@@ -298,10 +302,10 @@ export function TimelineSidebar({
       >
         <div>
           <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-            时间线日志
+            {t('timeline.title')}
           </h2>
           <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-            {timelineLogs.length} 条记录
+            {timelineLogs.length} {t('timeline.recordCount')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -310,7 +314,7 @@ export function TimelineSidebar({
             <button
               onClick={() => void loadParsedEvents(filePath)}
               className="p-1.5 rounded transition-colors hover:bg-[var(--color-app-secondary)]"
-              title="刷新"
+              title={t('timeline.refresh')}
               disabled={autoRefresh}
             >
               <RefreshCw
@@ -339,7 +343,7 @@ export function TimelineSidebar({
                   e.currentTarget.style.backgroundColor = 'transparent';
                 }
               }}
-              title={autoRefresh ? '停止自动刷新' : '开启自动刷新'}
+              title={autoRefresh ? t('timeline.stopAutoRefresh') : t('timeline.startAutoRefresh')}
             >
               {autoRefresh ? '⏸' : '▶'}
             </button>
@@ -347,7 +351,7 @@ export function TimelineSidebar({
           <button
             onClick={() => onToggleCollapse?.()}
             className="p-1 rounded transition-colors hover:bg-[var(--color-app-secondary)]"
-            title="折叠侧边栏"
+            title={t('timeline.collapse')}
           >
             <ChevronRight className="h-4 w-4" style={{ color: 'var(--color-text-secondary)' }} />
           </button>
@@ -372,7 +376,7 @@ export function TimelineSidebar({
         {timelineLogs.length === 0 && !parseError && (
           <div className="text-center py-8">
             <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              暂无日志记录
+              {t('timeline.noLogs')}
             </p>
           </div>
         )}
@@ -451,7 +455,7 @@ export function TimelineSidebar({
           color: 'var(--color-text-secondary)',
         }}
       >
-        {autoRefresh && '自动刷新中...'}
+        {autoRefresh && t('timeline.autoRefreshing')}
       </div>
     </aside>
 

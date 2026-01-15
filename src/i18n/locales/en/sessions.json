@@ -1,0 +1,66 @@
+{
+  "title": "Session Management",
+  "subtitle": "Browse and manage Claude Code session history",
+  "emptyState": {
+    "title": "Please select a monitored directory",
+    "description": "Select a directory from the left list to view its session files"
+  },
+  "buttons": {
+    "back": "Back",
+    "backToList": "Back to List",
+    "addDirectory": "Add Directory",
+    "refresh": "Refresh",
+    "cancel": "Cancel",
+    "add": "Add",
+    "confirm": "Confirm Rename",
+    "retry": "Retry"
+  },
+  "sidebar": {
+    "title": "Projects",
+    "noDirectories": "No monitored directories",
+    "noDirectoriesHint": "Click \"Add Directory\" to select a project directory to monitor",
+    "addDialog": {
+      "title": "Add Monitored Directory",
+      "description": "Confirm to add this directory to the monitoring list? The application will scan all session files in this directory.",
+      "nameLabel": "Name",
+      "namePlaceholder": "Directory display name",
+      "pathLabel": "Path"
+    },
+    "renameDialog": {
+      "title": "Rename Monitored Directory",
+      "description": "Set a new display name for this monitored directory.",
+      "newNameLabel": "New Name",
+      "newNamePlaceholder": "Enter new directory name"
+    },
+    "tooltips": {
+      "disable": "Disable this directory",
+      "enable": "Enable this directory",
+      "rename": "Rename",
+      "delete": "Delete this directory"
+    },
+    "selectDirectory": "Select Claude session directory to monitor"
+  },
+  "fileList": {
+    "title": "Session Files",
+    "emptyState": "No session files in this directory",
+    "emptyStateHint": "No Claude Code session records in this directory yet",
+    "showAgentSessions": "Show Agent Sessions",
+    "sessionCount": "sessions",
+    "totalSessions": "Total {{count}} sessions",
+    "allLoaded": "All loaded",
+    "loading": "Loading...",
+    "loadingMore": "Loading more...",
+    "loadFailed": "Load failed",
+    "lastModified": "Modified",
+    "size": "Size"
+  },
+  "detailView": {
+    "title": "Session Details",
+    "refresh": "Refresh",
+    "loadFailed": "Load failed",
+    "retry": "Retry",
+    "noContent": "No content",
+    "noContentHint": "The session file is empty or has incorrect format",
+    "messageCount": "Total {{count}} messages"
+  }
+}

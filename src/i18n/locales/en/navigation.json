@@ -1,0 +1,9 @@
+{
+  "nav": {
+    "home": "Home",
+    "sessions": "Sessions",
+    "settings": "API Settings",
+    "promptLab": "Prompt Lab",
+    "diagnostic": "Diagnostic"
+  }
+}

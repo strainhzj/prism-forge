@@ -5,6 +5,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Settings, Trash2, Zap, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,7 @@ export function ProviderSettings({
   onSelectProvider,
   className,
 }: ProviderSettingsProps) {
+  const { t } = useTranslation('settings');
   const providers = useProviders();
   const loading = useProvidersLoading();
   const error = useProvidersError();
@@ -74,8 +76,7 @@ export function ProviderSettings({
       if (!provider.id) return;
 
       const confirmed = window.confirm(
-        `确定要删除提供商 "${provider.name}" 吗？\n\n` +
-        `此操作将同时删除存储的 API Key，且不可恢复。`
+        t('dialog.deleteConfirm', { name: provider.name })
       );
 
       if (!confirmed) return;
@@ -165,22 +166,22 @@ export function ProviderSettings({
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
           <Settings className="h-5 w-5 text-muted-foreground" />
-          <h3 className="text-lg font-semibold">API 提供商</h3>
+          <h3 className="text-lg font-semibold">{t('tabs.providers')}</h3>
         </div>
         <div className="flex items-center gap-2 ml-auto">
           {stats.total > 0 && (
             <>
               <Badge variant="secondary" className="text-xs">
-                总计: {stats.total}
+                {t('stats.total')}: {stats.total}
               </Badge>
               {stats.active > 0 && (
                 <Badge variant="default" className="text-xs">
-                  活跃: {stats.active}
+                  {t('stats.active')}: {stats.active}
                 </Badge>
               )}
               {stats.withKey > 0 && (
                 <Badge variant="outline" className="text-xs">
-                  已配置: {stats.withKey}
+                  {t('stats.configured')}: {stats.withKey}
                 </Badge>
               )}
             </>
@@ -199,7 +200,7 @@ export function ProviderSettings({
               onClick={clearError}
               className="h-6 px-2"
             >
-              关闭
+              {t('buttons.close')}
             </Button>
           </AlertDescription>
         </Alert>
@@ -208,16 +209,16 @@ export function ProviderSettings({
       {/* 加载状态 */}
       {loading && providers.length === 0 && (
         <div className="flex justify-center py-8">
-          <Loading text="加载提供商..." />
+          <Loading text={t('emptyState.description')} />
         </div>
       )}
 
       {/* 空状态 */}
       {!loading && providers.length === 0 && (
         <Card className="p-8 text-center">
-          <p className="text-muted-foreground">暂无 API 提供商配置</p>
+          <p className="text-muted-foreground">{t('emptyState.title')}</p>
           <p className="text-sm text-muted-foreground mt-2">
-            点击下方按钮添加第一个提供商
+            {t('buttons.addFirst')}
           </p>
         </Card>
       )}
@@ -260,7 +261,7 @@ export function ProviderSettings({
                       {provider.isActive && (
                         <Badge variant="default" className="text-xs">
                           <Zap className="h-3 w-3 mr-1" />
-                          活跃
+                          {t('buttons.active')}
                         </Badge>
                       )}
                       <Badge variant="outline" className="text-xs">
@@ -275,16 +276,16 @@ export function ProviderSettings({
                       {provider.hasApiKey ? (
                         <span className="flex items-center gap-1">
                           <CheckCircle2 className="h-3 w-3 text-green-500" />
-                          已配置密钥
+                          {t('buttons.keyConfigured')}
                         </span>
                       ) : (
                         <span className="flex items-center gap-1">
                           <AlertCircle className="h-3 w-3 text-orange-500" />
-                          未配置密钥
+                          {t('buttons.noKeyConfigured')}
                         </span>
                       )}
                       {provider.model && (
-                        <span className="truncate">模型: {provider.model}</span>
+                        <span className="truncate">{t('buttons.model')}: {provider.model}</span>
                       )}
                     </div>
 
@@ -305,8 +306,8 @@ export function ProviderSettings({
                         )}
                         <span>
                           {testResult.success
-                            ? '连接成功'
-                            : testResult.errorMessage || '连接失败'}
+                            ? t('errors.connectionSuccess')
+                            : testResult.errorMessage || t('errors.connectionFailed')}
                         </span>
                       </div>
                     )}
@@ -320,7 +321,7 @@ export function ProviderSettings({
                         size="sm"
                         onClick={() => handleSetActive(provider)}
                         className="h-8"
-                        title="设为活跃"
+                        title={t('buttons.setActive')}
                       >
                         <Zap className="h-4 w-4" />
                       </Button>
@@ -336,7 +337,7 @@ export function ProviderSettings({
                         testStatus === 'success' && 'text-green-600',
                         testStatus === 'error' && 'text-red-600'
                       )}
-                      title="测试连接"
+                      title={t('buttons.testConnection')}
                     >
                       {testStatus === 'testing' ? (
                         <Settings className="h-4 w-4 animate-spin" />
@@ -354,7 +355,7 @@ export function ProviderSettings({
                       size="sm"
                       onClick={() => onSelectProvider?.(provider)}
                       className="h-8"
-                      title="编辑"
+                      title={t('buttons.edit')}
                     >
                       ✏️
                     </Button>
@@ -364,7 +365,7 @@ export function ProviderSettings({
                       size="sm"
                       onClick={() => handleDelete(provider)}
                       className="h-8 text-red-500 hover:text-red-600"
-                      title="删除"
+                      title={t('buttons.delete')}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -407,6 +408,7 @@ export function ProviderCard({
   onDelete,
   className,
 }: ProviderCardProps) {
+  const { t } = useTranslation('settings');
   return (
     <Card
       className={cn(
@@ -435,7 +437,7 @@ export function ProviderCard({
           <div className="flex items-center gap-2 mb-1">
             <h4 className="font-medium truncate">{provider.name}</h4>
             {provider.isActive && (
-              <Badge variant="default" className="text-xs">活跃</Badge>
+              <Badge variant="default" className="text-xs">{t('buttons.active')}</Badge>
             )}
           </div>
           <p className="text-xs text-muted-foreground truncate">

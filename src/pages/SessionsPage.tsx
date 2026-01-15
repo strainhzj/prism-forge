@@ -8,6 +8,7 @@
 
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,7 @@ export interface SessionsPageProps {
  */
 export function SessionsPage({ className }: SessionsPageProps) {
   const navigate = useNavigate();
+  const { t } = useTranslation('sessions');
 
   // 视图状态管理
   const [viewState, setViewState] = useState<ViewState>('directory_list');
@@ -86,9 +88,9 @@ export function SessionsPage({ className }: SessionsPageProps) {
           <ArrowLeft className="h-5 w-5" style={{ color: 'var(--color-text-secondary)' }} />
         </Button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>会话管理</h1>
+          <h1 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>{t('title')}</h1>
           <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-            浏览和管理 Claude Code 会话历史
+            {t('subtitle')}
           </p>
         </div>
         <ThemeToggle />
@@ -122,9 +124,9 @@ export function SessionsPage({ className }: SessionsPageProps) {
           ) : (
             // 空状态（未选择目录）
             <div className="flex flex-col items-center justify-center h-full text-center p-4">
-              <p className="font-medium text-lg" style={{ color: 'var(--color-text-primary)' }}>请选择一个监控目录</p>
+              <p className="font-medium text-lg" style={{ color: 'var(--color-text-primary)' }}>{t('emptyState.title')}</p>
               <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>
-                从左侧列表中选择一个目录查看其会话文件
+                {t('emptyState.description')}
               </p>
             </div>
           )}

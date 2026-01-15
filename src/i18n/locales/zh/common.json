@@ -1,0 +1,55 @@
+{
+  "language": {
+    "zh": "中文",
+    "en": "English"
+  },
+  "theme": {
+    "light": "浅色",
+    "dark": "深色",
+    "toggle": "切换主题"
+  },
+  "buttons": {
+    "analyze": "分析",
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "edit": "编辑",
+    "add": "添加",
+    "confirm": "确认",
+    "submit": "提交",
+    "search": "搜索",
+    "refresh": "刷新",
+    "loading": "加载中..."
+  },
+  "status": {
+    "loading": "加载中...",
+    "analyzing": "分析中...",
+    "success": "成功",
+    "error": "错误",
+    "empty": "暂无数据"
+  },
+  "alerts": {
+    "fillGoal": "请填写目标内容"
+  },
+  "projectSwitcher": {
+    "title": "切换项目",
+    "description": "选择一个项目并选择要跟踪的会话文件",
+    "searchPlaceholder": "搜索项目名称...",
+    "newProject": "新建项目",
+    "createNew": "新建",
+    "noProjectFound": "未找到匹配的项目",
+    "noProjectEmpty": "暂无项目，请点击「新建项目」添加",
+    "selectSession": "选择会话文件 (可选)",
+    "noSessionInProject": "该项目下暂无会话文件",
+    "confirmSelection": "确认选择",
+    "selectDirectory": "选择要监控的项目目录",
+    "deleteConfirm": "确定要删除项目「{{name}}」吗？",
+    "disabled": "(禁用)",
+    "time": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{count}}分钟前",
+      "hoursAgo": "{{count}}小时前",
+      "daysAgo": "{{count}}天前"
+    }
+  }
+}

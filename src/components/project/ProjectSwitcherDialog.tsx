@@ -11,6 +11,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Search, Plus, Trash2, Folder, FileText, Clock } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { useTranslation } from 'react-i18next';
 import { useProjectStore, useProjectActions, useCurrentProject } from '@/stores/useProjectStore';
 import type { MonitoredDirectory, SessionFileInfo } from '@/stores/useSessionStore';
 import { cn } from '@/lib/utils';
@@ -64,18 +65,18 @@ function extractDirectoryName(path: string): string {
 /**
  * 格式化时间显示
  */
-function formatRelativeTime(isoTime: string): string {
+function formatRelativeTime(isoTime: string, t: (key: string, params?: any) => string): string {
   const date = new Date(isoTime);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
 
-  if (diffMins < 1) return '刚刚';
-  if (diffMins < 60) return `${diffMins}分钟前`;
+  if (diffMins < 1) return t('projectSwitcher.time.justNow');
+  if (diffMins < 60) return t('projectSwitcher.time.minutesAgo', { count: diffMins });
   const diffHours = Math.floor(diffMs / 3600000);
-  if (diffHours < 24) return `${diffHours}小时前`;
+  if (diffHours < 24) return t('projectSwitcher.time.hoursAgo', { count: diffHours });
   const diffDays = Math.floor(diffMs / 86400000);
-  return `${diffDays}天前`;
+  return t('projectSwitcher.time.daysAgo', { count: diffDays });
 }
 
 /**
@@ -86,6 +87,7 @@ export function ProjectSwitcherDialog({
   onOpenChange,
   onConfirm,
 }: ProjectSwitcherDialogProps) {
+  const { t } = useTranslation('common');
   const projects = useProjectStore((state) => state.projects);
   const currentProject = useCurrentProject();
   const {
@@ -168,7 +170,7 @@ export function ProjectSwitcherDialog({
       const selected = await openDialog({
         directory: true,
         multiple: false,
-        title: '选择要监控的项目目录',
+        title: t('projectSwitcher.selectDirectory'),
       });
 
       if (selected) {
@@ -178,13 +180,13 @@ export function ProjectSwitcherDialog({
     } catch (error) {
       debugLog('handleAddProject', 'error', error);
     }
-  }, [addProject]);
+  }, [addProject, t]);
 
   // 删除项目
   const handleRemoveProject = useCallback(async (project: MonitoredDirectory) => {
     if (project.id === undefined) return;
 
-    const confirmed = confirm(`确定要删除项目"${project.name}"吗？`);
+    const confirmed = confirm(t('projectSwitcher.deleteConfirm', { name: project.name }));
     if (!confirmed) return;
 
     try {
@@ -196,7 +198,7 @@ export function ProjectSwitcherDialog({
     } catch (error) {
       debugLog('handleRemoveProject', 'error', error);
     }
-  }, [removeProject, selectedProject]);
+  }, [removeProject, selectedProject, t]);
 
   // 确认选择
   const handleConfirm = useCallback(() => {
@@ -213,9 +215,9 @@ export function ProjectSwitcherDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[850px] w-[95vw]" style={{ backgroundColor: 'var(--color-bg-card)' }}>
         <DialogHeader>
-          <DialogTitle style={{ color: 'var(--color-text-primary)' }}>切换项目</DialogTitle>
+          <DialogTitle style={{ color: 'var(--color-text-primary)' }}>{t('projectSwitcher.title')}</DialogTitle>
           <DialogDescription style={{ color: 'var(--color-text-secondary)' }}>
-            选择一个项目并选择要跟踪的会话文件
+            {t('projectSwitcher.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -228,7 +230,7 @@ export function ProjectSwitcherDialog({
                 style={{ color: 'var(--color-text-secondary)' }}
               />
               <Input
-                placeholder="搜索项目名称..."
+                placeholder={t('projectSwitcher.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 pr-3 [&::placeholder]:text-[var(--color-text-secondary)]"
@@ -251,8 +253,8 @@ export function ProjectSwitcherDialog({
               }}
             >
               <Plus className="h-4 w-4 mr-1 shrink-0" />
-              <span className="hidden sm:inline">新建项目</span>
-              <span className="sm:hidden">新建</span>
+              <span className="hidden sm:inline">{t('projectSwitcher.newProject')}</span>
+              <span className="sm:hidden">{t('projectSwitcher.createNew')}</span>
             </Button>
           </div>
 
@@ -267,7 +269,7 @@ export function ProjectSwitcherDialog({
             {filteredProjects.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
                 <p className="text-sm break-words" style={{ color: 'var(--color-text-secondary)' }}>
-                  {searchQuery ? '未找到匹配的项目' : '暂无项目，请点击"新建项目"添加'}
+                  {searchQuery ? t('projectSwitcher.noProjectFound') : t('projectSwitcher.noProjectEmpty')}
                 </p>
               </div>
             ) : (
@@ -303,7 +305,7 @@ export function ProjectSwitcherDialog({
                           {project.name}
                         </span>
                         {!project.is_active && (
-                          <span className="shrink-0" style={{ color: 'var(--color-text-secondary)', fontSize: '12px' }}>(禁用)</span>
+                          <span className="shrink-0" style={{ color: 'var(--color-text-secondary)', fontSize: '12px' }}>{t('projectSwitcher.disabled')}</span>
                         )}
                       </div>
                       <p className="text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>
@@ -332,7 +334,7 @@ export function ProjectSwitcherDialog({
           {selectedProject && (
             <div className="space-y-2">
               <p className="text-sm font-medium break-words" style={{ color: 'var(--color-text-primary)' }}>
-                选择会话文件 (可选)
+                {t('projectSwitcher.selectSession')}
               </p>
               <div
                 className="rounded-lg max-h-[200px] overflow-y-auto w-full"
@@ -357,7 +359,7 @@ export function ProjectSwitcherDialog({
                       style={{ color: 'var(--color-text-secondary)' }}
                     />
                     <p className="text-sm break-words" style={{ color: 'var(--color-text-secondary)' }}>
-                      该项目下暂无会话文件
+                      {t('projectSwitcher.noSessionInProject')}
                     </p>
                   </div>
                 ) : (
@@ -391,7 +393,7 @@ export function ProjectSwitcherDialog({
                           <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                             <span className="flex items-center gap-1 shrink-0">
                               <Clock className="h-3 w-3 shrink-0" />
-                              <span className="truncate">{formatRelativeTime(file.modified_time)}</span>
+                              <span className="truncate">{formatRelativeTime(file.modified_time, t)}</span>
                             </span>
                           </div>
                         </div>
@@ -406,14 +408,14 @@ export function ProjectSwitcherDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
+            {t('buttons.cancel')}
           </Button>
           <Button
             onClick={handleConfirm}
             disabled={!selectedProject}
             style={{ backgroundColor: 'var(--color-accent-warm)' }}
           >
-            确认选择
+            {t('projectSwitcher.confirmSelection')}
           </Button>
         </DialogFooter>
       </DialogContent>

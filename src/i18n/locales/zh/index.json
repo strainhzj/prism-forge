@@ -1,0 +1,37 @@
+{
+  "appTitle": "PrismForge",
+  "debugMode": "调试模式",
+  "sections": {
+    "nextGoal": "1. 下一步目标",
+    "analysisResult": "2. AI 分析结果"
+  },
+  "placeholders": {
+    "goalInput": "在此输入你的下一个目标...\n例如：修复用户服务中的空指针异常"
+  },
+  "buttons": {
+    "analyzeAndGenerate": "分析并生成提示词",
+    "analyzeButton": "Analyze & Generate Prompt ➔"
+  },
+  "messages": {
+    "fillGoalAlert": "请填写目标内容",
+    "analysisResultPlaceholder": "分析结果将显示在这里...",
+    "autoDetectFileError": "自动检测文件失败: {{error}}"
+  },
+  "timeline": {
+    "title": "时间线日志",
+    "expand": "展开时间线",
+    "collapse": "折叠侧边栏",
+    "refresh": "刷新",
+    "autoRefresh": "自动刷新",
+    "stopAutoRefresh": "停止自动刷新",
+    "startAutoRefresh": "开启自动刷新",
+    "logDetail": "日志详情",
+    "user": "用户",
+    "assistant": "助手",
+    "recordCount": "条记录"
+  },
+  "project": {
+    "switchProject": "切换项目",
+    "selectProject": "选择项目"
+  }
+}

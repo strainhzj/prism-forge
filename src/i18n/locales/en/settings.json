@@ -1,0 +1,203 @@
+{
+  "title": "Settings",
+  "tabs": {
+    "providers": "API Providers",
+    "vector": "Semantic Search"
+  },
+  "buttons": {
+    "create": "New Provider",
+    "addFirst": "Add First Provider",
+    "close": "Close",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "delete": "Delete",
+    "setActive": "Set as Active",
+    "testConnection": "Test Connection"
+  },
+  "emptyState": {
+    "title": "No API Providers",
+    "description": "Configure LLM API providers to use AI features. Supports OpenAI, Anthropic, Ollama, xAI, Google, and more."
+  },
+  "dialog": {
+    "createTitle": "New Provider",
+    "editTitle": "Edit Provider",
+    "deleteConfirm": "Are you sure you want to delete provider \"{{name}}\"?\n\nThis will also delete the stored API Key and cannot be undone."
+  },
+  "errors": {
+    "saveFailed": "Save Failed",
+    "connectionSuccess": "Connection Successful",
+    "connectionFailed": "Connection Failed"
+  },
+  "status": {
+    "idle": "Not Tested",
+    "testing": "Testing...",
+    "success": "Connection Successful",
+    "error": "Connection Failed"
+  },
+  "form": {
+    "providerType": "Provider Type",
+    "name": "Name",
+    "baseUrl": "Base URL",
+    "model": "Model",
+    "temperature": "Temperature",
+    "maxTokens": "Max Tokens",
+    "apiKey": "API Key",
+    "configJson": "Extra Config (JSON, Optional)",
+    "aliases": "Aliases (Optional)",
+    "setAsActive": "Set as Active Provider",
+    "thirdPartyPresets": "Quick Select Popular Providers",
+    "required": "Required",
+    "website": "Website",
+    "docs": "Docs",
+    "getApiKey": "Get API Key →"
+  },
+  "placeholders": {
+    "name": "e.g., OpenAI Official, Ollama Local",
+    "baseUrl": "https://api.openai.com/v1",
+    "model": "Leave empty to use default model",
+    "temperature": "0.7",
+    "maxTokens": "2000",
+    "apiKeySingle": "Enter single key: sk-...",
+    "apiKeyMultiple": "Or multiple keys (comma separated):\nsk-key1,sk-key2,sk-key3",
+    "apiKeyKeepExisting": "Leave empty to keep existing key",
+    "configJson": "{\"model\": \"gpt-4\", \"temperature\": 0.7}",
+    "aliases": "[\"claude\", \"anthropic-api\"]"
+  },
+  "helpText": {
+    "defaultBaseUrl": "Default value",
+    "leaveEmptyForDefault": "Leave empty to use default model",
+    "namespaceHint": "Tip: Supports namespace format, e.g., \"openai:gpt-4o\", \"anthropic:claude-3-5-sonnet\"",
+    "temperatureHint": "Controls randomness (0.0 - 2.0), default 0.7",
+    "maxTokensHint": "Maximum output tokens, default 2000",
+    "apiKeyExisting": "Configured",
+    "apiKeyKeepExisting": "Leave empty to keep existing key, or enter new key to update",
+    "apiKeyRotation": "Supports multiple key rotation (comma separated), system will automatically rotate for load balancing",
+    "configJsonHint": "Advanced config, e.g., model, temperature, etc. (JSON format)",
+    "aliasesHint": "Set aliases for this provider, JSON array format, e.g., [\"claude\", \"anthropic\"]",
+    "onlyOneActive": "Only one active provider at a time",
+    "selectPresetHint": "Click cards above to quickly fill config, or manually fill the form below"
+  },
+  "validation": {
+    "selectProviderType": "Please select provider type",
+    "enterProviderName": "Please enter provider name",
+    "enterBaseUrl": "Please enter Base URL",
+    "baseUrlMustStartWithHttp": "Base URL must start with http:// or https://",
+    "temperatureMin": "Temperature cannot be less than 0",
+    "temperatureMax": "Temperature cannot be greater than 2",
+    "maxTokensMin": "Max Tokens must be greater than 0",
+    "enterApiKey": "Please enter API Key",
+    "apiKeyMinLength": "API Key must be at least 10 characters",
+    "multiKeyInvalid": "Invalid multi-key format, use comma to separate at least 2 keys",
+    "eachKeyMinLength": "Each key must be at least 10 characters",
+    "invalidJson": "Invalid JSON format",
+    "aliasesMustBeArray": "Aliases must be an array",
+    "aliasesElementsMustBeString": "Each element in aliases array must be a string",
+    "aliasesJsonExample": "Invalid JSON format, e.g., [\"alias1\", \"alias2\"]"
+  },
+  "buttons": {
+    "saving": "Saving...",
+    "active": "Active",
+    "keyConfigured": "Key configured",
+    "noKeyConfigured": "No key configured",
+    "model": "Model"
+  },
+  "stats": {
+    "total": "Total",
+    "active": "Active",
+    "configured": "Configured"
+  },
+  "page": {
+    "backToHome": "Back to Home",
+    "searchPlaceholder": "Search providers...",
+    "addProvider": "Add Provider",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "loading": "Loading...",
+    "empty": "No providers",
+    "selectToEdit": "Select a provider from the left to edit, or add a new provider",
+    "testing": "Testing...",
+    "test": "Test",
+    "delete": "Delete",
+    "deleteTitle": "Delete",
+    "createTitle": "Add Provider",
+    "errorTitle": "Page Load Error",
+    "unknownError": "Unknown error",
+    "refreshPage": "Refresh Page"
+  },
+  "testResult": {
+    "connectionSuccess": "Connection successful!",
+    "authenticationError": "Authentication error",
+    "networkError": "Network error",
+    "serverError": "Server error",
+    "requestError": "Request error",
+    "unknownError": "Unknown error",
+    "connectionFailed": "Connection failed, please check configuration",
+    "testFailed": "Test failed"
+  },
+  "deleteConfirm": "Are you sure you want to delete provider \"{{name}}\"?\n\nThis will also delete the stored API Key and cannot be undone.",
+  "providerTypes": {
+    "openai": {
+      "label": "OpenAI",
+      "description": "Official OpenAI API, supports GPT-4, GPT-3.5 and other models"
+    },
+    "anthropic": {
+      "label": "Anthropic",
+      "description": "Anthropic Claude series, including Claude 3.5 Sonnet"
+    },
+    "google": {
+      "label": "Google Gemini",
+      "description": "Google Gemini (ML Dev API), uses API Key authentication"
+    },
+    "googleVertex": {
+      "label": "Google Vertex AI",
+      "description": "Google Vertex AI Public Preview (API Key URL parameter)"
+    },
+    "azureOpenai": {
+      "label": "Azure OpenAI",
+      "description": "Microsoft Azure OpenAI Service"
+    },
+    "ollama": {
+      "label": "Ollama",
+      "description": "Local Ollama service, no API Key required"
+    },
+    "xai": {
+      "label": "X AI (Grok)",
+      "description": "xAI Grok series, supports Grok-2 and other models"
+    },
+    "openaiCompatible": {
+      "label": "OpenAI Compatible / Third-party Services",
+      "description": "Third-party services compatible with OpenAI API format (DeepSeek, SiliconFlow, Zhipu, etc.)"
+    }
+  },
+  "thirdPartyProviders": {
+    "deepseek": {
+      "name": "DeepSeek",
+      "description": "DeepSeek-V3, DeepSeek-Coder"
+    },
+    "silicon": {
+      "name": "SiliconFlow",
+      "description": "Provides Qwen, DeepSeek, GLM, etc."
+    },
+    "zhipu": {
+      "name": "Zhipu AI",
+      "description": "GLM-4, GLM-3 series"
+    },
+    "moonshot": {
+      "name": "Moonshot AI",
+      "description": "Kimi series models"
+    },
+    "groq": {
+      "name": "Groq",
+      "description": "Ultra-fast inference engine, Llama, Mixtral"
+    },
+    "openrouter": {
+      "name": "OpenRouter",
+      "description": "Unified API access to multiple models"
+    },
+    "together": {
+      "name": "Together",
+      "description": "Open-source model hosting service"
+    }
+  }
+}

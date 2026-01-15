@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useCallback, Component, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Home } from 'lucide-react';
 import { useProviderActions, useProviders, useProvidersLoading, useProvidersError, type ProviderResponse, type SaveProviderRequest, type TestConnectionResult, ConnectionErrorType } from '../stores/useSettingsStore';
 import { ProviderForm } from '../components/settings/ProviderForm';
@@ -22,22 +23,22 @@ function debugLog(action: string, ...args: unknown[]) {
 /**
  * 格式化连接测试结果消息
  */
-function formatTestResultMessage(result: TestConnectionResult): string {
+function formatTestResultMessage(result: TestConnectionResult, t: (key: string, params?: any) => string): string {
   if (result.success) {
-    return '连接成功！';
+    return t('testResult.connectionSuccess');
   }
 
   // 根据错误类型返回更友好的消息
   const errorTypeLabels: Record<ConnectionErrorType, string> = {
-    [ConnectionErrorType.AUTHENTICATION]: '认证错误',
-    [ConnectionErrorType.NETWORK]: '网络错误',
-    [ConnectionErrorType.SERVER]: '服务器错误',
-    [ConnectionErrorType.REQUEST]: '请求错误',
-    [ConnectionErrorType.UNKNOWN]: '未知错误',
+    [ConnectionErrorType.AUTHENTICATION]: t('testResult.authenticationError'),
+    [ConnectionErrorType.NETWORK]: t('testResult.networkError'),
+    [ConnectionErrorType.SERVER]: t('testResult.serverError'),
+    [ConnectionErrorType.REQUEST]: t('testResult.requestError'),
+    [ConnectionErrorType.UNKNOWN]: t('testResult.unknownError'),
   };
 
   const typeLabel = result.errorType ? errorTypeLabels[result.errorType] : '';
-  const message = result.errorMessage || '连接失败，请检查配置';
+  const message = result.errorMessage || t('testResult.connectionFailed');
 
   return typeLabel ? `[${typeLabel}] ${message}` : message;
 }
@@ -66,8 +67,17 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-class SettingsErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundaryState> {
-  constructor(props: { children: ReactNode }) {
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  translations: {
+    errorTitle: string;
+    unknownError: string;
+    refreshPage: string;
+  };
+}
+
+class SettingsErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
   }
@@ -85,12 +95,12 @@ class SettingsErrorBoundary extends Component<{ children: ReactNode }, ErrorBoun
       return (
         <div className="settings-page">
           <div className="alert alert-error">
-            <h2>页面加载出错</h2>
-            <p>{this.state.error?.message || '未知错误'}</p>
+            <h2>{this.props.translations.errorTitle}</h2>
+            <p>{this.state.error?.message || this.props.translations.unknownError}</p>
             <pre style={{ fontSize: '12px', overflow: 'auto' }}>
               {this.state.error?.stack}
             </pre>
-            <button onClick={() => window.location.reload()}>刷新页面</button>
+            <button onClick={() => window.location.reload()}>{this.props.translations.refreshPage}</button>
           </div>
         </div>
       );
@@ -116,6 +126,7 @@ interface SettingsState {
 const SettingsContent: React.FC = () => {
   debugLog('render', 'SettingsContent mounting');
   const navigate = useNavigate();
+  const { t } = useTranslation('settings');
 
   // Store 状态
   const providers = useProviders();
@@ -210,8 +221,7 @@ const SettingsContent: React.FC = () => {
     if (!provider.id) return;
 
     const confirmed = window.confirm(
-      `确定要删除提供商 "${provider.name}" 吗？\n\n` +
-      `此操作将同时删除存储的 API Key，且不可恢复。`
+      t('deleteConfirm', { name: provider.name })
     );
 
     if (!confirmed) return;
@@ -225,7 +235,7 @@ const SettingsContent: React.FC = () => {
     } catch (error) {
       console.error('删除失败:', error);
     }
-  }, [deleteProvider]);
+  }, [deleteProvider, t]);
 
   // 切换活跃状态
   const handleToggleActive = useCallback(async (provider: ProviderResponse, e: React.MouseEvent) => {
@@ -266,7 +276,7 @@ const SettingsContent: React.FC = () => {
       }));
     } catch (error) {
       // 解析错误信息
-      let errorMessage = '未知错误';
+      let errorMessage = t('page.unknownError');
       if (typeof error === 'string') {
         errorMessage = error;
       } else if (error instanceof Error) {
@@ -284,13 +294,13 @@ const SettingsContent: React.FC = () => {
           id: provider.id!,
           result: {
             success: false,
-            errorMessage: `测试失败: ${errorMessage}`,
+            errorMessage: `${t('testResult.testFailed')}: ${errorMessage}`,
             errorType: ConnectionErrorType.UNKNOWN,
           },
         },
       }));
     }
-  }, [testProviderConnection]);
+  }, [testProviderConnection, t]);
 
   // 搜索处理
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -320,7 +330,7 @@ const SettingsContent: React.FC = () => {
           <div className="providers-panel-back">
             <button className="back-btn" onClick={() => navigate('/')}>
               <Home size={16} />
-              <span>返回首页</span>
+              <span>{t('page.backToHome')}</span>
             </button>
           </div>
 
@@ -329,22 +339,22 @@ const SettingsContent: React.FC = () => {
             <div className="providers-panel-search">
               <input
                 type="text"
-                placeholder="搜索提供商..."
+                placeholder={t('page.searchPlaceholder')}
                 value={searchQuery}
                 onChange={handleSearchChange}
               />
             </div>
             <button className="providers-panel-add-btn" onClick={handleCreate}>
-              + 添加提供商
+              + {t('page.addProvider')}
             </button>
           </div>
 
           {/* 提供商列表 */}
           {loading && providers.length === 0 ? (
-            <div className="loading-state">加载中...</div>
+            <div className="loading-state">{t('page.loading')}</div>
           ) : providers.length === 0 ? (
             <div className="empty-state">
-              <p>暂无提供商</p>
+              <p>{t('page.empty')}</p>
             </div>
           ) : (
             <ul className="providers-list">
@@ -369,7 +379,7 @@ const SettingsContent: React.FC = () => {
                   <div
                     className={`provider-toggle ${provider.isActive ? 'active' : ''}`}
                     onClick={(e) => handleToggleActive(provider, e)}
-                    title={provider.isActive ? '已启用' : '已禁用'}
+                    title={provider.isActive ? t('page.enabled') : t('page.disabled')}
                   />
                 </li>
               ))}
@@ -381,7 +391,7 @@ const SettingsContent: React.FC = () => {
         <div className="form-panel">
           {viewMode === 'list' && !selectedProvider ? (
             <div className="empty-selection">
-              <p>选择左侧提供商进行编辑，或添加新提供商</p>
+              <p>{t('page.selectToEdit')}</p>
             </div>
           ) : (
             <div className="form-container">
@@ -392,7 +402,7 @@ const SettingsContent: React.FC = () => {
                       {getProviderIcon(selectedProvider.providerType)}
                     </div>
                   )}
-                  {viewMode === 'create' ? '添加提供商' : selectedProvider?.name}
+                  {viewMode === 'create' ? t('page.createTitle') : selectedProvider?.name}
                 </h2>
                 {selectedProvider && (
                   <div className="form-actions-inline">
@@ -401,14 +411,14 @@ const SettingsContent: React.FC = () => {
                       onClick={() => handleTestConnection(selectedProvider)}
                       disabled={testingProviderId === selectedProvider.id}
                     >
-                      {testingProviderId === selectedProvider.id ? '测试中...' : '检测'}
+                      {testingProviderId === selectedProvider.id ? t('page.testing') : t('page.test')}
                     </button>
                     <button
                       className="btn-copy"
                       onClick={() => handleDelete(selectedProvider)}
-                      title="删除"
+                      title={t('page.deleteTitle')}
                     >
-                      删除
+                      {t('page.delete')}
                     </button>
                   </div>
                 )}
@@ -418,14 +428,14 @@ const SettingsContent: React.FC = () => {
                 provider={selectedProvider ?? undefined}
                 onSubmit={handleSave}
                 onCancel={handleCancel}
-                submitText={viewMode === 'create' ? '创建' : '保存'}
+                submitText={viewMode === 'create' ? t('buttons.create') : t('buttons.save')}
                 loading={loading}
               />
 
               {/* 表单外测试结果展示 */}
               {selectedProvider && testResult && testResult.id === selectedProvider.id && (
                 <div className={`test-result-banner ${testResult.result.success ? 'success' : 'error'}`}>
-                  {formatTestResultMessage(testResult.result)}
+                  {formatTestResultMessage(testResult.result, t)}
                 </div>
               )}
             </div>
@@ -439,8 +449,16 @@ const SettingsContent: React.FC = () => {
 // 包装错误边界的 Settings 组件
 const Settings: React.FC = () => {
   debugLog('render', 'Settings wrapper mounting');
+  const { t } = useTranslation('settings');
+
+  const errorTranslations = {
+    errorTitle: t('page.errorTitle'),
+    unknownError: t('page.unknownError'),
+    refreshPage: t('page.refreshPage'),
+  };
+
   return (
-    <SettingsErrorBoundary>
+    <SettingsErrorBoundary translations={errorTranslations}>
       <SettingsContent />
     </SettingsErrorBoundary>
   );

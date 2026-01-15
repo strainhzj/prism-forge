@@ -6,7 +6,8 @@
  */
 
 import { useForm } from 'react-hook-form';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ApiProviderType,
   type SaveProviderRequest,
@@ -14,6 +15,8 @@ import {
   DEFAULT_MODELS,
   PROVIDER_DISPLAY_INFO,
   THIRD_PARTY_PROVIDERS,
+  PROVIDER_TYPE_KEYS,
+  THIRD_PARTY_PROVIDER_KEYS,
 } from '../../stores/useSettingsStore';
 
 // ==================== 表单数据类型 ====================
@@ -62,13 +65,6 @@ interface ProviderFormProps {
 
 // ==================== 常量 ====================
 
-// 提供商类型选项（从 PROVIDER_DISPLAY_INFO 生成）
-const PROVIDER_TYPE_OPTIONS = Object.entries(PROVIDER_DISPLAY_INFO).map(([key, info]) => ({
-  value: key as ApiProviderType,
-  label: info.label,
-  description: info.description,
-}));
-
 // 默认 Base URL（从 PROVIDER_DISPLAY_INFO 生成）
 const DEFAULT_BASE_URLS: Record<ApiProviderType, string> = Object.entries(PROVIDER_DISPLAY_INFO).reduce(
   (acc, [key, info]) => ({
@@ -84,10 +80,35 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
   provider,
   onSubmit,
   onCancel,
-  submitText = '保存',
+  submitText,
   loading = false,
 }) => {
+  const { t } = useTranslation('settings');
   const [showThirdPartyPresets, setShowThirdPartyPresets] = useState(false);
+
+  // 提供商类型选项（使用翻译）
+  const PROVIDER_TYPE_OPTIONS = useMemo(() => {
+    return Object.entries(PROVIDER_DISPLAY_INFO).map(([key]) => {
+      const providerTypeKey = PROVIDER_TYPE_KEYS[key as ApiProviderType];
+      return {
+        value: key as ApiProviderType,
+        label: t(`providerTypes.${providerTypeKey}.label`),
+        description: t(`providerTypes.${providerTypeKey}.description`),
+      };
+    });
+  }, [t]);
+
+  // 第三方提供商预设（使用翻译）
+  const TRANSLATED_THIRD_PARTY_PROVIDERS = useMemo(() => {
+    return THIRD_PARTY_PROVIDERS.map((preset) => {
+      const providerKey = THIRD_PARTY_PROVIDER_KEYS[preset.id];
+      return {
+        ...preset,
+        name: providerKey ? t(`thirdPartyProviders.${providerKey}.name`) : preset.name,
+        description: providerKey ? t(`thirdPartyProviders.${providerKey}.description`) : preset.description,
+      };
+    });
+  }, [t]);
 
   const {
     register,
@@ -143,6 +164,10 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
   const displayInfo = PROVIDER_DISPLAY_INFO[providerType];
   const requiresApiKey = displayInfo?.requiresApiKey ?? true;
 
+  // 获取当前提供商类型的翻译描述
+  const currentProviderTypeKey = PROVIDER_TYPE_KEYS[providerType];
+  const providerTypeDescription = currentProviderTypeKey ? t(`providerTypes.${currentProviderTypeKey}.description`) : displayInfo?.description;
+
   // 选择第三方服务商预设
   const handleSelectThirdPartyPreset = (preset: typeof THIRD_PARTY_PROVIDERS[0]) => {
     setValue('name', preset.name);
@@ -164,12 +189,12 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
       {/* 提供商类型选择 */}
       <div className="form-group">
         <label htmlFor="providerType">
-          提供商类型 <span className="required">*</span>
+          {t('form.providerType')} <span className="required">*</span>
         </label>
         <select
           id="providerType"
           className="form-control"
-          {...register('providerType', { required: '请选择提供商类型' })}
+          {...register('providerType', { required: t('validation.selectProviderType') })}
           disabled={!!provider} // 编辑模式下不允许修改类型
         >
           {PROVIDER_TYPE_OPTIONS.map((option) => (
@@ -182,15 +207,15 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
           <span className="error-text">{errors.providerType.message}</span>
         )}
         <small className="help-text">
-          {displayInfo?.description}
+          {providerTypeDescription}
           {displayInfo?.websiteUrl && (
             <>
-              {' '}| <a href={displayInfo.websiteUrl} target="_blank" rel="noopener noreferrer">官网</a>
+              {' '}| <a href={displayInfo.websiteUrl} target="_blank" rel="noopener noreferrer">{t('form.website')}</a>
             </>
           )}
           {displayInfo?.docsUrl && (
             <>
-              {' '}| <a href={displayInfo.docsUrl} target="_blank" rel="noopener noreferrer">文档</a>
+              {' '}| <a href={displayInfo.docsUrl} target="_blank" rel="noopener noreferrer">{t('form.docs')}</a>
             </>
           )}
         </small>
@@ -199,9 +224,9 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
       {/* 第三方服务商快速选择（仅 OpenAI Compatible 显示） */}
       {showThirdPartyPresets && !provider && (
         <div className="form-group third-party-presets">
-          <label>快速选择常用服务商</label>
+          <label>{t('form.thirdPartyPresets')}</label>
           <div className="presets-grid">
-            {THIRD_PARTY_PROVIDERS.map((preset) => (
+            {TRANSLATED_THIRD_PARTY_PROVIDERS.map((preset) => (
               <button
                 key={preset.id}
                 type="button"
@@ -214,7 +239,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
             ))}
           </div>
           <small className="help-text">
-            点击上方卡片快速填充配置，或手动填写下方表单
+            {t('helpText.selectPresetHint')}
           </small>
         </div>
       )}
@@ -222,14 +247,14 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
       {/* 提供商名称 */}
       <div className="form-group">
         <label htmlFor="name">
-          名称 <span className="required">*</span>
+          {t('form.name')} <span className="required">*</span>
         </label>
         <input
           id="name"
           type="text"
           className="form-control"
-          placeholder="例如: OpenAI 官方、Ollama 本地"
-          {...register('name', { required: '请输入提供商名称' })}
+          placeholder={t('placeholders.name')}
+          {...register('name', { required: t('validation.enterProviderName') })}
         />
         {errors.name && <span className="error-text">{errors.name.message}</span>}
       </div>
@@ -237,29 +262,29 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
       {/* Base URL */}
       <div className="form-group">
         <label htmlFor="baseUrl">
-          Base URL <span className="required">*</span>
+          {t('form.baseUrl')} <span className="required">*</span>
         </label>
         <input
           id="baseUrl"
           type="text"
           className="form-control"
-          placeholder="https://api.openai.com/v1"
+          placeholder={t('placeholders.baseUrl')}
           {...register('baseUrl', {
-            required: '请输入 Base URL',
+            required: t('validation.enterBaseUrl'),
             pattern: {
               value: /^https?:\/\/.+/,
-              message: 'Base URL 必须以 http:// 或 https:// 开头',
+              message: t('validation.baseUrlMustStartWithHttp'),
             },
           })}
         />
         {errors.baseUrl && <span className="error-text">{errors.baseUrl.message}</span>}
         <small className="help-text">
-          默认值: {displayInfo?.defaultBaseUrl}
+          {t('helpText.defaultBaseUrl')}: {displayInfo?.defaultBaseUrl}
           {displayInfo?.apiKeyUrl && providerType === ApiProviderType.OPENAI && (
             <>
               <br />
               <a href={displayInfo.apiKeyUrl} target="_blank" rel="noopener noreferrer">
-                获取 API Key →
+                {t('form.getApiKey')}
               </a>
             </>
           )}
@@ -268,7 +293,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
 
       {/* 模型 */}
       <div className="form-group">
-        <label htmlFor="model">模型</label>
+        <label htmlFor="model">{t('form.model')}</label>
         <input
           id="model"
           type="text"
@@ -277,15 +302,15 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
           {...register('model')}
         />
         <small className="help-text">
-          留空使用默认模型: {DEFAULT_MODELS[providerType]}
+          {t('helpText.leaveEmptyForDefault')}: {DEFAULT_MODELS[providerType]}
           <br />
-          <strong>提示：</strong>支持命名空间格式，如 "openai:gpt-4o"、"anthropic:claude-3-5-sonnet"
+          <strong>{t('helpText.namespaceHint')}</strong>
         </small>
       </div>
 
       {/* Temperature */}
       <div className="form-group">
-        <label htmlFor="temperature">Temperature</label>
+        <label htmlFor="temperature">{t('form.temperature')}</label>
         <input
           id="temperature"
           type="number"
@@ -293,36 +318,36 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
           min="0"
           max="2"
           className="form-control"
-          placeholder="0.7"
+          placeholder={t('placeholders.temperature')}
           {...register('temperature', {
             valueAsNumber: true,  // 自动转换为数字类型，空值转为 null
-            min: { value: 0, message: 'Temperature 不能小于 0' },
-            max: { value: 2, message: 'Temperature 不能大于 2' },
+            min: { value: 0, message: t('validation.temperatureMin') },
+            max: { value: 2, message: t('validation.temperatureMax') },
           })}
         />
         {errors.temperature && <span className="error-text">{errors.temperature.message}</span>}
         <small className="help-text">
-          控制随机性 (0.0 - 2.0)，默认 0.7
+          {t('helpText.temperatureHint')}
         </small>
       </div>
 
       {/* Max Tokens */}
       <div className="form-group">
-        <label htmlFor="maxTokens">Max Tokens</label>
+        <label htmlFor="maxTokens">{t('form.maxTokens')}</label>
         <input
           id="maxTokens"
           type="number"
           min="1"
           className="form-control"
-          placeholder="2000"
+          placeholder={t('placeholders.maxTokens')}
           {...register('maxTokens', {
             valueAsNumber: true,  // 自动转换为数字类型，空值转为 null
-            min: { value: 1, message: 'Max Tokens 必须大于 0' },
+            min: { value: 1, message: t('validation.maxTokensMin') },
           })}
         />
         {errors.maxTokens && <span className="error-text">{errors.maxTokens.message}</span>}
         <small className="help-text">
-          最大输出 token 数，默认 2000
+          {t('helpText.maxTokensHint')}
         </small>
       </div>
 
@@ -330,10 +355,10 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
       {requiresApiKey && (
         <div className="form-group">
           <label htmlFor="apiKey">
-            API Key <span className="required">*</span>
+            {t('form.apiKey')} <span className="required">*</span>
             {provider?.hasApiKey && (
               <span className="existing-key-hint">
-                (已配置: {provider.apiKeyMask || '****'})
+                ({t('helpText.apiKeyExisting')}: {provider.apiKeyMask || '****'})
               </span>
             )}
           </label>
@@ -343,29 +368,29 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
             rows={provider?.hasApiKey ? 1 : 3}
             placeholder={
               provider?.hasApiKey
-                ? '留空以保持现有密钥'
-                : '输入单个密钥：sk-...\n或多个密钥（逗号分隔）：\nsk-key1,sk-key2,sk-key3'
+                ? t('placeholders.apiKeyKeepExisting')
+                : t('placeholders.apiKeySingle') + '\n' + t('placeholders.apiKeyMultiple')
             }
             autoComplete="off"
             {...register('apiKey', {
-              required: provider?.hasApiKey ? false : '请输入 API Key',
+              required: provider?.hasApiKey ? false : t('validation.enterApiKey'),
               validate: (value) => {
                 if (!value || value.trim() === '') {
-                  return provider?.hasApiKey ? true : '请输入 API Key';
+                  return provider?.hasApiKey ? true : t('validation.enterApiKey');
                 }
                 // 检查最小长度
                 const trimmed = value.trim();
                 if (trimmed.length < 10) {
-                  return 'API Key 长度不能少于 10 个字符';
+                  return t('validation.apiKeyMinLength');
                 }
                 // 如果包含逗号，验证多密钥格式
                 if (trimmed.includes(',')) {
                   const keys = trimmed.split(',').map(k => k.trim()).filter(k => k);
                   if (keys.length < 2) {
-                    return '多密钥格式无效，请使用逗号分隔至少2个密钥';
+                    return t('validation.multiKeyInvalid');
                   }
                   if (keys.some(k => k.length < 10)) {
-                    return '每个密钥长度不能少于 10 个字符';
+                    return t('validation.eachKeyMinLength');
                   }
                 }
                 return true;
@@ -375,8 +400,8 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
           {errors.apiKey && <span className="error-text">{errors.apiKey.message}</span>}
           <small className="help-text">
             {provider?.hasApiKey
-              ? '留空以保持现有密钥，或输入新密钥以更新'
-              : '支持多密钥轮换（逗号分隔），系统将自动轮换使用以实现负载均衡'
+              ? t('helpText.apiKeyKeepExisting')
+              : t('helpText.apiKeyRotation')
             }
           </small>
         </div>
@@ -384,12 +409,12 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
 
       {/* 额外配置（可选） */}
       <div className="form-group">
-        <label htmlFor="configJson">额外配置 (JSON, 可选)</label>
+        <label htmlFor="configJson">{t('form.configJson')}</label>
         <textarea
           id="configJson"
           className="form-control"
           rows={3}
-          placeholder='{"model": "gpt-4", "temperature": 0.7}'
+          placeholder={t('placeholders.configJson')}
           {...register('configJson', {
             validate: (value) => {
               if (!value) return true;
@@ -397,25 +422,25 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
                 JSON.parse(value);
                 return true;
               } catch {
-                return 'JSON 格式无效';
+                return t('validation.invalidJson');
               }
             },
           })}
         />
         {errors.configJson && <span className="error-text">{errors.configJson.message}</span>}
         <small className="help-text">
-          高级配置，例如 model、temperature 等（JSON 格式）
+          {t('helpText.configJsonHint')}
         </small>
       </div>
 
       {/* 别名（可选） */}
       <div className="form-group">
-        <label htmlFor="aliases">别名（可选）</label>
+        <label htmlFor="aliases">{t('form.aliases')}</label>
         <input
           id="aliases"
           type="text"
           className="form-control"
-          placeholder='["claude", "anthropic-api"]'
+          placeholder={t('placeholders.aliases')}
           {...register('aliases', {
             validate: (value) => {
               if (!value || value.trim() === '' || value === '[]') {
@@ -424,21 +449,21 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
               try {
                 const parsed = JSON.parse(value);
                 if (!Array.isArray(parsed)) {
-                  return '别名必须是数组格式';
+                  return t('validation.aliasesMustBeArray');
                 }
                 if (!parsed.every((item: unknown) => typeof item === 'string')) {
-                  return '别名数组中的每个元素必须是字符串';
+                  return t('validation.aliasesElementsMustBeString');
                 }
                 return true;
               } catch {
-                return 'JSON 格式无效，例如: ["alias1", "alias2"]';
+                return t('validation.aliasesJsonExample');
               }
             },
           })}
         />
         {errors.aliases && <span className="error-text">{errors.aliases.message}</span>}
         <small className="help-text">
-          为此提供商设置别名，JSON 数组格式，例如: ["claude", "anthropic"]
+          {t('helpText.aliasesHint')}
         </small>
       </div>
 
@@ -449,10 +474,10 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
             type="checkbox"
             {...register('isActive')}
           />
-          <span>设为活跃提供商</span>
+          <span>{t('form.setAsActive')}</span>
         </label>
         <small className="help-text">
-          同一时间只能有一个活跃提供商
+          {t('helpText.onlyOneActive')}
         </small>
       </div>
 
@@ -465,7 +490,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
             onClick={onCancel}
             disabled={loading}
           >
-            取消
+            {t('buttons.cancel')}
           </button>
         )}
         <button
@@ -473,7 +498,7 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
           className="btn btn-primary"
           disabled={loading}
         >
-          {loading ? '保存中...' : submitText}
+          {loading ? t('buttons.saving') : (submitText || t('buttons.save'))}
         </button>
       </div>
     </form>

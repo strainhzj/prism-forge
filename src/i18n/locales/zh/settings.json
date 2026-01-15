@@ -1,0 +1,203 @@
+{
+  "title": "设置",
+  "tabs": {
+    "providers": "API 提供商",
+    "vector": "语义搜索"
+  },
+  "buttons": {
+    "create": "新建提供商",
+    "addFirst": "添加第一个提供商",
+    "close": "关闭",
+    "save": "保存",
+    "cancel": "取消",
+    "edit": "编辑",
+    "delete": "删除",
+    "setActive": "设为活跃",
+    "testConnection": "测试连接"
+  },
+  "emptyState": {
+    "title": "暂无 API 提供商",
+    "description": "配置 LLM API 提供商以使用 AI 功能。支持 OpenAI、Anthropic、Ollama、xAI、Google 等多种提供商。"
+  },
+  "dialog": {
+    "createTitle": "新建提供商",
+    "editTitle": "编辑提供商",
+    "deleteConfirm": "确定要删除提供商 \"{{name}}\" 吗？\n\n此操作将同时删除存储的 API Key，且不可恢复。"
+  },
+  "errors": {
+    "saveFailed": "保存失败",
+    "connectionSuccess": "连接成功",
+    "connectionFailed": "连接失败"
+  },
+  "status": {
+    "idle": "未测试",
+    "testing": "测试中...",
+    "success": "连接成功",
+    "error": "连接失败"
+  },
+  "form": {
+    "providerType": "提供商类型",
+    "name": "名称",
+    "baseUrl": "Base URL",
+    "model": "模型",
+    "temperature": "Temperature",
+    "maxTokens": "Max Tokens",
+    "apiKey": "API Key",
+    "configJson": "额外配置 (JSON, 可选)",
+    "aliases": "别名（可选）",
+    "setAsActive": "设为活跃提供商",
+    "thirdPartyPresets": "快速选择常用服务商",
+    "required": "必填",
+    "website": "官网",
+    "docs": "文档",
+    "getApiKey": "获取 API Key →"
+  },
+  "placeholders": {
+    "name": "例如: OpenAI 官方、Ollama 本地",
+    "baseUrl": "https://api.openai.com/v1",
+    "model": "留空使用默认模型",
+    "temperature": "0.7",
+    "maxTokens": "2000",
+    "apiKeySingle": "输入单个密钥：sk-...",
+    "apiKeyMultiple": "或多个密钥（逗号分隔）：\nsk-key1,sk-key2,sk-key3",
+    "apiKeyKeepExisting": "留空以保持现有密钥",
+    "configJson": "{\"model\": \"gpt-4\", \"temperature\": 0.7}",
+    "aliases": "[\"claude\", \"anthropic-api\"]"
+  },
+  "helpText": {
+    "defaultBaseUrl": "默认值",
+    "leaveEmptyForDefault": "留空使用默认模型",
+    "namespaceHint": "提示：支持命名空间格式，如 \"openai:gpt-4o\"、\"anthropic:claude-3-5-sonnet\"",
+    "temperatureHint": "控制随机性 (0.0 - 2.0)，默认 0.7",
+    "maxTokensHint": "最大输出 token 数，默认 2000",
+    "apiKeyExisting": "已配置",
+    "apiKeyKeepExisting": "留空以保持现有密钥，或输入新密钥以更新",
+    "apiKeyRotation": "支持多密钥轮换（逗号分隔），系统将自动轮换使用以实现负载均衡",
+    "configJsonHint": "高级配置，例如 model、temperature 等（JSON 格式）",
+    "aliasesHint": "为此提供商设置别名，JSON 数组格式，例如: [\"claude\", \"anthropic\"]",
+    "onlyOneActive": "同一时间只能有一个活跃提供商",
+    "selectPresetHint": "点击上方卡片快速填充配置，或手动填写下方表单"
+  },
+  "validation": {
+    "selectProviderType": "请选择提供商类型",
+    "enterProviderName": "请输入提供商名称",
+    "enterBaseUrl": "请输入 Base URL",
+    "baseUrlMustStartWithHttp": "Base URL 必须以 http:// 或 https:// 开头",
+    "temperatureMin": "Temperature 不能小于 0",
+    "temperatureMax": "Temperature 不能大于 2",
+    "maxTokensMin": "Max Tokens 必须大于 0",
+    "enterApiKey": "请输入 API Key",
+    "apiKeyMinLength": "API Key 长度不能少于 10 个字符",
+    "multiKeyInvalid": "多密钥格式无效，请使用逗号分隔至少2个密钥",
+    "eachKeyMinLength": "每个密钥长度不能少于 10 个字符",
+    "invalidJson": "JSON 格式无效",
+    "aliasesMustBeArray": "别名必须是数组格式",
+    "aliasesElementsMustBeString": "别名数组中的每个元素必须是字符串",
+    "aliasesJsonExample": "JSON 格式无效，例如: [\"alias1\", \"alias2\"]"
+  },
+  "buttons": {
+    "saving": "保存中...",
+    "active": "活跃",
+    "keyConfigured": "已配置密钥",
+    "noKeyConfigured": "未配置密钥",
+    "model": "模型"
+  },
+  "stats": {
+    "total": "总计",
+    "active": "活跃",
+    "configured": "已配置"
+  },
+  "page": {
+    "backToHome": "返回首页",
+    "searchPlaceholder": "搜索提供商...",
+    "addProvider": "添加提供商",
+    "enabled": "已启用",
+    "disabled": "已禁用",
+    "loading": "加载中...",
+    "empty": "暂无提供商",
+    "selectToEdit": "选择左侧提供商进行编辑，或添加新提供商",
+    "testing": "测试中...",
+    "test": "检测",
+    "delete": "删除",
+    "deleteTitle": "删除",
+    "createTitle": "添加提供商",
+    "errorTitle": "页面加载出错",
+    "unknownError": "未知错误",
+    "refreshPage": "刷新页面"
+  },
+  "testResult": {
+    "connectionSuccess": "连接成功！",
+    "authenticationError": "认证错误",
+    "networkError": "网络错误",
+    "serverError": "服务器错误",
+    "requestError": "请求错误",
+    "unknownError": "未知错误",
+    "connectionFailed": "连接失败，请检查配置",
+    "testFailed": "测试失败"
+  },
+  "deleteConfirm": "确定要删除提供商「{{name}}」吗？\n\n此操作将同时删除存储的 API Key，且不可恢复。",
+  "providerTypes": {
+    "openai": {
+      "label": "OpenAI",
+      "description": "OpenAI 官方 API，支持 GPT-4、GPT-3.5 等模型"
+    },
+    "anthropic": {
+      "label": "Anthropic",
+      "description": "Anthropic Claude 系列，包括 Claude 3.5 Sonnet"
+    },
+    "google": {
+      "label": "Google Gemini",
+      "description": "Google Gemini (ML Dev API)，使用 API Key 认证"
+    },
+    "googleVertex": {
+      "label": "Google Vertex AI",
+      "description": "Google Vertex AI Public Preview (API Key URL 参数)"
+    },
+    "azureOpenai": {
+      "label": "Azure OpenAI",
+      "description": "Microsoft Azure OpenAI 服务"
+    },
+    "ollama": {
+      "label": "Ollama",
+      "description": "本地 Ollama 服务，无需 API Key"
+    },
+    "xai": {
+      "label": "X AI (Grok)",
+      "description": "xAI Grok 系列，支持 Grok-2 等模型"
+    },
+    "openaiCompatible": {
+      "label": "OpenAI Compatible / 第三方服务",
+      "description": "兼容 OpenAI API 格式的第三方服务（DeepSeek、硅基流动、智谱等）"
+    }
+  },
+  "thirdPartyProviders": {
+    "deepseek": {
+      "name": "DeepSeek (深度求索)",
+      "description": "DeepSeek-V3、DeepSeek-Coder"
+    },
+    "silicon": {
+      "name": "SiliconFlow (硅基流动)",
+      "description": "提供 Qwen、DeepSeek、GLM 等"
+    },
+    "zhipu": {
+      "name": "Zhipu AI (智谱)",
+      "description": "GLM-4、GLM-3 系列"
+    },
+    "moonshot": {
+      "name": "Moonshot AI (月之暗面)",
+      "description": "Kimi 系列模型"
+    },
+    "groq": {
+      "name": "Groq",
+      "description": "超快推理引擎，Llama、Mixtral"
+    },
+    "openrouter": {
+      "name": "OpenRouter",
+      "description": "统一 API 访问多种模型"
+    },
+    "together": {
+      "name": "Together",
+      "description": "开源模型托管服务"
+    }
+  }
+}
