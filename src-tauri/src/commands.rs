@@ -2625,35 +2625,37 @@ pub async fn cmd_get_messages_by_level(
     let messages: Vec<crate::database::models::Message> = entries
         .into_iter()
         .filter_map(|entry| {
-            // 从 JsonlEntry 提取消息数据
-            let uuid = entry.data.get("uuid")?.as_str()?.to_string();
-            let parent_uuid = entry.data.get("parentUuid").and_then(|v| v.as_str()).map(|s| s.to_string());
-            let msg_type = entry.message_type().unwrap_or("unknown".to_string());
+            // Claude Code 会话文件的 type 字段直接是角色名称 (user/assistant/system)
+            // 而不是 "message" 类型
+            let msg_type = entry.message_type()?;
 
-            // 只处理消息类型的条目
-            if msg_type != "message" {
+            // 只处理对话消息类型 (user, assistant, system)
+            if !matches!(msg_type.as_str(), "user" | "assistant" | "system") {
                 return None;
             }
 
-            let role = entry.role().unwrap_or("unknown".to_string());
+            // 从 JsonlEntry 提取消息数据
+            let uuid = entry.data.get("uuid")?.as_str()?.to_string();
+            let parent_uuid = entry.data.get("parentUuid").and_then(|v| v.as_str()).map(|s| s.to_string());
 
-            // 从 data 中提取 timestamp 和 summary
+            // 从 data 中提取 timestamp
             let timestamp = entry.data.get("timestamp")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
 
-            let summary = entry.data.get("content")
+            // 从 message 字段提取内容 (summary)
+            let summary = entry.data.get("message")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
-            // 使用 role 作为 msg_type
+            // 使用 type 字段值作为 msg_type (user/assistant/system)
             Some(crate::database::models::Message {
                 id: None,
                 session_id: session_id.clone(),
                 uuid,
                 parent_uuid,
-                msg_type: role,
+                msg_type,
                 timestamp: timestamp.clone(),
                 offset: entry.offset as i64,
                 length: entry.length as i64,
