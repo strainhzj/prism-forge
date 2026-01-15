@@ -2645,9 +2645,24 @@ pub async fn cmd_get_messages_by_level(
                 .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
 
             // 从 message 字段提取内容 (summary)
-            let summary = entry.data.get("message")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+            // Claude Code 的 message 字段可能是字符串或 JSON 对象
+            let summary = entry.data.get("message").map(|v| {
+                // 尝试作为字符串
+                if let Some(s) = v.as_str() {
+                    s.to_string()
+                } else if let Some(obj) = v.as_object() {
+                    // 如果是对象,尝试提取 text 字段或转为 JSON 字符串
+                    if let Some(text) = obj.get("text").and_then(|t| t.as_str()) {
+                        text.to_string()
+                    } else {
+                        // 转为 JSON 字符串
+                        serde_json::to_string(v).unwrap_or_else(|_| "[无法解析的消息]".to_string())
+                    }
+                } else {
+                    // 其他类型,转为字符串
+                    v.to_string()
+                }
+            });
 
             // 使用 type 字段值作为 msg_type (user/assistant/system)
             Some(crate::database::models::Message {
