@@ -31,3 +31,11 @@ dev_plans/
 
 # Claude Code temporary working directory files
 *-cwd
+
+# Claude Code skills directory
+.claude/skills/
+/.claude/dry-run-methodology.md
+
+# UI plugin and test reports
+penpot-ui-plugin/
+playwright-report/

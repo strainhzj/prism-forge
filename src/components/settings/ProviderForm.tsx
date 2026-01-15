@@ -115,13 +115,11 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
   const providerType = watch('providerType');
 
   useEffect(() => {
-    if (!isDirty) {
-      // 只在表单未修改时自动更新 baseUrl
-      setValue('baseUrl', DEFAULT_BASE_URLS[providerType]);
-    }
+    // 切换供应商类型时总是自动更新 baseUrl
+    setValue('baseUrl', DEFAULT_BASE_URLS[providerType]);
     // 如果选择的是 OpenAI Compatible，显示第三方预设
     setShowThirdPartyPresets(providerType === ApiProviderType.OPENAI_COMPATIBLE);
-  }, [providerType, setValue, isDirty]);
+  }, [providerType, setValue]);
 
   // 编辑模式：填充表单数据
   useEffect(() => {
