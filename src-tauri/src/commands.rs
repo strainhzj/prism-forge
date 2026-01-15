@@ -2540,6 +2540,7 @@ use crate::parser::view_level::{ViewLevel, MessageFilter, QAPair};
 /// # 参数
 /// - `session_id`: 会话 ID
 /// - `view_level`: 视图等级
+/// - `file_path`: (可选) 会话文件路径。如果提供，直接使用文件路径而不从数据库查询
 ///
 /// # 返回
 /// 过滤后的消息列表
@@ -2547,24 +2548,32 @@ use crate::parser::view_level::{ViewLevel, MessageFilter, QAPair};
 pub async fn cmd_get_messages_by_level(
     session_id: String,
     view_level: ViewLevel,
+    file_path: Option<String>,
 ) -> Result<Vec<crate::database::models::Message>, String> {
     use crate::database::repository::SessionRepository;
 
-    // 获取会话信息
-    let repo = SessionRepository::from_default_db()
-        .map_err(|e| format!("创建 SessionRepository 失败: {}", e))?;
-    let session = repo.get_session_by_id(&session_id)
-        .map_err(|e| format!("获取会话失败: {}", e))?
-        .ok_or_else(|| format!("会话不存在: {}", session_id))?;
+    // 确定文件路径
+    let final_file_path = if let Some(fp) = file_path {
+        // 如果提供了文件路径，直接使用
+        fp
+    } else {
+        // 否则从数据库查询会话信息
+        let repo = SessionRepository::from_default_db()
+            .map_err(|e| format!("创建 SessionRepository 失败: {}", e))?;
+        let session = repo.get_session_by_id(&session_id)
+            .map_err(|e| format!("获取会话失败: {}", e))?
+            .ok_or_else(|| format!("会话不存在: {}", session_id))?;
+        session.file_path
+    };
 
     // 检查会话文件是否存在
-    let file_path = std::path::PathBuf::from(&session.file_path);
-    if !file_path.exists() {
-        return Err(format!("会话文件不存在: {}", session.file_path));
+    let path_buf = std::path::PathBuf::from(&final_file_path);
+    if !path_buf.exists() {
+        return Err(format!("会话文件不存在: {}", final_file_path));
     }
 
     // 解析 JSONL 文件
-    let mut parser = JsonlParser::new(file_path.clone())
+    let mut parser = JsonlParser::new(path_buf.clone())
         .map_err(|e| format!("创建 JSONL 解析器失败: {}", e))?;
 
     let entries = parser.parse_all()
@@ -2625,6 +2634,7 @@ pub async fn cmd_get_messages_by_level(
 /// # 参数
 /// - `session_id`: 会话 ID
 /// - `view_level`: 视图等级（必须是 QAPairs）
+/// - `file_path`: (可选) 会话文件路径。如果提供，直接使用文件路径而不从数据库查询
 ///
 /// # 返回
 /// 问答对列表
@@ -2632,6 +2642,7 @@ pub async fn cmd_get_messages_by_level(
 pub async fn cmd_get_qa_pairs_by_level(
     session_id: String,
     view_level: ViewLevel,
+    file_path: Option<String>,
 ) -> Result<Vec<QAPair>, String> {
     use crate::database::repository::SessionRepository;
 
@@ -2640,21 +2651,28 @@ pub async fn cmd_get_qa_pairs_by_level(
         return Err("问答对提取仅在 QAPairs 等级下可用".to_string());
     }
 
-    // 获取会话信息
-    let repo = SessionRepository::from_default_db()
-        .map_err(|e| format!("创建 SessionRepository 失败: {}", e))?;
-    let session = repo.get_session_by_id(&session_id)
-        .map_err(|e| format!("获取会话失败: {}", e))?
-        .ok_or_else(|| format!("会话不存在: {}", session_id))?;
+    // 确定文件路径
+    let final_file_path = if let Some(fp) = file_path {
+        // 如果提供了文件路径，直接使用
+        fp
+    } else {
+        // 否则从数据库查询会话信息
+        let repo = SessionRepository::from_default_db()
+            .map_err(|e| format!("创建 SessionRepository 失败: {}", e))?;
+        let session = repo.get_session_by_id(&session_id)
+            .map_err(|e| format!("获取会话失败: {}", e))?
+            .ok_or_else(|| format!("会话不存在: {}", session_id))?;
+        session.file_path
+    };
 
     // 检查会话文件是否存在
-    let file_path = std::path::PathBuf::from(&session.file_path);
-    if !file_path.exists() {
-        return Err(format!("会话文件不存在: {}", session.file_path));
+    let path_buf = std::path::PathBuf::from(&final_file_path);
+    if !path_buf.exists() {
+        return Err(format!("会话文件不存在: {}", final_file_path));
     }
 
     // 解析 JSONL 文件
-    let mut parser = JsonlParser::new(file_path.clone())
+    let mut parser = JsonlParser::new(path_buf.clone())
         .map_err(|e| format!("创建 JSONL 解析器失败: {}", e))?;
 
     let entries = parser.parse_all()
@@ -2762,6 +2780,7 @@ pub enum ExportFormatType {
 /// - `session_id`: 会话 ID
 /// - `view_level`: 视图等级
 /// - `format`: 导出格式（markdown 或 json）
+/// - `file_path`: (可选) 会话文件路径。如果提供，直接使用文件路径而不从数据库查询
 ///
 /// # 返回
 /// 导出的内容字符串
@@ -2770,26 +2789,17 @@ pub async fn cmd_export_session_by_level(
     session_id: String,
     view_level: ViewLevel,
     format: ExportFormatType,
+    file_path: Option<String>,
 ) -> Result<String, String> {
-    use crate::database::repository::SessionRepository;
-
-    // 获取会话信息
-    let repo = SessionRepository::from_default_db()
-        .map_err(|e| format!("创建 SessionRepository 失败: {}", e))?;
-    let session = repo.get_session_by_id(&session_id)
-        .map_err(|e| format!("获取会话失败: {}", e))?
-        .ok_or_else(|| format!("会话不存在: {}", session_id))?;
-
     // 获取过滤后的消息
     let messages = if view_level == ViewLevel::QAPairs {
         // 对于 QAPairs，先获取问答对
-        let qa_pairs = cmd_get_qa_pairs_by_level(session_id.clone(), view_level).await?;
+        let qa_pairs = cmd_get_qa_pairs_by_level(session_id.clone(), view_level, file_path.clone()).await?;
 
         // 将问答对转换为可导出的格式
         let export_messages: Vec<crate::database::models::Message> = qa_pairs
             .into_iter()
             .flat_map(|qa| {
-                // 展平 question 和 answer，过滤掉 None 值
                 let mut messages = vec![qa.question];
                 if let Some(answer) = qa.answer {
                     messages.push(answer);
@@ -2801,15 +2811,20 @@ pub async fn cmd_export_session_by_level(
         export_messages
     } else {
         // 其他等级直接获取消息
-        cmd_get_messages_by_level(session_id.clone(), view_level).await?
+        cmd_get_messages_by_level(session_id.clone(), view_level, file_path.clone()).await?
     };
+
+    // 保存 file_path 的引用供后续使用
+    let file_path_ref = file_path.as_deref();
 
     match format {
         ExportFormatType::Markdown => {
             // 导出为 Markdown 格式
-            let mut markdown = format!("# {}\n\n", session.project_name);
-            markdown.push_str(&format!("**项目路径**: {}\n", session.project_path));
-            markdown.push_str(&format!("**文件路径**: {}\n", session.file_path));
+            let mut markdown = format!("# 会话导出\n\n");
+            markdown.push_str(&format!("**会话 ID**: {}\n", session_id));
+            if let Some(fp) = file_path_ref {
+                markdown.push_str(&format!("**文件路径**: {}\n", fp));
+            }
             markdown.push_str(&format!("**视图等级**: {}\n\n", view_level.display_name()));
             markdown.push_str("---\n\n");
 
@@ -2839,10 +2854,8 @@ pub async fn cmd_export_session_by_level(
             // 导出为 JSON 格式
             let export_data = serde_json::json!({
                 "session": {
-                    "session_id": session.session_id,
-                    "project_name": session.project_name,
-                    "project_path": session.project_path,
-                    "file_path": session.file_path,
+                    "session_id": session_id,
+                    "file_path": file_path,
                 },
                 "view_level": {
                     "value": view_level.to_string(),

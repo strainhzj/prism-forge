@@ -76,16 +76,18 @@ export function useSaveViewLevelPreference() {
  * @param sessionId - 会话 ID
  * @param viewLevel - 视图等级
  * @param enabled - 是否启用查询（默认 true）
+ * @param filePath - 可选的文件路径
  * @returns 消息列表的查询结果
  */
 export function useMessagesByLevel(
   sessionId: string,
   viewLevel: ViewLevel,
-  enabled: boolean = true
+  enabled: boolean = true,
+  filePath?: string
 ) {
   return useQuery({
     queryKey: viewLevelQueryKeys.messages(sessionId, viewLevel),
-    queryFn: () => getMessagesByLevel(sessionId, viewLevel),
+    queryFn: () => getMessagesByLevel(sessionId, viewLevel, filePath),
     enabled: enabled && !!sessionId,
     staleTime: 5 * 60 * 1000, // 5 分钟内数据视为新鲜
     gcTime: 10 * 60 * 1000, // 10 分钟后垃圾回收
@@ -98,21 +100,23 @@ export function useMessagesByLevel(
  *
  * @param sessionId - 会话 ID
  * @param viewLevel - 视图等级（必须是 QAPairs）
+ * @param filePath - 可选的文件路径
  * @param enabled - 是否启用查询（默认 true）
  * @returns 问答对列表的查询结果
  */
 export function useQAPairsByLevel(
   sessionId: string,
   viewLevel: ViewLevel,
+  filePath?: string,
   enabled: boolean = true
 ) {
   return useQuery({
     queryKey: viewLevelQueryKeys.qaPairs(sessionId, viewLevel),
-    queryFn: () => getQAPairsByLevel(sessionId, viewLevel),
-    enabled: enabled && viewLevel === ViewLevel.QAPairs && !!sessionId,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    retry: 2,
+    queryFn: () => getQAPairsByLevel(sessionId, viewLevel, filePath),
+    enabled: enabled && !!sessionId && viewLevel === ViewLevel.QAPairs,
+    staleTime: 5 * 60 * 1000, // 5 分钟内数据视为新鲜
+    gcTime: 10 * 60 * 1000, // 10 分钟后垃圾回收
+    retry: 2, // 重试两次
   });
 }
 
@@ -127,11 +131,13 @@ export function useExportSessionByLevel() {
       sessionId,
       viewLevel,
       format,
+      filePath,
     }: {
       sessionId: string;
       viewLevel: ViewLevel;
       format: ExportFormat;
-    }) => exportSessionByLevel(sessionId, viewLevel, format),
+      filePath?: string;
+    }) => exportSessionByLevel(sessionId, viewLevel, format, filePath),
   });
 }
 
@@ -193,21 +199,24 @@ export function useViewLevelManager(sessionId: string) {
  *
  * @param sessionId - 会话 ID
  * @param viewLevel - 视图等级
+ * @param filePath - 可选的文件路径
  * @returns 会话内容的查询结果
  */
 export function useSessionContent(
   sessionId: string,
-  viewLevel: ViewLevel
+  viewLevel: ViewLevel,
+  filePath?: string
 ) {
   // 加载消息列表
   const messagesQuery = useMessagesByLevel(
     sessionId,
     viewLevel,
-    viewLevel !== ViewLevel.QAPairs
+    viewLevel !== ViewLevel.QAPairs,
+    filePath
   );
 
   // 加载问答对（仅当视图等级为 QAPairs 时）
-  const qaPairsQuery = useQAPairsByLevel(sessionId, viewLevel);
+  const qaPairsQuery = useQAPairsByLevel(sessionId, viewLevel, filePath);
 
   return {
     // 数据

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>测试 Dialog 插件</title>
+    <script>
+        // 测试 dialog 插件是否正常工作
+        async function testDialog() {
+            try {
+                console.log('开始测试 dialog 插件...');
+                
+                // 导入 Tauri API
+                const { open } = await import('@tauri-apps/plugin-dialog');
+                
+                console.log('dialog 插件导入成功');
+                
+                // 测试打开目录选择对话框
+                const result = await open({
+                    directory: true,
+                    multiple: false,
+                    title: '测试目录选择'
+                });
+                
+                console.log('目录选择结果:', result);
+                
+                if (result) {
+                    document.getElementById('result').innerHTML = `选择的目录: ${result}`;
+                } else {
+                    document.getElementById('result').innerHTML = '用户取消了选择';
+                }
+                
+            } catch (error) {
+                console.error('测试失败:', error);
+                document.getElementById('result').innerHTML = `错误: ${error.message}`;
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>测试 Tauri Dialog 插件</h1>
+    <button onclick="testDialog()">测试目录选择</button>
+    <div id="result"></div>
+</body>
+</html>

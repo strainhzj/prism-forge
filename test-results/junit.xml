@@ -1,0 +1,116 @@
+<testsuites id="" name="" tests="7" failures="7" skipped="0" errors="0" time="7.9386540000000005">
+<testsuite name="add-directory.spec.ts" timestamp="2026-01-08T07:01:07.481Z" hostname="chromium" tests="7" failures="7" skipped="0" time="0.012" errors="0">
+<testcase name="添加目录功能测试 › 应该能够点击添加目录按钮" classname="add-directory.spec.ts" time="0.002">
+<failure message="add-directory.spec.ts:27:3 应该能够点击添加目录按钮" type="FAILURE">
+<![CDATA[  [chromium] › add-directory.spec.ts:27:3 › 添加目录功能测试 › 应该能够点击添加目录按钮 ────────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\thoma\AppData\Local\ms-playwright\chromium_headless_shell-1200\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔═════════════════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright Test or Playwright was just installed or updated. ║
+    ║ Please run the following command to download new browsers:              ║
+    ║                                                                         ║
+    ║     npx playwright install                                              ║
+    ║                                                                         ║
+    ║ <3 Playwright Team                                                      ║
+    ╚═════════════════════════════════════════════════════════════════════════╝
+]]>
+</failure>
+</testcase>
+<testcase name="添加目录功能测试 › 应该能够显示监控目录列表" classname="add-directory.spec.ts" time="0.002">
+<failure message="add-directory.spec.ts:52:3 应该能够显示监控目录列表" type="FAILURE">
+<![CDATA[  [chromium] › add-directory.spec.ts:52:3 › 添加目录功能测试 › 应该能够显示监控目录列表 ────────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\thoma\AppData\Local\ms-playwright\chromium_headless_shell-1200\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔═════════════════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright Test or Playwright was just installed or updated. ║
+    ║ Please run the following command to download new browsers:              ║
+    ║                                                                         ║
+    ║     npx playwright install                                              ║
+    ║                                                                         ║
+    ║ <3 Playwright Team                                                      ║
+    ╚═════════════════════════════════════════════════════════════════════════╝
+]]>
+</failure>
+</testcase>
+<testcase name="添加目录功能测试 › 应该能够切换监控目录状态" classname="add-directory.spec.ts" time="0.002">
+<failure message="add-directory.spec.ts:74:3 应该能够切换监控目录状态" type="FAILURE">
+<![CDATA[  [chromium] › add-directory.spec.ts:74:3 › 添加目录功能测试 › 应该能够切换监控目录状态 ────────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\thoma\AppData\Local\ms-playwright\chromium_headless_shell-1200\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔═════════════════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright Test or Playwright was just installed or updated. ║
+    ║ Please run the following command to download new browsers:              ║
+    ║                                                                         ║
+    ║     npx playwright install                                              ║
+    ║                                                                         ║
+    ║ <3 Playwright Team                                                      ║
+    ╚═════════════════════════════════════════════════════════════════════════╝
+]]>
+</failure>
+</testcase>
+<testcase name="添加目录功能测试 › 应该能够删除监控目录" classname="add-directory.spec.ts" time="0.002">
+<failure message="add-directory.spec.ts:107:3 应该能够删除监控目录" type="FAILURE">
+<![CDATA[  [chromium] › add-directory.spec.ts:107:3 › 添加目录功能测试 › 应该能够删除监控目录 ─────────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\thoma\AppData\Local\ms-playwright\chromium_headless_shell-1200\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔═════════════════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright Test or Playwright was just installed or updated. ║
+    ║ Please run the following command to download new browsers:              ║
+    ║                                                                         ║
+    ║     npx playwright install                                              ║
+    ║                                                                         ║
+    ║ <3 Playwright Team                                                      ║
+    ╚═════════════════════════════════════════════════════════════════════════╝
+]]>
+</failure>
+</testcase>
+<testcase name="添加目录功能测试 › 应该能够刷新会话列表" classname="add-directory.spec.ts" time="0.002">
+<failure message="add-directory.spec.ts:132:3 应该能够刷新会话列表" type="FAILURE">
+<![CDATA[  [chromium] › add-directory.spec.ts:132:3 › 添加目录功能测试 › 应该能够刷新会话列表 ─────────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\thoma\AppData\Local\ms-playwright\chromium_headless_shell-1200\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔═════════════════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright Test or Playwright was just installed or updated. ║
+    ║ Please run the following command to download new browsers:              ║
+    ║                                                                         ║
+    ║     npx playwright install                                              ║
+    ║                                                                         ║
+    ║ <3 Playwright Team                                                      ║
+    ╚═════════════════════════════════════════════════════════════════════════╝
+]]>
+</failure>
+</testcase>
+<testcase name="添加目录功能测试 › 应该显示正确的空状态提示" classname="add-directory.spec.ts" time="0.001">
+<failure message="add-directory.spec.ts:158:3 应该显示正确的空状态提示" type="FAILURE">
+<![CDATA[  [chromium] › add-directory.spec.ts:158:3 › 添加目录功能测试 › 应该显示正确的空状态提示 ───────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\thoma\AppData\Local\ms-playwright\chromium_headless_shell-1200\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔═════════════════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright Test or Playwright was just installed or updated. ║
+    ║ Please run the following command to download new browsers:              ║
+    ║                                                                         ║
+    ║     npx playwright install                                              ║
+    ║                                                                         ║
+    ║ <3 Playwright Team                                                      ║
+    ╚═════════════════════════════════════════════════════════════════════════╝
+]]>
+</failure>
+</testcase>
+<testcase name="添加目录功能测试 › 应该能够处理错误状态" classname="add-directory.spec.ts" time="0.001">
+<failure message="add-directory.spec.ts:180:3 应该能够处理错误状态" type="FAILURE">
+<![CDATA[  [chromium] › add-directory.spec.ts:180:3 › 添加目录功能测试 › 应该能够处理错误状态 ─────────────────────────────────
+
+    Error: browserType.launch: Executable doesn't exist at C:\Users\thoma\AppData\Local\ms-playwright\chromium_headless_shell-1200\chrome-headless-shell-win64\chrome-headless-shell.exe
+    ╔═════════════════════════════════════════════════════════════════════════╗
+    ║ Looks like Playwright Test or Playwright was just installed or updated. ║
+    ║ Please run the following command to download new browsers:              ║
+    ║                                                                         ║
+    ║     npx playwright install                                              ║
+    ║                                                                         ║
+    ║ <3 Playwright Team                                                      ║
+    ╚═════════════════════════════════════════════════════════════════════════╝
+]]>
+</failure>
+</testcase>
+</testsuite>
+</testsuites>

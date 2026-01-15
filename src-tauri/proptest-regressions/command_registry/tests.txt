@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc e073af3ccfc7aba39035710c9b07f0c932fd8c34fc579875399b17ac7cab15d5 # shrinks to whitespace = "\u{a0}"
+cc 2e4d0345c8da30ee25c57ab21978ad78a93a12a5ead4a2860dfa3ac12cfb615f # shrinks to invalid_commands = ["a"], technical_errors = ["HU7w9_2IA", "L92fK8.z1", ".0siY_TomD_4YX__e.28g", "_-1GCp.-9s.B9D_8_z_A.JT_", "_j.A85_wKlI", "__9gj4q"]
+cc df90ab5ef2fb5a9fbbdd12c2b865ea94a80ef2b8d6f16466ea31f2bf46624657 # shrinks to base_commands = ["A", "n"], dependency_changes = [("n", ["HnGyi6c__w_W_G39I__1VP6s8_lW", "_SIl0Y_"])]

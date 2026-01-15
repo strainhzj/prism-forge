@@ -76,7 +76,112 @@ PrismForge 是一个基于 Tauri 2 + React 18 的桌面应用程序，核心功�
        是否需要我实现这个方案？"
 ```
 
+### 4. 国际化与主题约束
+
+🌍 **所有用户可见文本必须支持中英文切换**
+
+- **强制要求**：
+
+  1. 所有面向用户的文本必须使用 `useTranslation` hook
+  2. 翻译键必须同时提供中文和英文版本
+  3. 禁止硬编码中文或英文文本到组件中
+  4. 动态内容（如供应商类型）必须通过翻译键映射实现
+
+- **翻译文件结构**：
+
+  ```
+  src/i18n/locales/
+  ├── zh/
+  │   ├── common.json    # 通用文本（项目切换器、按钮等）
+  │   ├── index.json     # 首页（timeline、项目操作）
+  │   ├── navigation.json # 导航菜单
+  │   ├── sessions.json   # 会话管理页面
+  │   └── settings.json   # API设置（表单、验证、供应商类型）
+  └── en/
+      └── (相同结构)
+  ```
+
+- **使用示例**：
+
+  ```typescript
+  // ✅ 正确：使用翻译
+  import { useTranslation } from 'react-i18next';
+  
+  const { t } = useTranslation('settings');
+  <span>{t('form.providerType')}</span>
+  <button>{t('buttons.save')}</button>
+  
+  // ❌ 错误：硬编码文本
+  <span>提供商类型</span>
+  <button>保存</button>
+  ```
+
+- **动态翻译处理**：
+
+  - 供应商类型通过 `PROVIDER_TYPE_KEYS` 映射到翻译键
+  - 第三方提供商通过 `THIRD_PARTY_PROVIDER_KEYS` 映射
+  - 使用 `useMemo` 缓存动态生成的翻译内容
+
+  ```typescript
+  // 示例：供应商类型动态翻译
+  const PROVIDER_TYPE_OPTIONS = useMemo(() => {
+    return Object.entries(PROVIDER_DISPLAY_INFO).map(([key]) => {
+      const providerTypeKey = PROVIDER_TYPE_KEYS[key as ApiProviderType];
+      return {
+        value: key as ApiProviderType,
+        label: t(`providerTypes.${providerTypeKey}.label`),
+        description: t(`providerTypes.${providerTypeKey}.description`),
+      };
+    });
+  }, [t]);
+  ```
+
+- **翻译键命名规范**：
+
+  - 使用点分路径：`namespace.category.key`
+  - 命名空间：`common`, `index`, `navigation`, `sessions`, `settings`
+  - 类别：`form`, `buttons`, `placeholders`, `validation`, `helpText`, `errors`
+  - 键名：camelCase（如 `providerType`, `save`, `connectionFailed`）
+
+🎨 **组件必须适配暗色/亮色主题**
+
+- **主题系统**：应用支持暗色和亮色两种主题模式，通过 `useThemeStore` 管理
+
+- **CSS 变量规范**：使用 Tailwind 的 `dark:` 前缀适配主题
+
+  ```tsx
+  // ✅ 正确：适配两种主题
+  <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+  <button className="bg-primary dark:bg-primary-dark text-white">
+  
+  // ❌ 错误：仅适配单一主题
+  <div className="bg-white text-gray-900">
+  <button className="bg-blue-500 text-white">
+  ```
+
+- **常用颜色值映射**：
+
+  | 元素           | 亮色主题                                  | 暗色主题                                            |
+  | -------------- | ----------------------------------------- | --------------------------------------------------- |
+  | **背景**       | `bg-white`                                | `dark:bg-gray-900`                                  |
+  | **卡片背景**   | `bg-gray-50`                              | `dark:bg-gray-800`                                  |
+  | **边框**       | `border-gray-200`                         | `dark:border-gray-700`                              |
+  | **文本主色**   | `text-gray-900`                           | `dark:text-gray-100`                                |
+  | **文本次要**   | `text-gray-600`                           | `dark:text-gray-400`                                |
+  | **文本禁用**   | `text-gray-400`                           | `dark:text-gray-600`                                |
+  | **主色调**     | `bg-orange-500`                           | `dark:bg-orange-600`                                |
+  | **主色调悬停** | `hover:bg-orange-600`                     | `dark:hover:bg-orange-700`                          |
+  | **输入框**     | `bg-white border-gray-300`                | `dark:bg-gray-800 dark:border-gray-600`             |
+  | **输入框文本** | `text-gray-900 placeholder:text-gray-400` | `dark:text-gray-100 dark:placeholder:text-gray-500` |
+  | **按钮主色**   | `bg-primary`                              | `dark:bg-primary-dark`                              |
+  | **按钮次要**   | `bg-gray-200 text-gray-900`               | `dark:bg-gray-700 dark:text-gray-100`               |
+  | **危险操作**   | `text-red-600 hover:text-red-700`         | `dark:text-red-400 dark:hover:text-red-300`         |
+  | **成功提示**   | `text-green-600 bg-green-50`              | `dark:text-green-400 dark:bg-green-900/20`          |
+  | **警告提示**   | `text-yellow-600 bg-yellow-50`            | `dark:text-yellow-400 dark:bg-yellow-900/20`        |
+  | **错误提示**   | `text-red-600 bg-red-50`                  | `dark:text-red-400 dark:bg-red-900/20`              |
+
 **总结**：
+
 - 🤔 **思考** → 📋 **提出假设** → ✅ **等待确认** → 🔨 **开始编码**
 - 🔍 **搜索** → ♻️ **复用优先** → 🆕 **必要时创建**
 - ❓ **发现疑问** → 💬 **主动提问** → 📊 **提供选项** → 👍 **等待决策**

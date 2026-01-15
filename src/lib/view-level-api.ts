@@ -21,16 +21,19 @@ export type ExportFormat = 'markdown' | 'json';
  *
  * @param sessionId - 会话 ID
  * @param viewLevel - 视图等级
+ * @param filePath - 可选的文件路径（如果提供，直接使用文件而不从数据库查询）
  * @returns 过滤后的消息列表
  */
 export async function getMessagesByLevel(
   sessionId: string,
-  viewLevel: ViewLevel
+  viewLevel: ViewLevel,
+  filePath?: string
 ): Promise<Message[]> {
   try {
     const messages = await invoke<Message[]>('cmd_get_messages_by_level', {
       sessionId,
       viewLevel,
+      filePath, // 添加可选的文件路径参数
     });
     return messages;
   } catch (error) {
@@ -44,16 +47,19 @@ export async function getMessagesByLevel(
  *
  * @param sessionId - 会话 ID
  * @param viewLevel - 视图等级（必须是 QAPairs）
+ * @param filePath - 可选的文件路径（如果提供，直接使用文件而不从数据库查询）
  * @returns 问答对列表
  */
 export async function getQAPairsByLevel(
   sessionId: string,
-  viewLevel: ViewLevel
+  viewLevel: ViewLevel,
+  filePath?: string
 ): Promise<QAPair[]> {
   try {
     const qaPairs = await invoke<QAPair[]>('cmd_get_qa_pairs_by_level', {
       sessionId,
       viewLevel,
+      filePath, // 添加可选的文件路径参数
     });
     return qaPairs;
   } catch (error) {
@@ -110,18 +116,21 @@ export async function getViewLevelPreference(
  * @param sessionId - 会话 ID
  * @param viewLevel - 视图等级
  * @param format - 导出格式（markdown 或 json）
+ * @param filePath - 可选的文件路径（如果提供，直接使用文件而不从数据库查询）
  * @returns 导出的内容字符串
  */
 export async function exportSessionByLevel(
   sessionId: string,
   viewLevel: ViewLevel,
-  format: ExportFormat
+  format: ExportFormat,
+  filePath?: string
 ): Promise<string> {
   try {
     const content = await invoke<string>('cmd_export_session_by_level', {
       sessionId,
       viewLevel,
       format,
+      filePath, // 添加可选的文件路径参数
     });
     return content;
   } catch (error) {
