@@ -2667,7 +2667,21 @@ pub async fn cmd_get_messages_by_level(
         .collect();
 
     #[cfg(debug_assertions)]
-    eprintln!("[DEBUG] 转换后得到 {} 个消息对象 (view_level: {:?})", messages.len(), view_level);
+    {
+        eprintln!("[DEBUG] 转换后得到 {} 个消息对象 (view_level: {:?})", messages.len(), view_level);
+
+        // 显示前 3 条消息的详细信息
+        if !messages.is_empty() {
+            eprintln!("[DEBUG] 前 3 条消息示例:");
+            for (i, msg) in messages.iter().take(3).enumerate() {
+                eprintln!("  [{}]:", i);
+                eprintln!("    msg_type: {:?}", msg.msg_type);
+                eprintln!("    uuid: {:?}", msg.uuid.get(..8));
+                eprintln!("    summary: {:?}", msg.summary.as_ref().and_then(|s| s.get(..50)));
+                eprintln!("    timestamp: {:?}", msg.timestamp);
+            }
+        }
+    }
 
     // 根据等级过滤消息
     let filter = MessageFilter::new(view_level);
