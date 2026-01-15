@@ -62,5 +62,52 @@
     "noContent": "No content",
     "noContentHint": "The session file is empty or has incorrect format",
     "messageCount": "Total {{count}} messages"
+  },
+  "viewLevel": {
+    "title": "View Level",
+    "description": "Select the display level for session messages",
+    "current": "Current",
+    "levels": {
+      "full": {
+        "label": "Full Mode",
+        "description": "Show all message types, including tool calls and errors",
+        "icon": "📄"
+      },
+      "conversation": {
+        "label": "Conversation",
+        "description": "Show only user, assistant, and thinking messages",
+        "icon": "💬"
+      },
+      "qa_pairs": {
+        "label": "Q&A Pairs",
+        "description": "Extract user questions and final answers, skip intermediate steps",
+        "icon": "❓"
+      },
+      "assistant_only": {
+        "label": "Assistant Only",
+        "description": "Show only assistant responses",
+        "icon": "🤖"
+      },
+      "user_only": {
+        "label": "User Only",
+        "description": "Show only user inputs",
+        "icon": "👤"
+      }
+    },
+    "export": {
+      "title": "Export Session",
+      "formatLabel": "Export Format",
+      "formats": {
+        "markdown": "Markdown",
+        "json": "JSON"
+      },
+      "buttons": {
+        "export": "Export",
+        "copy": "Copy",
+        "download": "Download"
+      },
+      "success": "Export successful",
+      "failed": "Export failed"
+    }
   }
 }

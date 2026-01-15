@@ -131,6 +131,12 @@ pub fn run() {
             get_vector_settings,
             update_vector_settings,
             sync_embeddings_now,
+            // 多级日志读取命令
+            cmd_get_messages_by_level,
+            cmd_get_qa_pairs_by_level,
+            cmd_save_view_level_preference,
+            cmd_get_view_level_preference,
+            cmd_export_session_by_level,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

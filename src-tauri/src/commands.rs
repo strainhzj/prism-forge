@@ -2529,4 +2529,334 @@ pub async fn sync_embeddings_now(
     Ok(count)
 }
 
+// ============================================================================
+// 多等级日志读取 Commands (Multi-Level Log Reading)
+// ============================================================================
+
+use crate::parser::view_level::{ViewLevel, MessageFilter, QAPair};
+
+/// 根据等级获取会话消息
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+/// - `view_level`: 视图等级
+///
+/// # 返回
+/// 过滤后的消息列表
+#[tauri::command]
+pub async fn cmd_get_messages_by_level(
+    session_id: String,
+    view_level: ViewLevel,
+) -> Result<Vec<crate::database::models::Message>, String> {
+    use crate::database::repository::SessionRepository;
+
+    // 获取会话信息
+    let repo = SessionRepository::from_default_db()
+        .map_err(|e| format!("创建 SessionRepository 失败: {}", e))?;
+    let session = repo.get_session_by_id(&session_id)
+        .map_err(|e| format!("获取会话失败: {}", e))?
+        .ok_or_else(|| format!("会话不存在: {}", session_id))?;
+
+    // 检查会话文件是否存在
+    let file_path = std::path::PathBuf::from(&session.file_path);
+    if !file_path.exists() {
+        return Err(format!("会话文件不存在: {}", session.file_path));
+    }
+
+    // 解析 JSONL 文件
+    let mut parser = JsonlParser::new(file_path.clone())
+        .map_err(|e| format!("创建 JSONL 解析器失败: {}", e))?;
+
+    let entries = parser.parse_all()
+        .map_err(|e| format!("解析 JSONL 文件失败: {}", e))?;
+
+    // 转换为 Message 对象
+    let messages: Vec<crate::database::models::Message> = entries
+        .into_iter()
+        .filter_map(|entry| {
+            // 从 JsonlEntry 提取消息数据
+            let uuid = entry.data.get("uuid")?.as_str()?.to_string();
+            let parent_uuid = entry.data.get("parentUuid").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let msg_type = entry.message_type().unwrap_or("unknown".to_string());
+
+            // 只处理消息类型的条目
+            if msg_type != "message" {
+                return None;
+            }
+
+            let role = entry.role().unwrap_or("unknown".to_string());
+
+            // 从 data 中提取 timestamp 和 summary
+            let timestamp = entry.data.get("timestamp")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+
+            let summary = entry.data.get("content")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            // 使用 role 作为 msg_type
+            Some(crate::database::models::Message {
+                id: None,
+                session_id: session_id.clone(),
+                uuid,
+                parent_uuid,
+                msg_type: role,
+                timestamp: timestamp.clone(),
+                offset: entry.offset as i64,
+                length: entry.length as i64,
+                summary,
+                parent_idx: None,
+                created_at: timestamp,
+            })
+        })
+        .collect();
+
+    // 根据等级过滤消息
+    let filter = MessageFilter::new(view_level);
+    let filtered_messages = filter.filter_messages(messages);
+
+    Ok(filtered_messages)
+}
+
+/// 根据等级提取问答对
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+/// - `view_level`: 视图等级（必须是 QAPairs）
+///
+/// # 返回
+/// 问答对列表
+#[tauri::command]
+pub async fn cmd_get_qa_pairs_by_level(
+    session_id: String,
+    view_level: ViewLevel,
+) -> Result<Vec<QAPair>, String> {
+    use crate::database::repository::SessionRepository;
+
+    // 验证等级必须是 QAPairs
+    if view_level != ViewLevel::QAPairs {
+        return Err("问答对提取仅在 QAPairs 等级下可用".to_string());
+    }
+
+    // 获取会话信息
+    let repo = SessionRepository::from_default_db()
+        .map_err(|e| format!("创建 SessionRepository 失败: {}", e))?;
+    let session = repo.get_session_by_id(&session_id)
+        .map_err(|e| format!("获取会话失败: {}", e))?
+        .ok_or_else(|| format!("会话不存在: {}", session_id))?;
+
+    // 检查会话文件是否存在
+    let file_path = std::path::PathBuf::from(&session.file_path);
+    if !file_path.exists() {
+        return Err(format!("会话文件不存在: {}", session.file_path));
+    }
+
+    // 解析 JSONL 文件
+    let mut parser = JsonlParser::new(file_path.clone())
+        .map_err(|e| format!("创建 JSONL 解析器失败: {}", e))?;
+
+    let entries = parser.parse_all()
+        .map_err(|e| format!("解析 JSONL 文件失败: {}", e))?;
+
+    // 转换为 Message 对象
+    let messages: Vec<crate::database::models::Message> = entries
+        .into_iter()
+        .filter_map(|entry| {
+            let uuid = entry.data.get("uuid")?.as_str()?.to_string();
+            let parent_uuid = entry.data.get("parentUuid").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let msg_type = entry.message_type().unwrap_or("unknown".to_string());
+
+            if msg_type != "message" {
+                return None;
+            }
+
+            let role = entry.role().unwrap_or("unknown".to_string());
+
+            // 从 data 中提取 timestamp 和 summary
+            let timestamp = entry.data.get("timestamp")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+
+            let summary = entry.data.get("content")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            Some(crate::database::models::Message {
+                id: None,
+                session_id: session_id.clone(),
+                uuid,
+                parent_uuid,
+                msg_type: role,
+                timestamp: timestamp.clone(),
+                offset: entry.offset as i64,
+                length: entry.length as i64,
+                summary,
+                parent_idx: None,
+                created_at: timestamp,
+            })
+        })
+        .collect();
+
+    // 提取问答对
+    let filter = MessageFilter::new(view_level);
+    let qa_pairs = filter.extract_qa_pairs(messages);
+
+    Ok(qa_pairs)
+}
+
+/// 保存视图等级偏好
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+/// - `view_level`: 视图等级
+///
+/// # 返回
+/// 成功返回 Ok(())
+#[tauri::command]
+pub async fn cmd_save_view_level_preference(
+    session_id: String,
+    view_level: ViewLevel,
+) -> Result<(), String> {
+    use crate::database::repository::ViewLevelPreferenceRepository;
+
+    let mut repo = ViewLevelPreferenceRepository::new();
+    repo.save_preference(&session_id, view_level)
+        .map_err(|e| format!("保存偏好失败: {}", e))
+}
+
+/// 获取视图等级偏好
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+///
+/// # 返回
+/// 视图等级，如果不存在则返回默认值 Full
+#[tauri::command]
+pub async fn cmd_get_view_level_preference(
+    session_id: String,
+) -> Result<ViewLevel, String> {
+    use crate::database::repository::ViewLevelPreferenceRepository;
+
+    let repo = ViewLevelPreferenceRepository::new();
+    let preference = repo.get_preference_or_default(&session_id)
+        .map_err(|e| format!("获取偏好失败: {}", e))?;
+
+    Ok(preference)
+}
+
+/// 导出格式
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ExportFormatType {
+    #[serde(rename = "markdown")]
+    Markdown,
+    #[serde(rename = "json")]
+    Json,
+}
+
+/// 根据等级导出会话
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+/// - `view_level`: 视图等级
+/// - `format`: 导出格式（markdown 或 json）
+///
+/// # 返回
+/// 导出的内容字符串
+#[tauri::command]
+pub async fn cmd_export_session_by_level(
+    session_id: String,
+    view_level: ViewLevel,
+    format: ExportFormatType,
+) -> Result<String, String> {
+    use crate::database::repository::SessionRepository;
+
+    // 获取会话信息
+    let repo = SessionRepository::from_default_db()
+        .map_err(|e| format!("创建 SessionRepository 失败: {}", e))?;
+    let session = repo.get_session_by_id(&session_id)
+        .map_err(|e| format!("获取会话失败: {}", e))?
+        .ok_or_else(|| format!("会话不存在: {}", session_id))?;
+
+    // 获取过滤后的消息
+    let messages = if view_level == ViewLevel::QAPairs {
+        // 对于 QAPairs，先获取问答对
+        let qa_pairs = cmd_get_qa_pairs_by_level(session_id.clone(), view_level).await?;
+
+        // 将问答对转换为可导出的格式
+        let export_messages: Vec<crate::database::models::Message> = qa_pairs
+            .into_iter()
+            .flat_map(|qa| {
+                // 展平 question 和 answer，过滤掉 None 值
+                let mut messages = vec![qa.question];
+                if let Some(answer) = qa.answer {
+                    messages.push(answer);
+                }
+                messages
+            })
+            .collect();
+
+        export_messages
+    } else {
+        // 其他等级直接获取消息
+        cmd_get_messages_by_level(session_id.clone(), view_level).await?
+    };
+
+    match format {
+        ExportFormatType::Markdown => {
+            // 导出为 Markdown 格式
+            let mut markdown = format!("# {}\n\n", session.project_name);
+            markdown.push_str(&format!("**项目路径**: {}\n", session.project_path));
+            markdown.push_str(&format!("**文件路径**: {}\n", session.file_path));
+            markdown.push_str(&format!("**视图等级**: {}\n\n", view_level.display_name()));
+            markdown.push_str("---\n\n");
+
+            for msg in &messages {
+                let role_label = match msg.msg_type.as_str() {
+                    "user" => "👤 用户",
+                    "assistant" => "🤖 助手",
+                    "thinking" => "💭 思考",
+                    _ => "📝 其他",
+                };
+
+                markdown.push_str(&format!("## {}\n\n", role_label));
+                markdown.push_str(&format!("**时间**: {}\n\n", msg.timestamp));
+
+                if let Some(summary) = &msg.summary {
+                    markdown.push_str(&format!("{}\n\n", summary));
+                } else {
+                    markdown.push_str("*（无内容）*\n\n");
+                }
+
+                markdown.push_str("---\n\n");
+            }
+
+            Ok(markdown)
+        }
+        ExportFormatType::Json => {
+            // 导出为 JSON 格式
+            let export_data = serde_json::json!({
+                "session": {
+                    "session_id": session.session_id,
+                    "project_name": session.project_name,
+                    "project_path": session.project_path,
+                    "file_path": session.file_path,
+                },
+                "view_level": {
+                    "value": view_level.to_string(),
+                    "display_name": view_level.display_name(),
+                    "description": view_level.description(),
+                },
+                "messages": messages,
+                "exported_at": chrono::Utc::now().to_rfc3339()
+            });
+
+            serde_json::to_string_pretty(&export_data)
+                .map_err(|e| format!("JSON 序列化失败: {}", e))
+        }
+    }
+}
+
 

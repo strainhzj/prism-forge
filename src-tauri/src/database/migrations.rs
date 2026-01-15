@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 12;
+const CURRENT_DB_VERSION: i32 = 13;
 
 /// 初始化数据库
 ///
@@ -81,6 +81,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             10 => migrate_v10(conn)?,
             11 => migrate_v11(conn)?,
             12 => migrate_v12(conn)?,
+            13 => migrate_v13(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -683,6 +684,44 @@ pub fn migrate_v12_impl(conn: &mut Connection) -> Result<()> {
     // 添加别名字段（JSON 数组格式，存储别名列表）
     conn.execute(
         "ALTER TABLE api_providers ADD COLUMN aliases TEXT DEFAULT '[]';",
+        [],
+    )?;
+
+    Ok(())
+}
+
+/// 迁移到版本 13: 创建 view_level_preferences 表
+#[cfg(test)]
+pub fn migrate_v13(conn: &mut Connection) -> Result<()> {
+    migrate_v13_impl(conn)
+}
+
+#[cfg(not(test))]
+pub fn migrate_v13(conn: &mut Connection) -> Result<()> {
+    migrate_v13_impl(conn)
+}
+
+pub fn migrate_v13_impl(conn: &mut Connection) -> Result<()> {
+    // 创建视图等级偏好表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS view_level_preferences (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL UNIQUE,
+            view_level TEXT NOT NULL CHECK (
+                view_level IN ('full', 'conversation', 'qa_pairs', 'assistant_only', 'user_only')
+            ),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+
+            FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+        );",
+        [],
+    )?;
+
+    // 创建索引以加速查询
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_view_level_preferences_session
+        ON view_level_preferences(session_id);",
         [],
     )?;
 
