@@ -28,3 +28,6 @@ docs/
 
 # Development plans and temporary files
 dev_plans/
+
+# Claude Code temporary working directory files
+*-cwd

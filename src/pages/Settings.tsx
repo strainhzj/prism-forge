@@ -1,12 +1,11 @@
 /**
  * Settings 页面 - LLM API 提供商管理
- *
- * 左侧：提供商列表
- * 右侧：详情表单 + Test Connection 按钮
+ * Cherry Studio 风格：左右分栏，左侧搜索+列表，右侧表单
  */
 
 import { useEffect, useState, useCallback, Component, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Home } from 'lucide-react';
 import { useProviderActions, useProviders, useProvidersLoading, useProvidersError, type ProviderResponse, type SaveProviderRequest, type TestConnectionResult, ConnectionErrorType } from '../stores/useSettingsStore';
 import { ProviderForm } from '../components/settings/ProviderForm';
 import './Settings.css';
@@ -27,7 +26,7 @@ function formatTestResultMessage(result: TestConnectionResult): string {
   if (result.success) {
     return '连接成功！';
   }
-  
+
   // 根据错误类型返回更友好的消息
   const errorTypeLabels: Record<ConnectionErrorType, string> = {
     [ConnectionErrorType.AUTHENTICATION]: '认证错误',
@@ -36,11 +35,28 @@ function formatTestResultMessage(result: TestConnectionResult): string {
     [ConnectionErrorType.REQUEST]: '请求错误',
     [ConnectionErrorType.UNKNOWN]: '未知错误',
   };
-  
+
   const typeLabel = result.errorType ? errorTypeLabels[result.errorType] : '';
   const message = result.errorMessage || '连接失败，请检查配置';
-  
+
   return typeLabel ? `[${typeLabel}] ${message}` : message;
+}
+
+/**
+ * 获取提供商图标首字母
+ */
+function getProviderIcon(providerType: string): string {
+  const typeMap: Record<string, string> = {
+    'openai': 'O',
+    'anthropic': 'A',
+    'ollama': 'O',
+    'xai': 'X',
+    'google': 'G',
+    'googlevertex': 'V',
+    'azureopenai': 'A',
+    'openai-compatible': 'C',
+  };
+  return typeMap[providerType] || providerType.charAt(0).toUpperCase();
 }
 
 // ==================== 错误边界 ====================
@@ -92,14 +108,14 @@ interface SettingsState {
   selectedProviderId: number | null;
   testingProviderId: number | null;
   testResult: { id: number; result: TestConnectionResult } | null;
+  searchQuery: string;
 }
 
 // ==================== Settings 页面 ====================
 
 const SettingsContent: React.FC = () => {
-  const navigate = useNavigate();
-
   debugLog('render', 'SettingsContent mounting');
+  const navigate = useNavigate();
 
   // Store 状态
   const providers = useProviders();
@@ -110,15 +126,22 @@ const SettingsContent: React.FC = () => {
   debugLog('state', { providersCount: providers.length, loading, error });
 
   // 本地状态
-  const [{ viewMode, selectedProviderId, testingProviderId, testResult }, setState] = useState<SettingsState>({
+  const [{ viewMode, selectedProviderId, testingProviderId, testResult, searchQuery }, setState] = useState<SettingsState>({
     viewMode: 'list',
     selectedProviderId: null,
     testingProviderId: null,
     testResult: null,
+    searchQuery: '',
   });
 
   // 获取选中的提供商
   const selectedProvider = providers.find((p) => p.id === selectedProviderId);
+
+  // 过滤提供商
+  const filteredProviders = providers.filter((p) =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.providerType.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   // ==================== 初始化 ====================
 
@@ -138,9 +161,10 @@ const SettingsContent: React.FC = () => {
       selectedProviderId: null,
       testingProviderId: null,
       testResult: null,
+      searchQuery,
     });
     clearError();
-  }, [clearError]);
+  }, [clearError, searchQuery]);
 
   // 编辑提供商
   const handleEdit = useCallback((provider: ProviderResponse) => {
@@ -149,9 +173,10 @@ const SettingsContent: React.FC = () => {
       selectedProviderId: provider.id ?? null,
       testingProviderId: null,
       testResult: null,
+      searchQuery,
     });
     clearError();
-  }, [clearError]);
+  }, [clearError, searchQuery]);
 
   // 取消编辑
   const handleCancel = useCallback(() => {
@@ -160,8 +185,9 @@ const SettingsContent: React.FC = () => {
       selectedProviderId: null,
       testingProviderId: null,
       testResult: null,
+      searchQuery,
     });
-  }, []);
+  }, [searchQuery]);
 
   // 保存提供商
   const handleSave = useCallback(async (data: SaveProviderRequest) => {
@@ -201,8 +227,9 @@ const SettingsContent: React.FC = () => {
     }
   }, [deleteProvider]);
 
-  // 设置活跃提供商
-  const handleSetActive = useCallback(async (provider: ProviderResponse) => {
+  // 切换活跃状态
+  const handleToggleActive = useCallback(async (provider: ProviderResponse, e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!provider.id) return;
 
     try {
@@ -265,29 +292,21 @@ const SettingsContent: React.FC = () => {
     }
   }, [testProviderConnection]);
 
+  // 搜索处理
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setState((prev) => ({
+      ...prev,
+      searchQuery: e.target.value,
+    }));
+  }, []);
+
   // ==================== 渲染 ====================
 
   return (
     <div className="settings-page">
-      <div className="settings-header">
-        <button
-          className="back-btn"
-          onClick={() => navigate('/')}
-          title="返回主页"
-        >
-          ← 返回
-        </button>
-        <h1>LLM API 提供商设置</h1>
-        {viewMode === 'list' && (
-          <button className="btn btn-primary" onClick={handleCreate}>
-            + 新建提供商
-          </button>
-        )}
-      </div>
-
       {/* 错误提示 */}
       {error && (
-        <div className="alert alert-error">
+        <div className="alert alert-error" style={{ margin: '16px' }}>
           <span>{error}</span>
           <button className="close-btn" onClick={clearError}>×</button>
         </div>
@@ -297,76 +316,63 @@ const SettingsContent: React.FC = () => {
       <div className="settings-content">
         {/* 左侧：提供商列表 */}
         <div className="providers-panel">
-          <h2>提供商列表</h2>
+          {/* 返回按钮 */}
+          <div className="providers-panel-back">
+            <button className="back-btn" onClick={() => navigate('/')}>
+              <Home size={16} />
+              <span>返回首页</span>
+            </button>
+          </div>
 
+          {/* 左侧顶部：搜索和添加 */}
+          <div className="providers-panel-header">
+            <div className="providers-panel-search">
+              <input
+                type="text"
+                placeholder="搜索提供商..."
+                value={searchQuery}
+                onChange={handleSearchChange}
+              />
+            </div>
+            <button className="providers-panel-add-btn" onClick={handleCreate}>
+              + 添加提供商
+            </button>
+          </div>
+
+          {/* 提供商列表 */}
           {loading && providers.length === 0 ? (
             <div className="loading-state">加载中...</div>
           ) : providers.length === 0 ? (
             <div className="empty-state">
-              <p>暂无提供商，请点击上方"新建提供商"按钮添加。</p>
+              <p>暂无提供商</p>
             </div>
           ) : (
             <ul className="providers-list">
-              {providers.map((provider) => {
-                const currentTestResult = testResult && testResult.id === provider.id ? testResult : null;
-                return (
-                  <li
-                    key={provider.id}
-                    className={`provider-item ${provider.id === selectedProviderId ? 'active' : ''} ${provider.isActive ? 'is-active' : ''}`}
-                    onClick={() => handleEdit(provider)}
-                  >
-                    <div className="provider-info">
-                      <div className="provider-name">
-                        {provider.name}
-                        {provider.isActive && <span className="active-badge">活跃</span>}
-                      </div>
-                      <div className="provider-meta">
-                        <span className="provider-type">{provider.providerType}</span>
-                        {provider.hasApiKey && (
-                          <span className="key-status">已配置密钥</span>
-                        )}
-                      </div>
-                    </div>
+              {filteredProviders.map((provider) => (
+                <li
+                  key={provider.id}
+                  className={`provider-item ${provider.id === selectedProviderId ? 'active' : ''} ${provider.isActive ? 'is-active' : ''}`}
+                  onClick={() => handleEdit(provider)}
+                  data-provider-type={provider.providerType}
+                >
+                  {/* 提供商图标 */}
+                  <div className="provider-icon">
+                    {getProviderIcon(provider.providerType)}
+                  </div>
 
-                    {/* 快捷操作按钮 */}
-                    <div className="provider-actions" onClick={(e) => e.stopPropagation()}>
-                      {provider.isActive ? (
-                        <span className="status-indicator active">●</span>
-                      ) : (
-                        <button
-                          className="action-btn set-active-btn"
-                          onClick={() => handleSetActive(provider)}
-                          title="设为活跃"
-                        >
-                          ⚡
-                        </button>
-                      )}
-                      <button
-                        className="action-btn test-btn"
-                        onClick={() => handleTestConnection(provider)}
-                        disabled={testingProviderId === provider.id}
-                        title="测试连接"
-                      >
-                        {testingProviderId === provider.id ? '⏳' : '🔗'}
-                      </button>
-                      <button
-                        className="action-btn delete-btn"
-                        onClick={() => handleDelete(provider)}
-                        title="删除"
-                      >
-                        🗑️
-                      </button>
-                    </div>
+                  {/* 提供商信息 */}
+                  <div className="provider-info">
+                    <div className="provider-name">{provider.name}</div>
+                  </div>
 
-                    {/* 测试结果 */}
-                    {currentTestResult && (
-                      <div className={`test-result ${currentTestResult.result.success ? 'success' : 'error'}`}>
-                        {formatTestResultMessage(currentTestResult.result)}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
+                  {/* 活跃状态开关 */}
+                  <div
+                    className={`provider-toggle ${provider.isActive ? 'active' : ''}`}
+                    onClick={(e) => handleToggleActive(provider, e)}
+                    title={provider.isActive ? '已启用' : '已禁用'}
+                  />
+                </li>
+              ))}
             </ul>
           )}
         </div>
@@ -375,20 +381,34 @@ const SettingsContent: React.FC = () => {
         <div className="form-panel">
           {viewMode === 'list' && !selectedProvider ? (
             <div className="empty-selection">
-              <p>请选择左侧提供商进行编辑，或新建提供商</p>
+              <p>选择左侧提供商进行编辑，或添加新提供商</p>
             </div>
           ) : (
             <div className="form-container">
               <div className="form-header">
-                <h2>{viewMode === 'create' ? '新建提供商' : '编辑提供商'}</h2>
+                <h2>
+                  {selectedProvider && (
+                    <div className="provider-icon" style={{ width: '28px', height: '28px', fontSize: '14px' }}>
+                      {getProviderIcon(selectedProvider.providerType)}
+                    </div>
+                  )}
+                  {viewMode === 'create' ? '添加提供商' : selectedProvider?.name}
+                </h2>
                 {selectedProvider && (
                   <div className="form-actions-inline">
                     <button
-                      className="btn btn-secondary"
+                      className="btn-test"
                       onClick={() => handleTestConnection(selectedProvider)}
                       disabled={testingProviderId === selectedProvider.id}
                     >
-                      {testingProviderId === selectedProvider.id ? '测试中...' : '🔗 测试连接'}
+                      {testingProviderId === selectedProvider.id ? '测试中...' : '检测'}
+                    </button>
+                    <button
+                      className="btn-copy"
+                      onClick={() => handleDelete(selectedProvider)}
+                      title="删除"
+                    >
+                      删除
                     </button>
                   </div>
                 )}

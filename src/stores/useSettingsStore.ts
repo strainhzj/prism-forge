@@ -119,6 +119,191 @@ export interface SaveProviderRequest {
 }
 
 /**
+ * 提供商显示信息（用于 UI 展示，不影响后端序列化）
+ */
+export interface ProviderDisplayInfo {
+  /** 显示名称 */
+  label: string;
+  /** 描述 */
+  description: string;
+  /** 默认 Base URL */
+  defaultBaseUrl: string;
+  /** 默认模型 */
+  defaultModel: string;
+  /** 是否需要 API Key */
+  requiresApiKey: boolean;
+  /** 官网链接 */
+  websiteUrl?: string;
+  /** API Key 获取链接 */
+  apiKeyUrl?: string;
+  /** 文档链接 */
+  docsUrl?: string;
+}
+
+/**
+ * 提供商显示信息映射
+ * 参考 Cherry Studio 的提供商配置
+ */
+export const PROVIDER_DISPLAY_INFO: Record<ApiProviderType, ProviderDisplayInfo> = {
+  // ========== 国际主流提供商 ==========
+
+  [ApiProviderType.OPENAI]: {
+    label: 'OpenAI',
+    description: 'OpenAI 官方 API，支持 GPT-4、GPT-3.5 等模型',
+    defaultBaseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-4o-mini',
+    requiresApiKey: true,
+    websiteUrl: 'https://openai.com/',
+    apiKeyUrl: 'https://platform.openai.com/api-keys',
+    docsUrl: 'https://platform.openai.com/docs',
+  },
+
+  [ApiProviderType.ANTHROPIC]: {
+    label: 'Anthropic',
+    description: 'Anthropic Claude 系列，包括 Claude 3.5 Sonnet',
+    defaultBaseUrl: 'https://api.anthropic.com',
+    defaultModel: 'claude-3-5-sonnet-20241022',
+    requiresApiKey: true,
+    websiteUrl: 'https://anthropic.com/',
+    apiKeyUrl: 'https://console.anthropic.com/settings/keys',
+    docsUrl: 'https://docs.anthropic.com/en/docs',
+  },
+
+  [ApiProviderType.GOOGLE]: {
+    label: 'Google Gemini',
+    description: 'Google Gemini (ML Dev API)，使用 API Key 认证',
+    defaultBaseUrl: 'https://generativelanguage.googleapis.com',
+    defaultModel: 'gemini-2.5-flash-lite',
+    requiresApiKey: true,
+    websiteUrl: 'https://gemini.google.com/',
+    apiKeyUrl: 'https://aistudio.google.com/app/apikey',
+    docsUrl: 'https://ai.google.dev/gemini-api/docs',
+  },
+
+  [ApiProviderType.GOOGLE_VERTEX]: {
+    label: 'Google Vertex AI',
+    description: 'Google Vertex AI Public Preview (API Key URL 参数)',
+    defaultBaseUrl: 'https://aiplatform.googleapis.com',
+    defaultModel: 'gemini-2.5-flash-lite',
+    requiresApiKey: true,
+    websiteUrl: 'https://cloud.google.com/vertex-ai',
+    apiKeyUrl: 'https://console.cloud.google.com/apis/credentials',
+    docsUrl: 'https://cloud.google.com/vertex-ai/generative-ai/docs',
+  },
+
+  [ApiProviderType.AZURE_OPENAI]: {
+    label: 'Azure OpenAI',
+    description: 'Microsoft Azure OpenAI 服务',
+    defaultBaseUrl: 'https://{your-resource-name}.openai.azure.com/openai/deployments/{deployment}?api-version=2024-02-01',
+    defaultModel: 'gpt-4o-mini',
+    requiresApiKey: true,
+    websiteUrl: 'https://azure.microsoft.com/en-us/products/ai-services/openai-service',
+    apiKeyUrl: 'https://portal.azure.com/#view/Microsoft_Azure_ProjectOxford/CognitiveServicesHub/~/OpenAI',
+    docsUrl: 'https://learn.microsoft.com/en-us/azure/ai-services/openai/',
+  },
+
+  [ApiProviderType.OLLAMA]: {
+    label: 'Ollama',
+    description: '本地 Ollama 服务，无需 API Key',
+    defaultBaseUrl: 'http://127.0.0.1:11434',
+    defaultModel: 'llama3',
+    requiresApiKey: false,
+    websiteUrl: 'https://ollama.com/',
+    docsUrl: 'https://github.com/ollama/ollama/tree/main/docs',
+  },
+
+  [ApiProviderType.XAI]: {
+    label: 'X AI (Grok)',
+    description: 'xAI Grok 系列，支持 Grok-2 等模型',
+    defaultBaseUrl: 'https://api.x.ai/v1',
+    defaultModel: 'grok-4-1-fast-reasoning',
+    requiresApiKey: true,
+    websiteUrl: 'https://x.ai/',
+    docsUrl: 'https://docs.x.ai/',
+  },
+
+  // ========== OpenAI 兼容类型（包括所有第三方服务）==========
+
+  [ApiProviderType.OPENAI_COMPATIBLE]: {
+    label: 'OpenAI Compatible / 第三方服务',
+    description: '兼容 OpenAI API 格式的第三方服务（DeepSeek、硅基流动、智谱等）',
+    defaultBaseUrl: 'https://api.example.com/v1',
+    defaultModel: 'gpt-4o-mini',
+    requiresApiKey: true,
+  },
+};
+
+/**
+ * 常用第三方服务商预设配置
+ * 用户可以在选择 "OpenAI Compatible" 后快速选择这些预设
+ */
+export const THIRD_PARTY_PROVIDERS = [
+  {
+    id: 'deepseek',
+    name: 'DeepSeek (深度求索)',
+    baseUrl: 'https://api.deepseek.com',
+    defaultModel: 'deepseek-chat',
+    description: 'DeepSeek-V3、DeepSeek-Coder',
+    websiteUrl: 'https://deepseek.com/',
+    apiKeyUrl: 'https://platform.deepseek.com/api_keys',
+  },
+  {
+    id: 'silicon',
+    name: 'SiliconFlow (硅基流动)',
+    baseUrl: 'https://api.siliconflow.cn',
+    defaultModel: 'Qwen/Qwen2.5-72B-Instruct',
+    description: '提供 Qwen、DeepSeek、GLM 等',
+    websiteUrl: 'https://www.siliconflow.cn',
+    apiKeyUrl: 'https://cloud.siliconflow.cn',
+  },
+  {
+    id: 'zhipu',
+    name: 'Zhipu AI (智谱)',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    defaultModel: 'glm-4-flash',
+    description: 'GLM-4、GLM-3 系列',
+    websiteUrl: 'https://open.bigmodel.cn/',
+    apiKeyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
+  },
+  {
+    id: 'moonshot',
+    name: 'Moonshot AI (月之暗面)',
+    baseUrl: 'https://api.moonshot.cn',
+    defaultModel: 'moonshot-v1-8k',
+    description: 'Kimi 系列模型',
+    websiteUrl: 'https://www.moonshot.cn/',
+    apiKeyUrl: 'https://platform.moonshot.cn/console/api-keys',
+  },
+  {
+    id: 'groq',
+    name: 'Groq',
+    baseUrl: 'https://api.groq.com/openai',
+    defaultModel: 'llama-3.3-70b-versatile',
+    description: '超快推理引擎，Llama、Mixtral',
+    websiteUrl: 'https://groq.com/',
+    apiKeyUrl: 'https://console.groq.com/keys',
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    defaultModel: 'anthropic/claude-3.5-sonnet',
+    description: '统一 API 访问多种模型',
+    websiteUrl: 'https://openrouter.ai/',
+    apiKeyUrl: 'https://openrouter.ai/settings/keys',
+  },
+  {
+    id: 'together',
+    name: 'Together',
+    baseUrl: 'https://api.together.xyz',
+    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+    description: '开源模型托管服务',
+    websiteUrl: 'https://www.together.ai/',
+    apiKeyUrl: 'https://api.together.ai/settings/api-keys',
+  },
+];
+
+/**
  * 每种提供商类型的默认模型
  */
 export const DEFAULT_MODELS: Record<ApiProviderType, string> = {
@@ -131,6 +316,27 @@ export const DEFAULT_MODELS: Record<ApiProviderType, string> = {
   [ApiProviderType.AZURE_OPENAI]: 'gpt-4o-mini',
   [ApiProviderType.OPENAI_COMPATIBLE]: 'gpt-4o-mini',
 };
+
+/**
+ * 获取提供商的默认 Base URL
+ */
+export function getDefaultBaseUrl(providerType: ApiProviderType): string {
+  return PROVIDER_DISPLAY_INFO[providerType]?.defaultBaseUrl || '';
+}
+
+/**
+ * 获取提供商的默认模型
+ */
+export function getDefaultModel(providerType: ApiProviderType): string {
+  return PROVIDER_DISPLAY_INFO[providerType]?.defaultModel || '';
+}
+
+/**
+ * 获取提供商显示信息
+ */
+export function getProviderDisplayInfo(providerType: ApiProviderType): ProviderDisplayInfo {
+  return PROVIDER_DISPLAY_INFO[providerType];
+}
 
 /**
  * 连接错误类型

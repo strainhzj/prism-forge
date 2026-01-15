@@ -6,12 +6,14 @@
  */
 
 import { useForm } from 'react-hook-form';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ApiProviderType,
   type SaveProviderRequest,
   type ProviderResponse,
   DEFAULT_MODELS,
+  PROVIDER_DISPLAY_INFO,
+  THIRD_PARTY_PROVIDERS,
 } from '../../stores/useSettingsStore';
 
 // ==================== 表单数据类型 ====================
@@ -60,27 +62,21 @@ interface ProviderFormProps {
 
 // ==================== 常量 ====================
 
-const PROVIDER_TYPE_OPTIONS = [
-  { value: ApiProviderType.OPENAI, label: 'OpenAI', description: 'OpenAI 官方 API' },
-  { value: ApiProviderType.ANTHROPIC, label: 'Anthropic', description: 'Claude (Anthropic)' },
-  { value: ApiProviderType.OLLAMA, label: 'Ollama', description: '本地 Ollama 服务' },
-  { value: ApiProviderType.XAI, label: 'X AI', description: 'X AI (Grok)' },
-  { value: ApiProviderType.GOOGLE, label: 'Google', description: 'Google Gemini ML Dev API (API Key 认证)' },
-  { value: ApiProviderType.GOOGLE_VERTEX, label: 'Google Vertex', description: 'Google Vertex AI Public Preview (API Key URL 参数)' },
-  { value: ApiProviderType.AZURE_OPENAI, label: 'Azure OpenAI', description: 'Microsoft Azure OpenAI 服务' },
-  { value: ApiProviderType.OPENAI_COMPATIBLE, label: 'OpenAI Compatible', description: '第三方兼容接口（OneAPI、中转服务等）' },
-];
+// 提供商类型选项（从 PROVIDER_DISPLAY_INFO 生成）
+const PROVIDER_TYPE_OPTIONS = Object.entries(PROVIDER_DISPLAY_INFO).map(([key, info]) => ({
+  value: key as ApiProviderType,
+  label: info.label,
+  description: info.description,
+}));
 
-const DEFAULT_BASE_URLS: Record<ApiProviderType, string> = {
-  [ApiProviderType.OPENAI]: 'https://api.openai.com/v1',
-  [ApiProviderType.ANTHROPIC]: 'https://api.anthropic.com',
-  [ApiProviderType.OLLAMA]: 'http://127.0.0.1:11434',
-  [ApiProviderType.XAI]: 'https://api.x.ai/v1',
-  [ApiProviderType.GOOGLE]: 'https://generativelanguage.googleapis.com',
-  [ApiProviderType.GOOGLE_VERTEX]: 'https://aiplatform.googleapis.com',
-  [ApiProviderType.AZURE_OPENAI]: 'https://{your-resource-name}.openai.azure.com/openai/deployments/{deployment}?api-version=2024-02-01',
-  [ApiProviderType.OPENAI_COMPATIBLE]: 'https://api.example.com/v1',
-};
+// 默认 Base URL（从 PROVIDER_DISPLAY_INFO 生成）
+const DEFAULT_BASE_URLS: Record<ApiProviderType, string> = Object.entries(PROVIDER_DISPLAY_INFO).reduce(
+  (acc, [key, info]) => ({
+    ...acc,
+    [key]: info.defaultBaseUrl,
+  }),
+  {} as Record<ApiProviderType, string>
+);
 
 // ==================== 组件 ====================
 
@@ -91,6 +87,8 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
   submitText = '保存',
   loading = false,
 }) => {
+  const [showThirdPartyPresets, setShowThirdPartyPresets] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -121,6 +119,8 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
       // 只在表单未修改时自动更新 baseUrl
       setValue('baseUrl', DEFAULT_BASE_URLS[providerType]);
     }
+    // 如果选择的是 OpenAI Compatible，显示第三方预设
+    setShowThirdPartyPresets(providerType === ApiProviderType.OPENAI_COMPATIBLE);
   }, [providerType, setValue, isDirty]);
 
   // 编辑模式：填充表单数据
@@ -142,7 +142,16 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
   }, [provider, reset]);
 
   // 判断当前提供商类型是否需要 API Key
-  const requiresApiKey = providerType !== ApiProviderType.OLLAMA;
+  const displayInfo = PROVIDER_DISPLAY_INFO[providerType];
+  const requiresApiKey = displayInfo?.requiresApiKey ?? true;
+
+  // 选择第三方服务商预设
+  const handleSelectThirdPartyPreset = (preset: typeof THIRD_PARTY_PROVIDERS[0]) => {
+    setValue('name', preset.name);
+    setValue('baseUrl', preset.baseUrl);
+    setValue('model', preset.defaultModel);
+    setShowThirdPartyPresets(false);
+  };
 
   // 提交处理
   const handleFormSubmit = async (data: ProviderFormData) => {
@@ -175,9 +184,42 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
           <span className="error-text">{errors.providerType.message}</span>
         )}
         <small className="help-text">
-          {PROVIDER_TYPE_OPTIONS.find((o) => o.value === providerType)?.description}
+          {displayInfo?.description}
+          {displayInfo?.websiteUrl && (
+            <>
+              {' '}| <a href={displayInfo.websiteUrl} target="_blank" rel="noopener noreferrer">官网</a>
+            </>
+          )}
+          {displayInfo?.docsUrl && (
+            <>
+              {' '}| <a href={displayInfo.docsUrl} target="_blank" rel="noopener noreferrer">文档</a>
+            </>
+          )}
         </small>
       </div>
+
+      {/* 第三方服务商快速选择（仅 OpenAI Compatible 显示） */}
+      {showThirdPartyPresets && !provider && (
+        <div className="form-group third-party-presets">
+          <label>快速选择常用服务商</label>
+          <div className="presets-grid">
+            {THIRD_PARTY_PROVIDERS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className="preset-card"
+                onClick={() => handleSelectThirdPartyPreset(preset)}
+              >
+                <div className="preset-name">{preset.name}</div>
+                <div className="preset-description">{preset.description}</div>
+              </button>
+            ))}
+          </div>
+          <small className="help-text">
+            点击上方卡片快速填充配置，或手动填写下方表单
+          </small>
+        </div>
+      )}
 
       {/* 提供商名称 */}
       <div className="form-group">
@@ -214,7 +256,15 @@ export const ProviderForm: React.FC<ProviderFormProps> = ({
         />
         {errors.baseUrl && <span className="error-text">{errors.baseUrl.message}</span>}
         <small className="help-text">
-          默认值: {DEFAULT_BASE_URLS[providerType]}
+          默认值: {displayInfo?.defaultBaseUrl}
+          {displayInfo?.apiKeyUrl && providerType === ApiProviderType.OPENAI && (
+            <>
+              <br />
+              <a href={displayInfo.apiKeyUrl} target="_blank" rel="noopener noreferrer">
+                获取 API Key →
+              </a>
+            </>
+          )}
         </small>
       </div>
 
