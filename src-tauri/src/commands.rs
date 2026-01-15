@@ -2582,6 +2582,17 @@ pub async fn cmd_get_messages_by_level(
     #[cfg(debug_assertions)]
     eprintln!("[DEBUG] 解析到 {} 个 JSONL 条目", entries.len());
 
+    #[cfg(debug_assertions)]
+    if !entries.is_empty() {
+        eprintln!("[DEBUG] 第一条 JSONL 条目结构:");
+        if let Some(first_entry) = entries.first() {
+            eprintln!("  type: {:?}", first_entry.message_type());
+            eprintln!("  role: {:?}", first_entry.role());
+            eprintln!("  uuid: {:?}", first_entry.data.get("uuid").and_then(|v| v.as_str()));
+            eprintln!("  data keys: {:?}", first_entry.data.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+        }
+    }
+
     // 转换为 Message 对象
     let messages: Vec<crate::database::models::Message> = entries
         .into_iter()
