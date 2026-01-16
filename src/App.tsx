@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -21,6 +21,16 @@ import {
 } from "./stores/useProjectStore";
 import { cn } from "@/lib/utils";
 
+// ==================== 类型定义 ====================
+
+type AlertType = 'success' | 'error' | 'info';
+
+interface AlertState {
+  show: boolean;
+  type: AlertType;
+  message: string;
+}
+
 // ==================== 调试模式 ====================
 const DEBUG = import.meta.env.DEV;
 
@@ -37,8 +47,26 @@ function App() {
   const navigate = useNavigate();
   const currentProject = useCurrentProject();
   const currentSessionFile = useCurrentSessionFile();
-  const { fetchProjects, setCurrentSessionFile } = useProjectActions();
+  const { fetchProjects, setCurrentSessionFile, getLatestSessionFile } = useProjectActions();
   const projectLoading = useProjectLoading();
+
+  // 全局 Alert 状态
+  const [globalAlert, setGlobalAlert] = useState<AlertState>({
+    show: false,
+    type: 'info',
+    message: '',
+  });
+
+  // 显示全局 Alert
+  const showGlobalAlert = useCallback((type: AlertType, message: string) => {
+    setGlobalAlert({ show: true, type, message });
+
+    // 自动关闭
+    const duration = type === 'success' ? 2000 : 3000;
+    setTimeout(() => {
+      setGlobalAlert(prev => ({ ...prev, show: false }));
+    }, duration);
+  }, []);
 
   // 本地状态
   const [goal, setGoal] = useState("");
@@ -99,9 +127,13 @@ function App() {
     if (!currentProject) return;
 
     try {
-      const path = await invoke<string>("get_latest_session_path");
-      debugLog('autoDetectFile', 'latest file:', path);
-      setCurrentSessionFile(path);
+      const path = await getLatestSessionFile(currentProject.path);
+      if (path) {
+        debugLog('autoDetectFile', 'latest file:', path);
+        setCurrentSessionFile(path);
+      } else {
+        debugLog('autoDetectFile', 'no files found');
+      }
     } catch (e) {
       const errorMsg = `自动检测文件失败: ${e}`;
       debugLog('autoDetectFile', 'error', errorMsg);
@@ -133,12 +165,37 @@ function App() {
 
   // 项目切换确认回调
   const handleProjectChange = useCallback(() => {
-    debugLog('handleProjectChange', 'project changed, reloading file');
-    autoDetectFile();
-  }, [currentProject]);
+    debugLog('handleProjectChange', 'project changed');
+    // 移除自动检测，避免覆盖用户选择的会话文件
+  }, []);
 
   return (
-    <div className="flex h-screen" style={{ fontFamily: 'sans-serif', backgroundColor: 'var(--color-bg-primary)' }}>
+    <div className="flex h-screen relative" style={{ fontFamily: 'sans-serif', backgroundColor: 'var(--color-bg-primary)' }}>
+      {/* 全局 Alert 弹窗 */}
+      {globalAlert.show && (
+        <div
+          className={cn(
+            "fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-auto px-4",
+            "animate-in fade-in slide-in-from-top-4 duration-300"
+          )}
+        >
+          <div
+            className={cn(
+              "rounded-lg shadow-lg border px-4 py-3 flex items-center gap-3",
+              globalAlert.type === 'success'
+                ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800"
+                : globalAlert.type === 'error'
+                ? "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800"
+                : "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+            )}
+          >
+            {globalAlert.type === 'success' && <CheckCircle className="h-5 w-5 flex-shrink-0" />}
+            {globalAlert.type === 'error' && <AlertCircle className="h-5 w-5 flex-shrink-0" />}
+            <span className="flex-1 text-sm font-medium">{globalAlert.message}</span>
+          </div>
+        </div>
+      )}
+
       <ResizablePanelGroup
         orientation="horizontal"
         className="h-full"
@@ -188,7 +245,7 @@ function App() {
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {/* 项目卡片区 (10%) */}
               <div className="p-6" style={{ height: '15%', backgroundColor: 'var(--color-bg-primary)' }}>
-                <ProjectCard onConfirm={handleProjectChange} />
+                <ProjectCard onConfirm={handleProjectChange} onAlert={showGlobalAlert} />
               </div>
 
               {/* 分隔线 */}
