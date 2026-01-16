@@ -11,7 +11,9 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { MultiLevelViewTabs } from '@/components/MultiLevelViewSelector';
+import { TimelineMessageList } from '@/components/session/TimelineMessageList';
 import { useViewLevelManager, useSessionContent, useExportSessionByLevel } from '@/hooks/useViewLevel';
+import type { MessageNode } from '@/types/message';
 
 // ==================== 调试模式 ====================
 const DEBUG = import.meta.env.DEV;
@@ -286,66 +288,25 @@ export function SessionContentView({
             )}
           </div>
         ) : (
-          // 消息列表视图
-          <div className="p-4 space-y-3">
+          // 消息列表视图 - 使用 TimelineMessageList 组件
+          <div className="p-4">
             {messages && messages.length > 0 ? (
-              messages.map((msg) => {
-                const msgType = msg.msg_type || 'unknown';
-                const isUser = msgType === 'user';
-                const isAssistant = msgType === 'assistant';
-                const isThinking = msgType === 'thinking';
-
-                return (
-                  <div
-                    key={msg.uuid}
-                    className={cn(
-                      'border rounded-lg p-4 transition-all'
-                    )}
-                    style={{
-                      backgroundColor: isUser ? 'rgba(245, 158, 11, 0.1)' : 'var(--color-bg-card)',
-                      borderColor: isUser ? 'rgba(245, 158, 11, 0.3)' : isAssistant ? 'rgba(37, 99, 235, 0.2)' : 'var(--color-border-light)',
-                      boxShadow: isUser ? '0 0 20px rgba(245, 158, 11, 0.2)' : 'none'
-                    }}
-                  >
-                    {/* 元数据 */}
-                    <div className="flex items-center gap-2 mb-2">
-                      <span
-                        className={cn(
-                          'text-xs font-semibold px-2 py-0.5 rounded text-white'
-                        )}
-                        style={{
-                          backgroundColor: isUser ? 'var(--color-accent-warm)' : 'var(--color-accent-blue)',
-                          boxShadow: isUser ? '0 0 10px rgba(245, 158, 11, 0.4)' : '0 0 10px rgba(37, 99, 235, 0.4)'
-                        }}
-                      >
-                        {msgType.toUpperCase()}
-                      </span>
-                      <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                        {msg.timestamp.split('T')[1]?.substring(0, 8) || msg.timestamp}
-                      </span>
-                      {isThinking && (
-                        <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: 'rgba(147, 51, 234, 0.2)', color: 'var(--color-text-secondary)' }}>
-                          💭 思考过程
-                        </span>
-                      )}
-                    </div>
-
-                    {/* 内容 */}
-                    <div className="text-sm whitespace-pre-wrap break-words" style={{ color: 'var(--color-text-primary)' }}>
-                      {msg.summary && msg.summary.length > 500
-                        ? msg.summary.substring(0, 500) + '...'
-                        : msg.summary || '无内容'}
-                    </div>
-
-                    {/* 父消息引用（仅在有 parent_uuid 时显示） */}
-                    {msg.parent_uuid && (
-                      <div className="mt-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                        父消息: {msg.parent_uuid.slice(0, 8)}...
-                      </div>
-                    )}
-                  </div>
-                );
-              })
+              <TimelineMessageList
+                messages={messages.map((msg): MessageNode => ({
+                  id: msg.uuid,
+                  parent_id: msg.parent_uuid || null,
+                  depth: 0,
+                  role: msg.msg_type || 'unknown',
+                  type: msg.msg_type || 'unknown',
+                  content: msg.summary && msg.summary.length > 500
+                    ? msg.summary.substring(0, 500) + '...'
+                    : msg.summary || '无内容',
+                  fullContent: msg.summary || undefined,
+                  timestamp: msg.timestamp,
+                  children: [],
+                  thread_id: null,
+                }))}
+              />
             ) : (
               // 空状态
               <div className="flex flex-col items-center justify-center h-full text-center p-4">

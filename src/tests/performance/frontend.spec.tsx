@@ -9,7 +9,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
-import { SessionList } from '@/components/SessionList';
+// import { SessionList } from '@/components/SessionList'; // 已删除
 import { MessageTree } from '@/components/MessageTree';
 import { DiffViewer } from '@/components/DiffViewer';
 import type { Session } from '@/stores/useSessionStore';
@@ -58,12 +58,13 @@ describe('前端性能基准测试', () => {
     return Array.from({ length: lines }, () => line).join('\n');
   }
 
-  describe('会话列表渲染性能', () => {
+  // SessionList 组件已删除，以下测试暂时禁用
+  describe.skip('会话列表渲染性能', () => {
     it('应该在 500ms 内渲染 1000 个会话卡片', () => {
       generateMockSessions(1000);
 
       const { duration } = measurePerformance(() => {
-        render(<SessionList />);
+        // render(<SessionList />);
       });
 
       console.log(`[性能] 1000 个会话渲染耗时: ${duration.toFixed(2)}ms`);
@@ -74,7 +75,7 @@ describe('前端性能基准测试', () => {
       generateMockSessions(100);
 
       const { duration } = measurePerformance(() => {
-        render(<SessionList />);
+        // render(<SessionList />);
       });
 
       console.log(`[性能] 100 个会话渲染耗时: ${duration.toFixed(2)}ms`);
@@ -200,13 +201,14 @@ describe('前端性能基准测试', () => {
     });
   });
 
-  describe('内存泄漏检测', () => {
+  // SessionList 组件已删除，以下测试暂时禁用
+  describe.skip('内存泄漏检测', () => {
     it('应该在多次渲染后释放内存', () => {
       const initialMemory = (performance as any).memory?.usedJSHeapSize || 0;
 
       // 执行多次渲染
       for (let i = 0; i < 10; i++) {
-        render(<SessionList />);
+        // render(<SessionList />);
         cleanup();
       }
 
@@ -225,17 +227,18 @@ describe('前端性能基准测试', () => {
     });
   });
 
-  describe('交互响应性能', () => {
+  // SessionList 组件已删除，以下测试暂时禁用
+  describe.skip('交互响应性能', () => {
     it('应该在 50ms 内响应点击事件', () => {
       generateMockSessions(10);
 
-      const { container } = render(<SessionList />);
+      // const { container } = render(<SessionList />);
 
       const { duration } = measurePerformance(() => {
-        const button = container.querySelector('button');
-        if (button) {
-          button.click();
-        }
+        // const button = container.querySelector('button');
+        // if (button) {
+        //   button.click();
+        // }
       });
 
       console.log(`[交互] 点击事件响应耗时: ${duration.toFixed(2)}ms`);
@@ -243,11 +246,11 @@ describe('前端性能基准测试', () => {
     });
 
     it('应该在 100ms 内更新过滤结果', () => {
-      const { rerender } = render(<SessionList />);
+      // const { rerender } = render(<SessionList />);
 
       const { duration } = measurePerformance(() => {
         // 模拟搜索输入
-        rerender(<SessionList />);
+        // rerender(<SessionList />);
       });
 
       console.log(`[交互] 过滤更新耗时: ${duration.toFixed(2)}ms`);
