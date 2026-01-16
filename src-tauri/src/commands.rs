@@ -3017,4 +3017,92 @@ pub async fn cmd_export_session_by_level(
     }
 }
 
+// ==================== 日志过滤配置管理命令 ====================
+
+/// 获取过滤配置
+#[tauri::command]
+pub fn get_filter_config() -> Result<crate::filter_config::FilterConfig, CommandError> {
+    use crate::filter_config::FilterConfigManager;
+
+    let manager = FilterConfigManager::with_default_path()
+        .map_err(|e| CommandError {
+            message: format!("加载过滤配置失败: {}", e),
+        })?;
+
+    Ok(manager.get_config().clone())
+}
+
+/// 更新过滤配置
+#[tauri::command]
+pub fn update_filter_config(config: crate::filter_config::FilterConfig) -> Result<(), CommandError> {
+    use crate::filter_config::FilterConfigManager;
+
+    let mut manager = FilterConfigManager::with_default_path()
+        .map_err(|e| CommandError {
+            message: format!("加载过滤配置失败: {}", e),
+        })?;
+
+    manager.update_config(config)
+        .map_err(|e| CommandError {
+            message: format!("更新过滤配置失败: {}", e),
+        })?;
+
+    Ok(())
+}
+
+/// 重新加载过滤配置
+#[tauri::command]
+pub fn reload_filter_config() -> Result<(), CommandError> {
+    use crate::filter_config::FilterConfigManager;
+
+    let mut manager = FilterConfigManager::with_default_path()
+        .map_err(|e| CommandError {
+            message: format!("加载过滤配置失败: {}", e),
+        })?;
+
+    manager.reload()
+        .map_err(|e| CommandError {
+            message: format!("重新加载过滤配置失败: {}", e),
+        })?;
+
+    Ok(())
+}
+
+/// 获取过滤配置文件路径
+#[tauri::command]
+pub fn get_filter_config_path() -> Result<String, CommandError> {
+    use crate::filter_config::FilterConfigManager;
+
+    let manager = FilterConfigManager::with_default_path()
+        .map_err(|e| CommandError {
+            message: format!("获取配置路径失败: {}", e),
+        })?;
+
+    Ok(manager.config_path().to_string_lossy().to_string())
+}
+
+/// 在系统默认文件管理器中打开配置文件所在目录
+#[tauri::command]
+pub fn open_filter_config_folder() -> Result<(), CommandError> {
+    use crate::filter_config::FilterConfigManager;
+
+    let manager = FilterConfigManager::with_default_path()
+        .map_err(|e| CommandError {
+            message: format!("获取配置路径失败: {}", e),
+        })?;
+
+    let config_dir = manager.config_path().parent()
+        .ok_or_else(|| CommandError {
+            message: "无法获取配置目录".to_string(),
+        })?;
+
+    // 使用系统默认程序打开目录
+    open::that(config_dir)
+        .map_err(|e| CommandError {
+            message: format!("打开配置目录失败: {}", e),
+        })?;
+
+    Ok(())
+}
+
 

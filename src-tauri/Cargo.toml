@@ -31,6 +31,7 @@ tokio = { version = "1.0", features = ["fs", "sync"] }
 log = "0.4"
 tiktoken-rs = "0.6"
 regex = "1.10"
+open = "5.0"
 
 # fastembed 在 Windows 上有编译问题，暂时禁用
 # TODO: 等待上游修复后重新启用

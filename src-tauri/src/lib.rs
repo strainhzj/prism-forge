@@ -17,6 +17,7 @@ pub mod logging;
 pub mod path_resolver;
 pub mod session_reader;
 pub mod session_type_detector;
+mod filter_config;
 
 // 导入 Tauri 插件
 
@@ -30,12 +31,18 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
-/// 获取最新的会话文件路径
+/// 获取指定项目的最新会话文件路径
+///
+/// # 参数
+/// * `project_path` - 项目路径（监控目录路径）
+///
+/// # 返回
+/// 返回该项目 sessions 目录下修改时间最新的 .jsonl 文件路径
 #[tauri::command]
-fn get_latest_session_path() -> Result<String, String> {
-    optimizer::find_latest_session_file()
+fn get_latest_session_path(project_path: String) -> Result<String, String> {
+    optimizer::find_latest_session_file_in_project(&project_path)
         .map(|p| p.to_string_lossy().to_string())
-        .ok_or_else(|| "未找到会话文件".to_string())
+        .ok_or_else(|| "当前项目没有会话文件".to_string())
 }
 
 /// 解析会话文件（用于前端预览展示）
@@ -137,6 +144,12 @@ pub fn run() {
             cmd_save_view_level_preference,
             cmd_get_view_level_preference,
             cmd_export_session_by_level,
+            // 日志过滤配置管理命令
+            get_filter_config,
+            update_filter_config,
+            reload_filter_config,
+            get_filter_config_path,
+            open_filter_config_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

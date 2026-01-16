@@ -23,6 +23,7 @@ import {
 import { ProviderSettings } from '@/components/settings/ProviderSettings';
 import { ProviderForm } from '@/components/settings/ProviderForm';
 import { VectorSettings } from '@/components/settings/VectorSettings';
+import { FilterConfigSettings } from '@/components/FilterConfigSettings';
 import {
   useProviderActions,
   useProviders,
@@ -33,7 +34,7 @@ import {
 } from '@/stores/useSettingsStore';
 
 type ViewMode = 'list' | 'create' | 'edit';
-type SettingsTab = 'providers' | 'vector';
+type SettingsTab = 'providers' | 'vector' | 'filter';
 
 export interface SettingsPageProps {
   /** 自定义类名 */
@@ -154,9 +155,10 @@ export function SettingsPage({ className }: SettingsPageProps) {
 
           {/* 标签页 */}
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as SettingsTab)}>
-            <TabsList className="grid w-full grid-cols-2" style={{ backgroundColor: 'var(--color-bg-card)' }}>
+            <TabsList className="grid w-full grid-cols-3" style={{ backgroundColor: 'var(--color-bg-card)' }}>
               <TabsTrigger value="providers">{t('tabs.providers')}</TabsTrigger>
               <TabsTrigger value="vector">{t('tabs.vector')}</TabsTrigger>
+              <TabsTrigger value="filter">日志过滤</TabsTrigger>
             </TabsList>
 
             {/* API 提供商标签页 */}
@@ -187,6 +189,11 @@ export function SettingsPage({ className }: SettingsPageProps) {
             {/* 向量搜索标签页 */}
             <TabsContent value="vector" className="space-y-6 mt-6">
               <VectorSettings />
+            </TabsContent>
+
+            {/* 日志过滤标签页 */}
+            <TabsContent value="filter" className="space-y-6 mt-6">
+              <FilterConfigSettings />
             </TabsContent>
           </Tabs>
         </div>

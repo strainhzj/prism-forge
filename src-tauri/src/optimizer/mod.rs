@@ -10,10 +10,12 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::time::SystemTime;
+use std::sync::{Arc, Mutex};
 
 use crate::llm::LLMClientManager;
 use crate::llm::interface::{Message, MessageRole, ModelParams};
 use crate::database::ApiProviderType;
+use crate::filter_config::FilterConfigManager;
 
 // ==================== 数据结构 ====================
 
@@ -210,10 +212,19 @@ impl PromptOptimizer {
 
     /// 解析会话文件（公共方法，可供 Tauri 命令调用）
     pub fn parse_session_file(file_path: &str) -> Result<Vec<ParsedEvent>> {
+        // 加载过滤配置
+        let filter_manager = FilterConfigManager::with_default_path()
+            .context("加载过滤配置失败")?;
+
+        #[cfg(debug_assertions)]
+        eprintln!("[parse_session_file] 过滤配置已加载，规则数量: {}",
+                  filter_manager.get_config().rules.len());
+
         let file = File::open(file_path)
             .context(format!("无法打开会话文件: {}", file_path))?;
         let reader = BufReader::new(file);
         let mut events = Vec::new();
+        let mut filtered_count = 0;
 
         for line in reader.lines() {
             let line_content = line.context("读取行失败")?;
@@ -254,6 +265,12 @@ impl PromptOptimizer {
                 }
 
                 if !final_text.trim().is_empty() {
+                    // 检查是否需要过滤
+                    if filter_manager.should_filter(&final_text) {
+                        filtered_count += 1;
+                        continue;
+                    }
+
                     events.push(ParsedEvent {
                         time: timestamp.clone(),
                         role,
@@ -307,6 +324,12 @@ impl PromptOptimizer {
                 }
 
                 if !res_str.is_empty() {
+                    // 检查是否需要过滤（同时检查截断和完整内容）
+                    if filter_manager.should_filter(&res_str) || filter_manager.should_filter(&full_res_str) {
+                        filtered_count += 1;
+                        continue;
+                    }
+
                     events.push(ParsedEvent {
                         time: timestamp,
                         role: "system".to_string(),
@@ -320,6 +343,12 @@ impl PromptOptimizer {
 
         // 按时间排序
         events.sort_by(|a, b| a.time.cmp(&b.time));
+
+        // 输出过滤统计
+        #[cfg(debug_assertions)]
+        if filtered_count > 0 {
+            eprintln!("[parse_session_file] 已过滤 {} 条事件", filtered_count);
+        }
 
         Ok(events)
     }
@@ -382,26 +411,46 @@ impl PromptOptimizer {
 
 // ==================== 辅助函数 ====================
 
-/// 查找最近的 Session 文件
-pub fn find_latest_session_file() -> Option<PathBuf> {
-    let home_dir = dirs::home_dir()?;
-    let base_pattern = home_dir.join(".claude/projects/**/*.jsonl");
-    let pattern_str = base_pattern.to_str()?;
+/// 查找指定项目下最新的 Session 文件
+///
+/// # 参数
+/// * `project_path` - 项目路径（监控目录路径，如 C:\software\my-project）
+///
+/// # 返回
+/// 返回该项目对应的 Claude Desktop 会话目录中修改时间最新的 .jsonl 文件
+///
+/// # 路径解析逻辑
+/// Claude Desktop 将项目路径转换后存储在 ~/.claude/projects/ 目录下：
+/// - C:\software\my-project → C--software-my-project
+/// - 会话文件位于: ~/.claude/projects/C--software-my-project/*.jsonl
+pub fn find_latest_session_file_in_project(project_path: &str) -> Option<PathBuf> {
+    use crate::path_resolver::list_session_files;
+    use std::path::Path;
 
-    let mut latest_file: Option<PathBuf> = None;
-    let mut latest_time = SystemTime::UNIX_EPOCH;
+    let project = Path::new(project_path);
 
-    if let Ok(paths) = glob::glob(pattern_str) {
-        for entry in paths.filter_map(Result::ok) {
-            if let Ok(metadata) = std::fs::metadata(&entry) {
-                if let Ok(modified) = metadata.modified() {
-                    if modified > latest_time {
-                        latest_time = modified;
-                        latest_file = Some(entry);
-                    }
-                }
+    #[cfg(debug_assertions)]
+    eprintln!("[find_latest_session_file_in_project] 项目路径: {:?}", project);
+
+    // 使用 path_resolver 模块解析会话目录并获取文件列表
+    // list_session_files 已经按修改时间倒序排序，第一个就是最新的
+    match list_session_files(project) {
+        Ok(mut files) => {
+            if !files.is_empty() {
+                let latest = files.remove(0); // 取第一个（最新的）
+                #[cfg(debug_assertions)]
+                eprintln!("[find_latest_session_file_in_project] 找到最新文件: {:?}", latest.full_path);
+                Some(latest.full_path)
+            } else {
+                #[cfg(debug_assertions)]
+                eprintln!("[find_latest_session_file_in_project] 未找到会话文件");
+                None
             }
         }
+        Err(e) => {
+            #[cfg(debug_assertions)]
+            eprintln!("[find_latest_session_file_in_project] 解析失败: {}", e);
+            None
+        }
     }
-    latest_file
 }
