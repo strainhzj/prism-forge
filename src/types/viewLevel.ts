@@ -53,13 +53,13 @@ export interface Message {
   /** 数据库 ID */
   id?: number | null;
   /** 会话 ID */
-  session_id: string;
+  sessionId: string;
   /** 消息 UUID */
   uuid: string;
   /** 父消息 UUID */
-  parent_uuid: string | null;
+  parentUuid: string | null;
   /** 消息类型（user/assistant/thinking等） */
-  msg_type: string;
+  msgType: string;
   /** 时间戳 */
   timestamp: string;
   /** 文件偏移量 */
@@ -69,9 +69,9 @@ export interface Message {
   /** 摘要/内容 */
   summary?: string | null;
   /** 父索引 */
-  parent_idx?: number | null;
+  parentIdx?: number | null;
   /** 创建时间 */
-  created_at: string;
+  createdAt: string;
 }
 
 /**

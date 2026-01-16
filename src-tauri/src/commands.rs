@@ -2584,6 +2584,15 @@ pub async fn cmd_get_messages_by_level(
 
     #[cfg(debug_assertions)]
     {
+        // 🔍 显示前 5 条原始 JSON 数据的键
+        eprintln!("[DEBUG] 前 5 条 JSONL 数据的 keys:");
+        for (i, entry) in entries.iter().take(5).enumerate() {
+            eprintln!("  [{}]: keys = {:?}", i,
+                entry.data.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+            eprintln!("       type = {:?}, role = {:?}",
+                entry.data.get("type"), entry.data.get("role"));
+        }
+
         // 统计所有 type 类型的分布
         use std::collections::HashMap;
         let mut type_counts: HashMap<String, usize> = HashMap::new();
@@ -2625,12 +2634,25 @@ pub async fn cmd_get_messages_by_level(
     let messages: Vec<crate::database::models::Message> = entries
         .into_iter()
         .filter_map(|entry| {
+            // 🔧 修复：优先使用 type 字段，如果不存在或无效则尝试使用 role 字段
             // Claude Code 会话文件的 type 字段直接是角色名称 (user/assistant/system)
             // 而不是 "message" 类型
-            let msg_type = entry.message_type()?;
+            let msg_type = entry.message_type()
+                .or_else(|| entry.role())  // Fallback: 使用 role 字段
+                .unwrap_or_else(|| {
+                    // 最后的 fallback: 检查 message.type 字段
+                    entry.data.get("message")
+                        .and_then(|v| v.as_object())
+                        .and_then(|obj| obj.get("type"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "unknown".to_string())
+                });
 
             // 只处理对话消息类型 (user, assistant, system)
             if !matches!(msg_type.as_str(), "user" | "assistant" | "system") {
+                #[cfg(debug_assertions)]
+                eprintln!("[DEBUG] 跳过非对话消息类型: msg_type={:?}", msg_type);
                 return None;
             }
 
@@ -2709,6 +2731,42 @@ pub async fn cmd_get_messages_by_level(
             eprintln!("[DEBUG] 原始消息示例:");
             for (i, msg) in messages.iter().take(3).enumerate() {
                 eprintln!("  [{}]: msg_type={}, uuid={}", i, msg.msg_type, &msg.uuid[..8]);
+            }
+        }
+
+        // 🔍 新增：序列化调试 - 检查实际输出的 JSON
+        if !filtered_messages.is_empty() {
+            eprintln!("[DEBUG] 🔍 序列化前第一条消息的 msg_type 字段值:");
+            let first_msg = &filtered_messages[0];
+            eprintln!("  msg_type (原始值) = {:?}", first_msg.msg_type);
+            eprintln!("  msg_type (字符串) = {}", first_msg.msg_type);
+
+            // 尝试序列化第一条消息
+            match serde_json::to_string_pretty(first_msg) {
+                Ok(json) => {
+                    eprintln!("[DEBUG] 序列化后的 JSON:");
+                    for line in json.lines().take(15) {
+                        eprintln!("  {}", line);
+                    }
+
+                    // 解析回来验证字段名
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&json) {
+                        eprintln!("[DEBUG] JSON 中的键名:");
+                        if let Some(obj) = value.as_object() {
+                            for (key, _) in obj.iter() {
+                                eprintln!("  - {}", key);
+                            }
+                            // 特别检查 type/msgType/msg_type 字段
+                            eprintln!("[DEBUG] 特定字段值:");
+                            eprintln!("  type 字段存在: {:?}", obj.get("type"));
+                            eprintln!("  msgType 字段存在: {:?}", obj.get("msgType"));
+                            eprintln!("  msg_type 字段存在: {:?}", obj.get("msg_type"));
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[DEBUG] 序列化失败: {}", e);
+                }
             }
         }
     }

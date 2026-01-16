@@ -5,7 +5,9 @@
  * 集成多级日志读取功能
  */
 
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { invoke } from '@tauri-apps/api/core';
 import { ChevronLeft, RefreshCw, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -89,6 +91,62 @@ export function SessionContentView({
     isQAPairsMode,
     refresh: refreshContent
   } = useSessionContent(sessionInfo.session_id, currentViewLevel, sessionInfo.file_path);
+
+  // 调试日志：检查返回的数据
+  useEffect(() => {
+    if (!messages || messages.length === 0) return;
+
+    // 统计所有 msgType 的分布
+    const typeCounts: Record<string, number> = {};
+    messages.forEach(msg => {
+      typeCounts[msg.msgType] = (typeCounts[msg.msgType] || 0) + 1;
+    });
+
+    // 显示前 5 条消息的详细信息
+    const firstFive = messages.slice(0, 5).map(msg => ({
+      uuid: msg.uuid.substring(0, 8),
+      msgType: msg.msgType,
+      summary_preview: msg.summary?.substring(0, 50) || '(empty)',
+      timestamp: msg.timestamp?.substring(11, 19) || '(empty)',
+    }));
+
+    debugLog('useSessionContent', 'messages analysis:', {
+      totalCount: messages.length,
+      typeDistribution: typeCounts,
+      firstFiveMessages: firstFive,
+      viewLevel: currentViewLevel,
+      filePath: sessionInfo.file_path,
+    });
+
+    // 检查是否有 "unknown" 或其他非标准的 msgType
+    const nonStandardTypes = Object.keys(typeCounts).filter(
+      t => !['user', 'assistant', 'system'].includes(t)
+    );
+    if (nonStandardTypes.length > 0) {
+      console.warn('[SessionContentView] 发现非标准消息类型:', nonStandardTypes);
+
+      // 🔍 临时调试：直接读取 JSONL 文件的前几行
+      invoke<string>('read_file_first_lines', {
+        path: sessionInfo.file_path,
+        count: 5
+      }).then(result => {
+        console.log('[SessionContentView] JSONL 前 5 行:');
+        const lines = result.split('\n');
+        lines.forEach((line, i) => {
+          if (line.trim()) {
+            try {
+              const parsed = JSON.parse(line);
+              console.log(`  [${i}]`, parsed);
+            } catch {
+              console.log(`  [${i}] (解析失败):`, line.substring(0, 200));
+            }
+          }
+        });
+      }).catch(() => {
+        console.log('[SessionContentView] read_file_first_lines 不可用，跳过');
+      });
+    }
+  }, [messages, currentViewLevel, sessionInfo.file_path]);
 
   // 导出功能
   const exportMutation = useExportSessionByLevel();
@@ -292,12 +350,13 @@ export function SessionContentView({
           <div className="p-4">
             {messages && messages.length > 0 ? (
               <TimelineMessageList
-                messages={messages.map((msg): MessageNode => ({
+                messages={messages.slice().reverse().map((msg): MessageNode => ({
                   id: msg.uuid,
-                  parent_id: msg.parent_uuid || null,
+                  parent_id: msg.parentUuid || null,
                   depth: 0,
-                  role: msg.msg_type || 'unknown',
-                  type: msg.msg_type || 'unknown',
+                  // 使用 msgType 字段
+                  role: msg.msgType || 'unknown',
+                  type: msg.msgType || 'unknown',
                   content: msg.summary && msg.summary.length > 500
                     ? msg.summary.substring(0, 500) + '...'
                     : msg.summary || '无内容',

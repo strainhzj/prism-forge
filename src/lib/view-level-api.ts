@@ -35,6 +35,32 @@ export async function getMessagesByLevel(
       viewLevel,
       filePath, // 添加可选的文件路径参数
     });
+
+    // 🔍 调试：检查接收到的原始数据
+    const DEBUG = import.meta.env.DEV;
+    if (DEBUG && messages && messages.length > 0) {
+      console.log('🔍 [getMessagesByLevel] 接收到消息数量:', messages.length);
+      const firstMsg = messages[0];
+
+      console.log('🔍 [getMessagesByLevel] 第一条消息的所有键名:', Object.keys(firstMsg));
+      console.log('🔍 [getMessagesByLevel] 第一条消息详情:');
+      console.log('  - msgType:', firstMsg.msgType);
+      console.log('  - uuid:', firstMsg.uuid);
+      console.log('  - sessionId:', firstMsg.sessionId);
+      console.log('  - parentUuid:', firstMsg.parentUuid);
+      console.log('  - timestamp:', firstMsg.timestamp);
+
+      // 统计所有消息的类型分布
+      const typeCounts: Record<string, number> = {};
+      messages.forEach(msg => {
+        typeCounts[msg.msgType] = (typeCounts[msg.msgType] || 0) + 1;
+      });
+      console.log('🔍 [getMessagesByLevel] 消息类型分布:', typeCounts);
+
+      // 完整输出第一条消息的 JSON（用于对比 Rust 端输出）
+      console.log('🔍 [getMessagesByLevel] 第一条消息完整 JSON:', JSON.stringify(firstMsg, null, 2));
+    }
+
     return messages;
   } catch (error) {
     console.error('获取消息失败:', error);

@@ -189,6 +189,22 @@ export function SessionFileList({
 
       debugLog('loadSessions', '加载成功', result.length, '个会话');
 
+      // 🔍 调试：检查排序状态
+      if (DEBUG && result.length > 0) {
+        console.log('🔍 [SessionFileList] 会话排序检查:');
+        console.log('  前 3 个会话的修改时间:');
+        result.slice(0, 3).forEach((s, i) => {
+          console.log(`    [${i}] ${s.displayName || s.session_id}`);
+          console.log(`        modified_time: ${s.modified_time}`);
+        });
+        console.log('  后 3 个会话的修改时间:');
+        result.slice(-3).forEach((s, i) => {
+          const idx = result.length - 3 + i;
+          console.log(`    [${idx}] ${s.displayName || s.session_id}`);
+          console.log(`        modified_time: ${s.modified_time}`);
+        });
+      }
+
       if (isLoadMore) {
         // 追加数据
         setSessions((prev) => [...prev, ...result]);

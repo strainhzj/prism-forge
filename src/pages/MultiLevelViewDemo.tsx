@@ -177,22 +177,22 @@ export function MultiLevelViewDemo() {
                       <div className="flex items-start gap-3">
                         {/* 角色图标 */}
                         <span className="text-xl shrink-0">
-                          {msg.msg_type === 'user' && '👤'}
-                          {msg.msg_type === 'assistant' && '🤖'}
-                          {msg.msg_type === 'thinking' && '💭'}
-                          {msg.msg_type !== 'user' && msg.msg_type !== 'assistant' && msg.msg_type !== 'thinking' && '📝'}
+                          {msg.msgType === 'user' && '👤'}
+                          {msg.msgType === 'assistant' && '🤖'}
+                          {msg.msgType === 'thinking' && '💭'}
+                          {msg.msgType !== 'user' && msg.msgType !== 'assistant' && msg.msgType !== 'thinking' && '📝'}
                         </span>
 
                         {/* 消息内容 */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-sm capitalize">{msg.msg_type}</span>
+                            <span className="font-medium text-sm capitalize">{msg.msgType}</span>
                             <span className="text-xs text-muted-foreground">{msg.timestamp}</span>
                           </div>
                           <p className="text-sm">{msg.summary || '无内容'}</p>
-                          {msg.parent_uuid && (
+                          {msg.parentUuid && (
                             <p className="text-xs text-muted-foreground mt-1">
-                              父消息: {msg.parent_uuid.slice(0, 8)}...
+                              父消息: {msg.parentUuid.slice(0, 8)}...
                             </p>
                           )}
                         </div>
