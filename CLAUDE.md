@@ -269,6 +269,7 @@ src-tauri/src/
 ├── main.rs              # Tauri 入口，应用生命周期
 ├── lib.rs               # 核心模块注册和 Tauri 状态管理
 ├── commands.rs          # Tauri 命令接口（前端调用入口）
+├── session_parser.rs    # 统一会话解析服务（新增）
 ├── database/            # 数据持久化层
 │   ├── models.rs        # ApiProvider 数据模型
 │   ├── migrations.rs    # SQLite 表结构和初始化
@@ -282,9 +283,22 @@ src-tauri/src/
 │       ├── anthropic.rs # Anthropic 适配器（手动 HTTP）
 │       ├── ollama.rs    # Ollama 适配器（本地服务）
 │       └── xai.rs       # xAI 适配器
+├── parser/              # JSONL 解析和消息树构建
+│   ├── jsonl.rs         # JSONL 文件解析器
+│   ├── view_level.rs    # 视图等级过滤和问答对提取
+│   ├── tree.rs          # 消息树构建
+│   └── extractor.rs     # 会话内容提取器
+├── filter_config.rs     # 日志过滤配置管理
 └── optimizer/           # 提示词优化业务逻辑
     └── mod.rs           # 会话分析和提示词生成
 ```
+
+**统一会话解析服务 (`session_parser.rs`)**：
+
+- `SessionParserService`：统一的会话解析入口
+- 集成 JSONL 解析、消息转换、内容过滤和视图等级过滤
+- 提供 `parse_session()` 方法，返回解析结果和统计信息
+- 支持配置化：`enable_content_filter`、`view_level`、`debug`
 
 ### React 前端结构
 
@@ -383,7 +397,44 @@ pub trait LLMService {
 3. 在 `llm/manager.rs` 的工厂方法中添加分支
 4. 前端 `useSettingsStore.ts` 同步添加枚举值
 
-### 5. 调试模式
+### 5. 统一会话解析服务
+
+`SessionParserService` 提供统一的会话文件解析接口：
+
+```rust
+use crate::session_parser::{SessionParserService, SessionParserConfig};
+use crate::parser::view_level::ViewLevel;
+
+let config = SessionParserConfig {
+    enable_content_filter: true,
+    view_level: ViewLevel::Full,
+    debug: true,
+};
+
+let parser = SessionParserService::new(config);
+let result = parser.parse_session("/path/to/session.jsonl", "session_id")?;
+
+// 访问解析结果
+for msg in result.messages {
+    println!("{:?}: {}", msg.msg_type, msg.summary);
+}
+
+// 查看统计信息
+println!("解析统计: {:?}", result.stats);
+```
+
+**解析流程**：
+1. **文件解析**：使用 `JsonlParser` 读取 JSONL 文件
+2. **消息转换**：将 `JsonlEntry` 转换为 `Message` 对象
+3. **内容过滤**：应用 `FilterConfigManager` 规则过滤不需要的内容
+4. **视图等级过滤**：使用 `MessageFilter` 根据视图等级过滤消息
+
+**使用场景**：
+- `cmd_get_messages_by_level`：获取指定视图等级的消息列表
+- `cmd_get_qa_pairs_by_level`：提取问答对（使用 QAPairs 视图等级）
+- 其他需要解析会话文件的场景
+
+### 6. 调试模式
 
 前端和后端都支持调试模式开关：
 

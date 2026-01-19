@@ -18,6 +18,7 @@ pub mod path_resolver;
 pub mod session_reader;
 pub mod session_type_detector;
 mod filter_config;
+pub mod session_parser;
 
 // 导入 Tauri 插件
 

@@ -2623,6 +2623,7 @@ pub async fn cmd_get_messages_by_level(
     file_path: Option<String>,
 ) -> Result<Vec<crate::database::models::Message>, String> {
     use crate::database::repository::SessionRepository;
+    use crate::session_parser::{SessionParserService, SessionParserConfig};
 
     // 确定文件路径
     let final_file_path = if let Some(fp) = file_path {
@@ -2644,192 +2645,40 @@ pub async fn cmd_get_messages_by_level(
         return Err(format!("会话文件不存在: {}", final_file_path));
     }
 
-    // 解析 JSONL 文件
-    let mut parser = JsonlParser::new(path_buf.clone())
-        .map_err(|e| format!("创建 JSONL 解析器失败: {}", e))?;
+    // 创建解析配置
+    let config = SessionParserConfig {
+        enable_content_filter: true,  // ✅ 启用内容过滤
+        view_level: view_level.clone(),
+        debug: cfg!(debug_assertions),
+    };
 
-    let entries = parser.parse_all()
-        .map_err(|e| format!("解析 JSONL 文件失败: {}", e))?;
+    // 创建解析服务
+    let parser = SessionParserService::new(config);
 
-    #[cfg(debug_assertions)]
-    eprintln!("[DEBUG] 解析到 {} 个 JSONL 条目", entries.len());
+    // 解析会话
+    let result = parser.parse_session(&final_file_path, &session_id)
+        .map_err(|e| format!("解析会话失败: {}", e))?;
 
-    #[cfg(debug_assertions)]
-    {
-        // 🔍 显示前 5 条原始 JSON 数据的键
-        eprintln!("[DEBUG] 前 5 条 JSONL 数据的 keys:");
-        for (i, entry) in entries.iter().take(5).enumerate() {
-            eprintln!("  [{}]: keys = {:?}", i,
-                entry.data.as_object().map(|o| o.keys().collect::<Vec<_>>()));
-            eprintln!("       type = {:?}, role = {:?}",
-                entry.data.get("type"), entry.data.get("role"));
-        }
-
-        // 统计所有 type 类型的分布
-        use std::collections::HashMap;
-        let mut type_counts: HashMap<String, usize> = HashMap::new();
-
-        for entry in &entries {
-            if let Some(msg_type) = entry.message_type() {
-                *type_counts.entry(msg_type).or_insert(0) += 1;
-            }
-        }
-
-        eprintln!("[DEBUG] 类型统计:");
-        for (msg_type, count) in type_counts.iter() {
-            eprintln!("  {}: {} 条", msg_type, count);
-        }
-
-        // 找到第一条 "message" 类型的条目
-        if let Some(first_message) = entries.iter().find(|e| e.message_type().as_deref() == Some("message")) {
-            eprintln!("[DEBUG] 第一条 message 类型条目:");
-            eprintln!("  type: {:?}", first_message.message_type());
-            eprintln!("  role: {:?}", first_message.role());
-            eprintln!("  uuid: {:?}", first_message.data.get("uuid").and_then(|v| v.as_str()));
-            eprintln!("  data keys: {:?}", first_message.data.as_object().map(|o| o.keys().collect::<Vec<_>>()));
-        } else {
-            eprintln!("[DEBUG] ⚠️  没有找到 'message' 类型的条目!");
-            eprintln!("[DEBUG] 显示前 3 条不同类型的条目:");
-            let mut seen_types = std::collections::HashSet::new();
-            for entry in entries.iter() {
-                if let Some(msg_type) = entry.message_type() {
-                    if seen_types.insert(msg_type.clone()) && seen_types.len() <= 3 {
-                        eprintln!("  类型 '{}': keys = {:?}", msg_type,
-                            entry.data.as_object().map(|o| o.keys().collect::<Vec<_>>()));
-                    }
-                }
-            }
-        }
-    }
-
-    // 转换为 Message 对象
-    let messages: Vec<crate::database::models::Message> = entries
-        .into_iter()
-        .filter_map(|entry| {
-            // 🔧 修复：优先使用 type 字段，如果不存在或无效则尝试使用 role 字段
-            // Claude Code 会话文件的 type 字段直接是角色名称 (user/assistant/system)
-            // 而不是 "message" 类型
-            let msg_type = entry.message_type()
-                .or_else(|| entry.role())  // Fallback: 使用 role 字段
-                .unwrap_or_else(|| {
-                    // 最后的 fallback: 检查 message.type 字段
-                    entry.data.get("message")
-                        .and_then(|v| v.as_object())
-                        .and_then(|obj| obj.get("type"))
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| "unknown".to_string())
-                });
-
-            // 只处理对话消息类型 (user, assistant, system)
-            if !matches!(msg_type.as_str(), "user" | "assistant" | "system") {
-                #[cfg(debug_assertions)]
-                eprintln!("[DEBUG] 跳过非对话消息类型: msg_type={:?}", msg_type);
-                return None;
-            }
-
-            // 从 JsonlEntry 提取消息数据
-            let uuid = entry.data.get("uuid")?.as_str()?.to_string();
-            let parent_uuid = entry.data.get("parentUuid").and_then(|v| v.as_str()).map(|s| s.to_string());
-
-            // 从 data 中提取 timestamp
-            let timestamp = entry.data.get("timestamp")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
-
-            // 从 message 字段提取内容 (summary)
-            // Claude Code 的 message 字段可能是字符串或 JSON 对象
-            let summary = entry.data.get("message").map(|v| {
-                // 尝试作为字符串
-                if let Some(s) = v.as_str() {
-                    s.to_string()
-                } else if let Some(obj) = v.as_object() {
-                    // 如果是对象,尝试提取 text 字段或转为 JSON 字符串
-                    if let Some(text) = obj.get("text").and_then(|t| t.as_str()) {
-                        text.to_string()
-                    } else {
-                        // 转为 JSON 字符串
-                        serde_json::to_string(v).unwrap_or_else(|_| "[无法解析的消息]".to_string())
-                    }
-                } else {
-                    // 其他类型,转为字符串
-                    v.to_string()
-                }
-            });
-
-            // 只在非完整模式下过滤 tool_use 和 tool_result
-            // 完整模式（Full）需要保留所有消息，包括工具调用
-            if view_level != ViewLevel::Full {
-                if let Some(ref content) = summary {
-                    if content.contains("\"type\":\"tool_use\"") ||
-                       content.contains("\"type\": \"tool_use\"") ||
-                       content.contains("\"type\":\"tool_result\"") ||
-                       content.contains("\"type\": \"tool_result\"") {
-                        #[cfg(debug_assertions)]
-                        {
-                            eprintln!("[DEBUG] 跳过包含 tool_use/tool_result 的消息: uuid={}, msg_type={}",
-                                &uuid[..8.min(uuid.len())],
-                                msg_type
-                            );
-                        }
-                        return None;
-                    }
-                }
-            }
-
-            // 使用 type 字段值作为 msg_type (user/assistant/system)
-            Some(crate::database::models::Message {
-                id: None,
-                session_id: session_id.clone(),
-                uuid,
-                parent_uuid,
-                msg_type,
-                timestamp: timestamp.clone(),
-                offset: entry.offset as i64,
-                length: entry.length as i64,
-                summary,
-                parent_idx: None,
-                created_at: timestamp,
-            })
-        })
-        .collect();
-
+    // 输出调试信息
     #[cfg(debug_assertions)]
     {
-        eprintln!("[DEBUG] 转换后得到 {} 个消息对象 (view_level: {:?})", messages.len(), view_level);
+        eprintln!("[DEBUG] 解析统计: {:?}", result.stats);
+        eprintln!("[DEBUG] 返回 {} 个消息 (view_level: {:?})", result.messages.len(), view_level);
 
         // 显示前 3 条消息的详细信息
-        if !messages.is_empty() {
+        if !result.messages.is_empty() {
             eprintln!("[DEBUG] 前 3 条消息示例:");
-            for (i, msg) in messages.iter().take(3).enumerate() {
+            for (i, msg) in result.messages.iter().take(3).enumerate() {
                 eprintln!("  [{}]:", i);
                 eprintln!("    msg_type: {:?}", msg.msg_type);
                 eprintln!("    uuid: {:?}", msg.uuid.get(..8));
                 eprintln!("    summary: {:?}", msg.summary.as_ref().and_then(|s| s.get(..50)));
                 eprintln!("    timestamp: {:?}", msg.timestamp);
             }
-        }
-    }
 
-    // 根据等级过滤消息
-    let filter = MessageFilter::new(view_level);
-    let filtered_messages = filter.filter_messages(messages.clone());
-
-    #[cfg(debug_assertions)]
-    {
-        eprintln!("[DEBUG] 过滤后得到 {} 个消息", filtered_messages.len());
-        if filtered_messages.is_empty() && !messages.is_empty() {
-            eprintln!("[DEBUG] 原始消息示例:");
-            for (i, msg) in messages.iter().take(3).enumerate() {
-                eprintln!("  [{}]: msg_type={}, uuid={}", i, msg.msg_type, &msg.uuid[..8]);
-            }
-        }
-
-        // 🔍 新增：序列化调试 - 检查实际输出的 JSON
-        if !filtered_messages.is_empty() {
+            // 🔍 序列化调试 - 检查实际输出的 JSON
             eprintln!("[DEBUG] 🔍 序列化前第一条消息的 msg_type 字段值:");
-            let first_msg = &filtered_messages[0];
+            let first_msg = &result.messages[0];
             eprintln!("  msg_type (原始值) = {:?}", first_msg.msg_type);
             eprintln!("  msg_type (字符串) = {}", first_msg.msg_type);
 
@@ -2863,8 +2712,9 @@ pub async fn cmd_get_messages_by_level(
         }
     }
 
-    Ok(filtered_messages)
+    Ok(result.messages)
 }
+
 
 /// 根据等级提取问答对
 ///
@@ -2882,6 +2732,7 @@ pub async fn cmd_get_qa_pairs_by_level(
     file_path: Option<String>,
 ) -> Result<Vec<QAPair>, String> {
     use crate::database::repository::SessionRepository;
+    use crate::session_parser::{SessionParserService, SessionParserConfig};
 
     // 验证等级必须是 QAPairs
     if view_level != ViewLevel::QAPairs {
@@ -2908,152 +2759,43 @@ pub async fn cmd_get_qa_pairs_by_level(
         return Err(format!("会话文件不存在: {}", final_file_path));
     }
 
-    // 解析 JSONL 文件
-    let mut parser = JsonlParser::new(path_buf.clone())
-        .map_err(|e| format!("创建 JSONL 解析器失败: {}", e))?;
+    // 使用 SessionParserService 解析会话（在 Full 视图等级下获取所有消息）
+    let config = SessionParserConfig {
+        enable_content_filter: false,  // 问答对提取不过滤内容
+        view_level: ViewLevel::Full,   // 获取所有消息，后续由 extract_qa_pairs 处理
+        debug: cfg!(debug_assertions),
+    };
 
-    let entries = parser.parse_all()
-        .map_err(|e| format!("解析 JSONL 文件失败: {}", e))?;
+    let parser = SessionParserService::new(config);
+    let result = parser.parse_session(&final_file_path, &session_id)
+        .map_err(|e| format!("解析会话失败: {}", e))?;
 
-    // 调试日志：检查原始解析的条目
     #[cfg(debug_assertions)]
     {
-        eprintln!("🔍 [cmd_get_qa_pairs_by_level] 原始解析的条目数量: {}", entries.len());
-        if !entries.is_empty() {
-            eprintln!("🔍 [cmd_get_qa_pairs_by_level] 前 3 个条目的类型和角色:");
-            for (i, entry) in entries.iter().take(3).enumerate() {
-                eprintln!("  [{}] type={:?}, role={:?}, has_uuid={}",
-                    i,
-                    entry.message_type(),
-                    entry.role(),
-                    entry.data.get("uuid").is_some()
-                );
-            }
-        }
-    }
-
-    // 转换为 Message 对象
-    let messages: Vec<crate::database::models::Message> = entries
-        .into_iter()
-        .filter_map(|entry| {
-            // 使用 effective_message_type 获取实际的消息类型
-            // 对于包含 message.content[0].type 的条目,会返回 tool_use 或 tool_result
-            let msg_type = entry.effective_message_type().unwrap_or("unknown".to_string());
-
-            // 跳过 summary 类型的条目
-            if msg_type == "summary" {
-                return None;
-            }
-
-            // 跳过 tool_use 和 tool_result 类型的条目(这些不应该参与问答配对)
-            if msg_type == "tool_use" || msg_type == "tool_result" {
-                #[cfg(debug_assertions)]
-                {
-                    eprintln!("⚠️  [cmd_get_qa_pairs_by_level] 跳过 tool_use/tool_result 类型: uuid={}, msg_type={}",
-                        entry.data.get("uuid").and_then(|v| v.as_str()).map(|s| &s[..8.min(s.len())]).unwrap_or("N/A"),
-                        msg_type
-                    );
-                }
-                return None;
-            }
-
-            let uuid = entry.data.get("uuid")?.as_str()?.to_string();
-            let parent_uuid = entry.data.get("parentUuid").and_then(|v| v.as_str()).map(|s| s.to_string());
-
-            // 从 data 中提取 timestamp
-            let timestamp = entry.data.get("timestamp")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
-
-            // 提取内容：优先使用 content 字段，然后是 message 字段
-            let summary = entry.data.get("content")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-                .or_else(|| {
-                    // 尝试从 message 字段提取
-                    entry.data.get("message").map(|v| {
-                        // 尝试作为字符串
-                        if let Some(s) = v.as_str() {
-                            s.to_string()
-                        } else if let Some(obj) = v.as_object() {
-                            // 如果是对象，尝试提取 text 字段
-                            if let Some(text) = obj.get("text").and_then(|t| t.as_str()) {
-                                text.to_string()
-                            } else {
-                                // 转为 JSON 字符串
-                                serde_json::to_string(v).unwrap_or_else(|_| "[无法解析的消息]".to_string())
-                            }
-                        } else {
-                            v.to_string()
-                        }
-                    })
-                });
-
-            // 直接使用 type 字段作为 msg_type（不是 role）
-            Some(crate::database::models::Message {
-                id: None,
-                session_id: session_id.clone(),
-                uuid,
-                parent_uuid,
-                msg_type: msg_type.clone(), // 使用 type 字段
-                timestamp: timestamp.clone(),
-                offset: entry.offset as i64,
-                length: entry.length as i64,
-                summary,
-                parent_idx: None,
-                created_at: timestamp,
-            })
-        })
-        .collect();
-
-    // 调试日志：检查解析后的消息
-    #[cfg(debug_assertions)]
-    {
-        eprintln!("🔍 [cmd_get_qa_pairs_by_level] 解析后的消息数量: {}", messages.len());
-        if !messages.is_empty() {
-            eprintln!("🔍 [cmd_get_qa_pairs_by_level] 消息类型分布:");
-            let mut type_counts = std::collections::HashMap::new();
-            for msg in &messages {
-                *type_counts.entry(msg.msg_type.clone()).or_insert(0) += 1;
-            }
-            for (msg_type, count) in type_counts.iter() {
-                eprintln!("  - {}: {}", msg_type, count);
-            }
-
-            // 显示前 5 条消息的摘要
-            eprintln!("🔍 [cmd_get_qa_pairs_by_level] 前 5 条消息:");
-            for (i, msg) in messages.iter().take(5).enumerate() {
-                eprintln!("  [{}] uuid={}, msg_type={}, has_summary={}",
-                    i,
-                    &msg.uuid[..8.min(msg.uuid.len())],
-                    msg.msg_type,
-                    msg.summary.is_some()
-                );
-            }
-        }
+        eprintln!("[DEBUG] 解析统计: {:?}", result.stats);
+        eprintln!("[DEBUG] 返回 {} 个消息用于问答对提取", result.messages.len());
     }
 
     // 提取问答对
     let filter = MessageFilter::new(view_level);
-    let qa_pairs = filter.extract_qa_pairs(messages);
+    let qa_pairs = filter.extract_qa_pairs(result.messages);
 
     // 调试日志：检查提取的问答对
     #[cfg(debug_assertions)]
     {
-        eprintln!("🔍 [cmd_get_qa_pairs_by_level] 提取的问答对数量: {}", qa_pairs.len());
+        eprintln!("[DEBUG] 提取的问答对数量: {}", qa_pairs.len());
         if !qa_pairs.is_empty() {
-            eprintln!("🔍 [cmd_get_qa_pairs_by_level] 前 3 个问答对:");
+            eprintln!("[DEBUG] 前 3 个问答对:");
             for (i, pair) in qa_pairs.iter().take(3).enumerate() {
                 eprintln!("  [{}] question_uuid={}, question_type={}, has_answer={}",
                     i,
-                    &pair.question.uuid[..8.min(pair.question.uuid.len())],
+                    &pair.question.uuid[..pair.question.uuid.len().min(8)],
                     pair.question.msg_type,
                     pair.answer.is_some()
                 );
                 if let Some(ref answer) = pair.answer {
                     eprintln!("       answer_uuid={}, answer_type={}",
-                        &answer.uuid[..8.min(answer.uuid.len())],
+                        &answer.uuid[..answer.uuid.len().min(8)],
                         answer.msg_type
                     );
                 }
@@ -3063,6 +2805,7 @@ pub async fn cmd_get_qa_pairs_by_level(
 
     Ok(qa_pairs)
 }
+
 
 /// 保存视图等级偏好
 ///
