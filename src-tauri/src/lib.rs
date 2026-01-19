@@ -125,6 +125,9 @@ pub fn run() {
             optimize_prompt,
             get_meta_template,
             update_meta_template,
+            // 优化器配置管理命令
+            reload_optimizer_config,
+            get_optimizer_config,
             // 监控目录管理命令
             get_monitored_directories,
             add_monitored_directory,

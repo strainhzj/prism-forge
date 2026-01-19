@@ -114,14 +114,13 @@ export function useQAPairsByLevel(
     queryKey: viewLevelQueryKeys.qaPairs(sessionId, viewLevel),
     queryFn: () => getQAPairsByLevel(sessionId, viewLevel, filePath),
     enabled: enabled && !!sessionId && viewLevel === ViewLevel.QAPairs,
-    staleTime: 5 * 60 * 1000, // 5 分钟内数据视为新鲜
-    gcTime: 10 * 60 * 1000, // 10 分钟后垃圾回收
-    retry: 2, // 重试两次
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    retry: 2,
   });
 }
 
 /**
- * 导出会话
  *
  * @returns 导出的 mutation
  */
@@ -165,17 +164,27 @@ export function useViewLevelManager(sessionId: string) {
    * 切换视图等级
    */
   const changeViewLevel = async (newLevel: ViewLevel) => {
-    await savePreferenceMutation.mutateAsync({
-      sessionId,
-      viewLevel: newLevel,
-    });
-
-    // 切换视图等级后，刷新消息列表
+    // 先失效旧的视图等级的查询缓存
     queryClient.invalidateQueries({
       queryKey: viewLevelQueryKeys.messages(sessionId, currentViewLevel),
     });
+
+    // 保存偏好设置（异步，不阻塞）
+    savePreferenceMutation.mutateAsync({
+      sessionId,
+      viewLevel: newLevel,
+    }).catch((error) => {
+      console.error('[useViewLevelManager] 保存视图等级偏好失败:', error);
+    });
+
+    // 失效新的视图等级的查询缓存，触发重新加载
     queryClient.invalidateQueries({
-      queryKey: viewLevelQueryKeys.qaPairs(sessionId, currentViewLevel),
+      queryKey: viewLevelQueryKeys.messages(sessionId, newLevel),
+    });
+
+    // 失效偏好查询缓存，确保 currentViewLevel 更新
+    queryClient.invalidateQueries({
+      queryKey: viewLevelQueryKeys.preference(sessionId),
     });
   };
 
@@ -197,6 +206,9 @@ export function useViewLevelManager(sessionId: string) {
 /**
  * 会话内容加载 Hook（根据视图等级自动选择加载消息或问答对）
  *
+ * 问答模式使用 qaPairs API，其他模式使用 messages API
+ * 但都转换为统一的 messages 格式供 TimelineMessageList 展示
+ *
  * @param sessionId - 会话 ID
  * @param viewLevel - 视图等级
  * @param filePath - 可选的文件路径
@@ -207,28 +219,29 @@ export function useSessionContent(
   viewLevel: ViewLevel,
   filePath?: string
 ) {
-  // 加载消息列表
+  const isQAPairsMode = viewLevel === ViewLevel.QAPairs;
+
+  // 加载消息列表（非问答模式）
   const messagesQuery = useMessagesByLevel(
     sessionId,
     viewLevel,
-    viewLevel !== ViewLevel.QAPairs,
+    !isQAPairsMode, // 问答模式禁用此查询
     filePath
   );
 
-  // 加载问答对（仅当视图等级为 QAPairs 时）
+  // 加载问答对（仅问答模式）
   const qaPairsQuery = useQAPairsByLevel(sessionId, viewLevel, filePath);
 
+  // 将问答对转换为消息列表
+  const qaMessages = qaPairsQuery.data ? convertQAPairsToMessages(qaPairsQuery.data) : undefined;
+
   return {
-    // 数据
-    messages: messagesQuery.data,
-    qaPairs: qaPairsQuery.data,
+    // 数据 - 问答模式使用转换后的消息，否则使用原始消息
+    messages: isQAPairsMode ? qaMessages : messagesQuery.data,
 
     // 状态
-    isLoading: messagesQuery.isLoading || qaPairsQuery.isLoading,
-    error: messagesQuery.error || qaPairsQuery.error,
-
-    // 判断当前模式
-    isQAPairsMode: viewLevel === ViewLevel.QAPairs,
+    isLoading: isQAPairsMode ? qaPairsQuery.isLoading : messagesQuery.isLoading,
+    error: isQAPairsMode ? qaPairsQuery.error : messagesQuery.error,
 
     // 工具方法
     refresh: () => {
@@ -236,4 +249,50 @@ export function useSessionContent(
       qaPairsQuery.refetch();
     },
   };
+}
+
+/**
+ * 将问答对列表转换为消息列表
+ *
+ * 将 QAPair[] 转换为 Message[]，以便使用 TimelineMessageList 展示
+ * 结果按时间戳倒序排列（最新的消息在最前面）
+ *
+ * @param qaPairs - 问答对列表
+ * @returns 消息列表（按时间倒序）
+ */
+function convertQAPairsToMessages(qaPairs: import('@/types/viewLevel').QAPair[]): import('@/types/viewLevel').Message[] {
+  const messages: import('@/types/viewLevel').Message[] = [];
+
+  for (const pair of qaPairs) {
+    // 添加问题消息
+    messages.push({
+      uuid: pair.question.uuid,
+      sessionId: pair.question.sessionId,
+      parentUuid: pair.question.parentUuid,
+      msgType: pair.question.msgType,
+      timestamp: pair.question.timestamp,
+      summary: pair.question.summary,
+    });
+
+    // 添加答案消息（如果存在）
+    if (pair.answer) {
+      messages.push({
+        uuid: pair.answer.uuid,
+        sessionId: pair.answer.sessionId,
+        parentUuid: pair.answer.parentUuid,
+        msgType: pair.answer.msgType,
+        timestamp: pair.answer.timestamp,
+        summary: pair.answer.summary,
+      });
+    }
+  }
+
+  // 按时间戳倒序排序（最新的在最前面）
+  messages.sort((a, b) => {
+    const timeA = new Date(a.timestamp).getTime();
+    const timeB = new Date(b.timestamp).getTime();
+    return timeB - timeA; // 倒序：timeB - timeA
+  });
+
+  return messages;
 }

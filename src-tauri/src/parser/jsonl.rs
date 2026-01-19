@@ -41,6 +41,52 @@ impl JsonlEntry {
     pub fn role(&self) -> Option<String> {
         self.data.get("role")?.as_str().map(|s| s.to_string())
     }
+
+    /// 获取有效的消息类型
+    ///
+    /// 对于包含嵌套 message 对象的条目,检查 message.content 的类型
+    /// - 如果 content 是字符串 → 真正的用户问题/助手回复,返回顶层 type
+    /// - 如果 content 是数组且第一个元素是 tool_use/tool_result → 返回工具类型
+    /// - 否则返回顶层的 type 字段
+    ///
+    /// # 优先级
+    /// 1. message.content 是字符串 → 直接返回顶层 type (user/assistant)
+    /// 2. message.content[0].type 是 tool_use/tool_result → 返回工具类型
+    /// 3. type (顶层类型)
+    pub fn effective_message_type(&self) -> Option<String> {
+        // 首先尝试从 message.content 获取实际类型
+        if let Some(message) = self.data.get("message") {
+            if let Some(content) = message.get("content") {
+                // 情况1: content 是字符串 → 真正的用户问题或助手回复
+                if content.is_string() {
+                    // 直接返回顶层 type,这是真正的问答内容
+                    return self.message_type();
+                }
+
+                // 情况2: content 是数组 → 检查第一个元素的类型
+                if let Some(content_array) = content.as_array() {
+                    if !content_array.is_empty() {
+                        let first_content = &content_array[0];
+                        if let Some(content_type) = first_content.get("type") {
+                            if let Some(type_str) = content_type.as_str() {
+                                // 如果内容类型是 tool_use 或 tool_result,直接返回
+                                if matches!(type_str, "tool_use" | "tool_result") {
+                                    return Some(type_str.to_string());
+                                }
+                                // 对于 text 类型,返回顶层 type
+                                if type_str == "text" {
+                                    return self.message_type();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 回退到顶层的 type 字段
+        self.message_type()
+    }
 }
 
 /// JSONL 解析器

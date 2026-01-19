@@ -19,7 +19,9 @@ import {
   useCurrentSessionFile,
   useProjectLoading,
 } from "./stores/useProjectStore";
+import type { EnhancedPromptRequest } from "@/types/prompt";
 import { cn } from "@/lib/utils";
+import type { EnhancedPrompt } from "@/types/prompt";
 
 // ==================== 类型定义 ====================
 
@@ -47,7 +49,7 @@ function App() {
   const navigate = useNavigate();
   const currentProject = useCurrentProject();
   const currentSessionFile = useCurrentSessionFile();
-  const { fetchProjects, setCurrentSessionFile, getLatestSessionFile } = useProjectActions();
+  const { fetchProjects, setCurrentSessionFile, getLatestSessionFile, getSessionFiles } = useProjectActions();
   const projectLoading = useProjectLoading();
 
   // 全局 Alert 状态
@@ -70,7 +72,7 @@ function App() {
 
   // 本地状态
   const [goal, setGoal] = useState("");
-  const [analysisResult, setAnalysisResult] = useState("");
+  const [analysisResult, setAnalysisResult] = useState<EnhancedPrompt | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
 
@@ -142,22 +144,56 @@ function App() {
 
   // 执行分析
   const handleAnalyze = async () => {
-    if (!currentSessionFile || !goal) {
+    if (!goal) {
       alert(t('alerts.fillGoal', { ns: 'common' }));
       return;
     }
 
     setAnalyzing(true);
-    setAnalysisResult("");
+    setAnalysisResult(null);
 
     try {
-      const result = await invoke<string>("optimize_prompt", {
-        sessionFile: currentSessionFile,
-        goal
+      // 获取当前项目的会话文件列表
+      let sessionFilePaths: string[] = [];
+      if (currentProject) {
+        const sessionFiles = await getSessionFiles(currentProject.path, false);
+        // 获取最近的几个会话文件
+        sessionFilePaths = sessionFiles.slice(0, 10).map(f => f.file_path);
+        console.log(`[App] 找到 ${sessionFilePaths.length} 个会话文件`);
+      }
+
+      // 使用正确的请求结构调用 optimize_prompt
+      const result = await invoke<EnhancedPrompt>("optimize_prompt", {
+        request: {
+          goal: goal.trim(),
+          sessionFilePaths,  // 传递会话文件路径列表
+          limit: 5,
+          useWeighted: true
+        }
       });
+      debugLog('handleAnalyze', 'result received:', result);
+      debugLog('handleAnalyze', 'result JSON:', JSON.stringify(result, null, 2));
+      debugLog('handleAnalyze', 'enhancedPrompt length:', result?.enhancedPrompt?.length || 0);
+      debugLog('handleAnalyze', 'enhancedPrompt content:', result?.enhancedPrompt || 'EMPTY');
+      debugLog('handleAnalyze', 'result keys:', result ? Object.keys(result) : 'NO KEYS');
       setAnalysisResult(result);
     } catch (e) {
-      setAnalysisResult(`Error: ${e}`);
+      // 更详细的错误处理
+      let errorMsg = 'Unknown error';
+      if (typeof e === 'string') {
+        errorMsg = e;
+      } else if (e instanceof Error) {
+        errorMsg = e.message;
+      } else if (e && typeof e === 'object') {
+        try {
+          errorMsg = JSON.stringify(e);
+        } catch {
+          errorMsg = 'Error object cannot be stringified';
+        }
+      }
+      debugLog('handleAnalyze', 'error', e);
+      setAnalysisResult(null);
+      alert(`Error: ${errorMsg}`);
     } finally {
       setAnalyzing(false);
     }
@@ -273,13 +309,13 @@ function App() {
                       border: '1px solid var(--color-border-light)',
                       color: 'var(--color-text-primary)'
                     }}
-                    disabled={projectLoading || !currentSessionFile}
+                    disabled={projectLoading}
                   />
 
                   {/* 暖橙色/珊瑚橙色全宽按钮 */}
                   <button
                     onClick={handleAnalyze}
-                    disabled={analyzing || !goal.trim() || !currentSessionFile}
+                    disabled={analyzing || !goal.trim()}
                     className={cn(
                       "w-full py-4 text-white font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed",
                       "hover:shadow-lg active:scale-[0.99]"
@@ -289,7 +325,7 @@ function App() {
                       boxShadow: '0 0 20px rgba(245, 158, 11, 0.4)'
                     }}
                     onMouseEnter={(e) => {
-                      if (!analyzing && goal.trim() && currentSessionFile) {
+                      if (!analyzing && goal.trim()) {
                         e.currentTarget.style.boxShadow = '0 0 30px rgba(245, 158, 11, 0.6)';
                       }
                     }}
@@ -300,7 +336,7 @@ function App() {
                     {analyzing ? (
                       <span className="flex items-center justify-center gap-2">
                         <RefreshCw className="h-4 w-4 animate-spin" />
-                        {t('status.analyzing')}
+                        {t('status.analyzing', { ns: 'common' })}
                       </span>
                     ) : t('buttons.analyzeButton')}
                   </button>
@@ -324,15 +360,64 @@ function App() {
                 }}>
                   <div className="h-full overflow-y-auto p-4">
                     {analysisResult ? (
-                      <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed" style={{
-                        color: 'var(--color-text-primary)',
-                        fontFamily: 'Consolas, Monaco, "Courier New", monospace'
-                      }}>
-                        {analysisResult}
-                      </pre>
+                      <div className="space-y-4">
+                        {/* Token 统计 */}
+                        {analysisResult.tokenStats && (
+                          <div className="flex items-center gap-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                            <span>Token: {analysisResult.tokenStats.compressedTokens} / {analysisResult.tokenStats.originalTokens}</span>
+                            {analysisResult.tokenStats.savingsPercentage > 0 && (
+                              <span style={{ color: 'var(--color-accent-blue)' }}>
+                                节省 {analysisResult.tokenStats.savingsPercentage.toFixed(1)}%
+                              </span>
+                            )}
+                            <span>置信度: {(analysisResult.confidence * 100).toFixed(0)}%</span>
+                          </div>
+                        )}
+
+                        {/* 引用的会话 */}
+                        {analysisResult.referencedSessions && analysisResult.referencedSessions.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                              引用的会话 ({analysisResult.referencedSessions.length}):
+                            </p>
+                            {analysisResult.referencedSessions.map((session, idx) => (
+                              <div key={idx} className="text-sm p-2 rounded" style={{
+                                backgroundColor: 'var(--color-bg-primary)',
+                                border: '1px solid var(--color-border-light)'
+                              }}>
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <p className="font-medium">{session.summary || '无摘要'}</p>
+                                    <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                                      相似度: {((session.similarityScore || 0) * 100).toFixed(0)}%
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* 增强的提示词 */}
+                        <div>
+                          <p className="text-sm font-medium mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                            增强的提示词:
+                          </p>
+                          <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed p-3 rounded" style={{
+                            color: 'var(--color-text-primary)',
+                            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                            backgroundColor: 'var(--color-bg-primary)',
+                            border: '1px solid var(--color-border-light)'
+                          }}>
+                            {analysisResult.enhancedPrompt}
+                          </pre>
+                        </div>
+                      </div>
                     ) : (
                       <div className="flex items-center justify-center h-full">
-                        <p style={{ color: 'var(--color-text-secondary)' }}>{t('messages.analysisResultPlaceholder')}</p>
+                        <p style={{ color: 'var(--color-text-secondary)' }}>
+                          {analyzing ? '分析中...' : t('messages.analysisResultPlaceholder')}
+                        </p>
                       </div>
                     )}
                   </div>

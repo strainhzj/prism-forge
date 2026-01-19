@@ -7,6 +7,13 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { ViewLevel, VIEW_LEVEL_INFO } from '@/types/viewLevel';
 
 export interface MultiLevelViewSelectorProps {
@@ -224,6 +231,79 @@ export function MultiLevelViewTabs({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * 视图等级下拉选择器
+ */
+export interface MultiLevelViewDropdownProps {
+  value: ViewLevel;
+  onChange: (level: ViewLevel) => void;
+  className?: string;
+  disabled?: boolean;
+}
+
+export function MultiLevelViewDropdown({
+  value,
+  onChange,
+  className,
+  disabled = false,
+}: MultiLevelViewDropdownProps) {
+  const { t } = useTranslation('sessions');
+
+  const viewLevels = useMemo(() => {
+    return Object.values(ViewLevel).map((level) => ({
+      ...VIEW_LEVEL_INFO[level],
+      value: level,
+    }));
+  }, []);
+
+  // 获取当前选中等级的配置
+  const currentLevel = useMemo(
+    () => viewLevels.find((level) => level.value === value),
+    [value, viewLevels]
+  );
+
+  return (
+    <div className={cn('flex items-center gap-3', className)}>
+      <span className="text-sm font-medium whitespace-nowrap" style={{ color: 'var(--color-text-primary)' }}>
+        {t('viewLevel.title')}:
+      </span>
+      <Select value={value} onValueChange={(val) => onChange(val as ViewLevel)} disabled={disabled}>
+        <SelectTrigger className="w-[240px]" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
+          {currentLevel ? (
+            <div className="flex items-center gap-2">
+              <span className="text-base">{currentLevel.icon}</span>
+              <span>{t(`viewLevel.levels.${currentLevel.value}.label`)}</span>
+            </div>
+          ) : (
+            <SelectValue placeholder={t('viewLevel.title')} />
+          )}
+        </SelectTrigger>
+        <SelectContent className="z-50" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
+          {viewLevels.map((level) => {
+            return (
+              <SelectItem key={level.value} value={level.value}>
+                <div className="flex items-start gap-2">
+                  <span className="text-base shrink-0 mt-0.5">
+                    {level.icon}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>
+                      {t(`viewLevel.levels.${level.value}.label`)}
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                      {t(`viewLevel.levels.${level.value}.description`)}
+                    </div>
+                  </div>
+                </div>
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

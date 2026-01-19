@@ -1798,6 +1798,7 @@ impl ViewLevelPreferenceRepository {
     /// 保存视图等级偏好
     ///
     /// 如果该会话已有偏好记录，则更新；否则创建新记录。
+    /// 如果会话不存在于 sessions 表中，会自动创建一个占位会话记录。
     ///
     /// # 参数
     /// - `session_id`: 会话唯一标识
@@ -1810,7 +1811,30 @@ impl ViewLevelPreferenceRepository {
         let view_level_str = view_level.to_string();
 
         self.with_conn_inner(|conn| {
-            // 使用 INSERT OR REPLACE 实现保存或更新
+            // 检查会话是否存在
+            let session_exists: bool = conn.query_row(
+                "SELECT COUNT(*) > 0 FROM sessions WHERE session_id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            ).unwrap_or(false);
+
+            // 如果会话不存在，创建一个占位会话记录
+            if !session_exists {
+                conn.execute(
+                    "INSERT INTO sessions (session_id, project_path, project_name, file_path, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![
+                        session_id,
+                        "",  // 空的 project_path（占位）
+                        "",  // 空的 project_name（占位）
+                        "",  // 空的 file_path（占位）
+                        now,
+                        now
+                    ],
+                )?;
+            }
+
+            // 保存或更新视图等级偏好
             conn.execute(
                 "INSERT INTO view_level_preferences (session_id, view_level, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4)

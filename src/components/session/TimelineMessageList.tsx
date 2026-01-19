@@ -55,6 +55,58 @@ function formatTimestamp(timestamp?: string): string {
 }
 
 /**
+ * 从内容中提取文本
+ *
+ * 根据角色类型使用不同的提取方式：
+ * - 用户消息：直接返回 content 的内容
+ * - 助手消息：提取 content 中 text 字段的内容
+ *
+ * @param content - 原始内容
+ * @param isUser - 是否是用户消息
+ * @returns 提取的文本内容
+ */
+function extractTextFromContent(content: string, isUser: boolean): string {
+  if (!content) return '';
+
+  // 用户消息：直接返回 content 的内容
+  if (isUser) {
+    return content;
+  }
+
+  // 助手消息：提取 text 字段
+  try {
+    const parsed = JSON.parse(content);
+
+    // 如果是对象且包含 text 字段，返回 text
+    if (typeof parsed === 'object' && parsed !== null && 'text' in parsed) {
+      return String(parsed.text);
+    }
+
+    // 否则返回原始内容
+    return content;
+  } catch {
+    // 解析失败，返回原始内容
+    return content;
+  }
+}
+
+/**
+ * 格式化文本内容
+ *
+ * - 将 `\n` 转换为真正的换行
+ * - 保持其他格式化字符
+ *
+ * @param text - 文本内容
+ * @returns 格式化后的文本
+ */
+function formatTextContent(text: string): string {
+  if (!text) return '';
+
+  // 将 \n 转换为真正的换行符
+  return text.replace(/\\n/g, '\n');
+}
+
+/**
  * TimelineMessageItem 组件 - 单条消息项
  */
 interface TimelineMessageItemProps {
@@ -65,12 +117,20 @@ interface TimelineMessageItemProps {
 
 function TimelineMessageItem({ message, isExpanded, onToggleExpand }: TimelineMessageItemProps) {
   const isUser = message.role?.toLowerCase() === 'user';
-  const displayContent = isExpanded ? (message.fullContent || message.content || '') : (message.content || '');
+
+  // 提取内容：用户消息直接显示，助手消息提取 text 字段
+  const rawContent = isExpanded ? (message.fullContent || message.content || '') : (message.content || '');
+  const textContent = extractTextFromContent(rawContent, isUser);
+
+  // 格式化文本（处理 \n）
+  const displayContent = formatTextContent(textContent);
+
   const hasMoreContent = message.fullContent && message.fullContent !== message.content;
 
   debugLog('render message', {
     id: message.id,
     role: message.role,
+    isUser,
     isExpanded,
     hasMoreContent,
     contentLength: displayContent.length,
@@ -144,6 +204,7 @@ function TimelineMessageItem({ message, isExpanded, onToggleExpand }: TimelineMe
             onClick={onToggleExpand}
             className="ml-auto p-1 rounded transition-colors hover:bg-[var(--color-app-secondary)]"
             style={{ color: 'var(--color-text-secondary)' }}
+            title={isExpanded ? '收起' : '展开'}
           >
             {isExpanded ? (
               <ChevronDown className="w-4 h-4" />
@@ -167,7 +228,7 @@ function TimelineMessageItem({ message, isExpanded, onToggleExpand }: TimelineMe
         {displayContent}
       </p>
 
-      {/* 提示有更多内容 */}
+      {/* 提示有更多内容或收起按钮 */}
       {!isExpanded && hasMoreContent && (
         <div
           className="mt-2 text-xs cursor-pointer hover:underline"
@@ -175,6 +236,15 @@ function TimelineMessageItem({ message, isExpanded, onToggleExpand }: TimelineMe
           onClick={onToggleExpand}
         >
           点击查看完整内容...
+        </div>
+      )}
+      {isExpanded && hasMoreContent && (
+        <div
+          className="mt-2 text-xs cursor-pointer hover:underline"
+          style={{ color: 'var(--color-text-secondary)' }}
+          onClick={onToggleExpand}
+        >
+          点击收起
         </div>
       )}
     </div>

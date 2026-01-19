@@ -5,14 +5,14 @@
  * 集成多级日志读取功能
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { ChevronLeft, RefreshCw, Filter } from 'lucide-react';
+import { ChevronLeft, RefreshCw, Filter, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { MultiLevelViewTabs } from '@/components/MultiLevelViewSelector';
+import { MultiLevelViewDropdown } from '@/components/MultiLevelViewSelector';
 import { TimelineMessageList } from '@/components/session/TimelineMessageList';
 import { useViewLevelManager, useSessionContent, useExportSessionByLevel } from '@/hooks/useViewLevel';
 import type { MessageNode } from '@/types/message';
@@ -74,6 +74,9 @@ export function SessionContentView({
 }: SessionContentViewProps) {
   const { t } = useTranslation('sessions');
 
+  // ===== 排序状态管理 =====
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc'); // 默认倒序
+
   // ===== 多级日志读取功能 =====
   // 使用视图等级管理 hook
   const {
@@ -85,12 +88,23 @@ export function SessionContentView({
   // 加载会话内容（根据视图等级过滤）
   const {
     messages,
-    qaPairs,
     isLoading: contentLoading,
     error: contentError,
-    isQAPairsMode,
     refresh: refreshContent
   } = useSessionContent(sessionInfo.session_id, currentViewLevel, sessionInfo.file_path);
+
+  // ===== 排序后的消息列表 =====
+  const sortedMessages = useMemo(() => {
+    if (!messages || messages.length === 0) return messages;
+
+    const sorted = [...messages].sort((a, b) => {
+      const timeA = new Date(a.timestamp || 0).getTime();
+      const timeB = new Date(b.timestamp || 0).getTime();
+      return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+    });
+
+    return sorted;
+  }, [messages, sortOrder]);
 
   // 调试日志：检查返回的数据
   useEffect(() => {
@@ -214,6 +228,20 @@ export function SessionContentView({
             <RefreshCw className={cn('h-4 w-4', contentLoading && 'animate-spin')} style={{ color: 'var(--color-text-primary)' }} />
           </Button>
 
+          {/* 排序切换按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+            }}
+            disabled={contentLoading}
+            className="shrink-0 hover:bg-[var(--color-app-secondary)]"
+            title={t(`detailView.sortOrder.${sortOrder}`)}
+          >
+            <ArrowUpDown className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
+          </Button>
+
           {/* 导出按钮（下拉菜单） */}
           <div className="relative group">
             <Button
@@ -249,7 +277,7 @@ export function SessionContentView({
 
       {/* 视图等级选择器栏 */}
       <div className="px-6 py-3 border-b" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
-        <MultiLevelViewTabs
+        <MultiLevelViewDropdown
           value={currentViewLevel}
           onChange={changeViewLevel}
           disabled={viewLevelSaving || contentLoading}
@@ -280,77 +308,12 @@ export function SessionContentView({
               {t('buttons.retry')}
             </Button>
           </div>
-        ) : isQAPairsMode ? (
-          // QA Pairs 视图
-          <div className="p-4 space-y-4">
-            {qaPairs && qaPairs.length > 0 ? (
-              qaPairs.map((pair, index) => (
-                <div
-                  key={index}
-                  className="border rounded-lg p-4 space-y-4"
-                  style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}
-                >
-                  {/* 问题 */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-lg">👤</span>
-                      <span
-                        className="text-xs font-semibold px-2 py-0.5 rounded text-white"
-                        style={{ backgroundColor: 'var(--color-accent-warm)', boxShadow: '0 0 10px rgba(245, 158, 11, 0.4)' }}
-                      >
-                        {t('detailView.question')} #{index + 1}
-                      </span>
-                      <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                        {pair.question.timestamp.split('T')[1]?.substring(0, 8) || pair.question.timestamp}
-                      </span>
-                    </div>
-                    <div className="text-sm whitespace-pre-wrap break-words pl-8" style={{ color: 'var(--color-text-primary)' }}>
-                      {pair.question.summary && pair.question.summary.length > 500
-                        ? pair.question.summary.substring(0, 500) + '...'
-                        : pair.question.summary || '无内容'}
-                    </div>
-                  </div>
-
-                  {/* 答案 */}
-                  {pair.answer && (
-                    <div className="ml-4 border-l-2 pl-4" style={{ borderColor: 'rgba(37, 99, 235, 0.3)' }}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-lg">🤖</span>
-                        <span
-                          className="text-xs font-semibold px-2 py-0.5 rounded text-white"
-                          style={{ backgroundColor: 'var(--color-accent-blue)', boxShadow: '0 0 10px rgba(37, 99, 235, 0.4)' }}
-                        >
-                          {t('detailView.answer')}
-                        </span>
-                        <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                          {pair.answer.timestamp.split('T')[1]?.substring(0, 8) || pair.answer.timestamp}
-                        </span>
-                      </div>
-                      <div className="text-sm whitespace-pre-wrap break-words pl-8" style={{ color: 'var(--color-text-primary)' }}>
-                        {pair.answer.summary && pair.answer.summary.length > 500
-                          ? pair.answer.summary.substring(0, 500) + '...'
-                          : pair.answer.summary || '无内容'}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))
-            ) : (
-              // 空状态
-              <div className="flex flex-col items-center justify-center h-full text-center p-4">
-                <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{t('detailView.noContent')}</p>
-                <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>
-                  {t('detailView.noContentHint')}
-                </p>
-              </div>
-            )}
-          </div>
         ) : (
           // 消息列表视图 - 使用 TimelineMessageList 组件
           <div className="p-4">
-            {messages && messages.length > 0 ? (
+            {sortedMessages && sortedMessages.length > 0 ? (
               <TimelineMessageList
-                messages={messages.slice().reverse().map((msg): MessageNode => ({
+                messages={sortedMessages.map((msg): MessageNode => ({
                   id: msg.uuid,
                   parent_id: msg.parentUuid || null,
                   depth: 0,
@@ -382,11 +345,7 @@ export function SessionContentView({
       {/* 底部统计信息 */}
       {!contentLoading && !contentError && (
         <div className="px-6 py-3 border-t text-xs" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)', color: 'var(--color-text-secondary)' }}>
-          {isQAPairsMode ? (
-            t('detailView.qaPairsCount', { count: qaPairs?.length || 0 })
-          ) : (
-            t('detailView.messageCount', { count: messages?.length || 0 })
-          )}
+          {t('detailView.messageCount', { count: sortedMessages?.length || 0 })}
         </div>
       )}
     </div>

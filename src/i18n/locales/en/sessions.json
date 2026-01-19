@@ -61,7 +61,14 @@
     "retry": "Retry",
     "noContent": "No content",
     "noContentHint": "The session file is empty or has incorrect format",
-    "messageCount": "Total {{count}} messages"
+    "messageCount": "Total {{count}} messages",
+    "sort": "Sort",
+    "sortOrder": {
+      "desc": "Newest First",
+      "asc": "Oldest First"
+    },
+    "collapse": "Collapse",
+    "expand": "Expand"
   },
   "viewLevel": {
     "title": "View Level",
@@ -70,28 +77,23 @@
     "levels": {
       "full": {
         "label": "Full Mode",
-        "description": "Show all message types, including tool calls and errors",
-        "icon": "📄"
+        "description": "Show all message types, including tool calls and errors"
       },
       "conversation": {
         "label": "Conversation",
-        "description": "Show only user, assistant, and thinking messages",
-        "icon": "💬"
+        "description": "Show only user, assistant, and thinking messages"
       },
       "qa_pairs": {
-        "label": "Q&A Pairs",
-        "description": "Extract user questions and final answers, skip intermediate steps",
-        "icon": "❓"
+        "label": "Q&A Mode",
+        "description": "Extract user questions and final answers, skip intermediate steps"
       },
       "assistant_only": {
         "label": "Assistant Only",
-        "description": "Show only assistant responses",
-        "icon": "🤖"
+        "description": "Show only assistant responses"
       },
       "user_only": {
         "label": "User Only",
-        "description": "Show only user inputs",
-        "icon": "👤"
+        "description": "Show only user inputs"
       }
     },
     "export": {

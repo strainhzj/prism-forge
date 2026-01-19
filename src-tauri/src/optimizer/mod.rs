@@ -4,6 +4,9 @@
 
 pub mod compressor;
 pub mod prompt_generator;
+pub mod config;
+
+pub use config::{ConfigManager, OptimizerConfig};
 
 use anyhow::{Context, Result};
 use std::fs::File;

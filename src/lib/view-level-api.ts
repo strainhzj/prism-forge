@@ -85,8 +85,9 @@ export async function getQAPairsByLevel(
     const qaPairs = await invoke<QAPair[]>('cmd_get_qa_pairs_by_level', {
       sessionId,
       viewLevel,
-      filePath, // 添加可选的文件路径参数
+      filePath,
     });
+
     return qaPairs;
   } catch (error) {
     console.error('获取问答对失败:', error);

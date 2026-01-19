@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 13;
+const CURRENT_DB_VERSION: i32 = 14;
 
 /// 初始化数据库
 ///
@@ -82,6 +82,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             11 => migrate_v11(conn)?,
             12 => migrate_v12(conn)?,
             13 => migrate_v13(conn)?,
+            14 => migrate_v14(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -411,8 +412,23 @@ pub fn migrate_v6_impl(conn: &mut Connection) -> Result<()> {
         [],
     )?;
 
-    // 注释：保留 message_embedding_map 表（用于未来的消息级别向量）
-    // 当前版本先实现会话级别的向量搜索
+    // 创建 message_embeddings 虚拟表（使用 sqlite-vec 扩展）
+    // 用于存储消息级别的向量嵌入
+    // 注意：如果 sqlite-vec 扩展未加载，这里会失败，但不影响其他功能
+    let vec_table_created = conn.execute(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS message_embeddings USING vec0(
+            embedding float[384],
+            summary text
+        );",
+        [],
+    );
+
+    if let Err(e) = vec_table_created {
+        log::warn!("创建 message_embeddings 虚拟表失败（可能 sqlite-vec 扩展未加载）: {}", e);
+        // 不中断迁移，继续创建其他表
+    } else {
+        log::info!("message_embeddings 虚拟表创建成功");
+    }
 
     // 关联表: 存储 message_id 到 vec0 行 ID 的映射
     conn.execute(
@@ -724,6 +740,41 @@ pub fn migrate_v13_impl(conn: &mut Connection) -> Result<()> {
         ON view_level_preferences(session_id);",
         [],
     )?;
+
+    Ok(())
+}
+
+/// 迁移到版本 14: 创建 message_embeddings 虚拟表
+///
+/// # 功能
+/// - 创建用于向量搜索的 message_embeddings 虚拟表（使用 sqlite-vec）
+/// - 如果 sqlite-vec 扩展未加载，会记录警告但不中断迁移
+#[cfg(test)]
+pub fn migrate_v14(conn: &mut Connection) -> Result<()> {
+    migrate_v14_impl(conn)
+}
+
+#[cfg(not(test))]
+pub fn migrate_v14(conn: &mut Connection) -> Result<()> {
+    migrate_v14_impl(conn)
+}
+
+pub fn migrate_v14_impl(conn: &mut Connection) -> Result<()> {
+    // 创建 message_embeddings 虚拟表（使用 sqlite-vec 扩展）
+    // 用于存储消息级别的向量嵌入
+    let vec_table_created = conn.execute(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS message_embeddings USING vec0(
+            embedding float[384],
+            summary text
+        );",
+        [],
+    );
+
+    if let Err(e) = vec_table_created {
+        log::warn!("创建 message_embeddings 虚拟表失败（可能 sqlite-vec 扩展未加载）: {}", e);
+    } else {
+        log::info!("message_embeddings 虚拟表创建成功");
+    }
 
     Ok(())
 }

@@ -55,10 +55,10 @@ fn initialize_connection() -> Result<Arc<Mutex<Connection>>> {
     log::debug!("WAL 模式已启用");
 
     // 加载 sqlite-vec 扩展
-    // if let Err(e) = load_sqlite_vec_extension(&mut conn) {
-    // log::warn!("sqlite-vec 扩展加载失败: {}", e);
+    if let Err(e) = load_sqlite_vec_extension(&mut conn) {
+        log::warn!("sqlite-vec 扩展加载失败: {}", e);
         // 不中断初始化，向量功能将在需要时报错
-    // }
+    }
 
     // 执行数据库迁移
     crate::database::migrations::run_migrations(&mut conn)?;
