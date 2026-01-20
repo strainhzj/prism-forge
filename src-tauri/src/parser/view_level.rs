@@ -18,7 +18,6 @@
 //! - **状态持久化**: 新增 view_level_preferences 表存储每个会话的等级选择
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt;
 use anyhow::Result;
 
@@ -251,27 +250,39 @@ impl MessageFilter {
     ///
     /// # 算法
     ///
-    /// **从后向前扫描 + 向前查找**：
+    /// **步骤 1: 预过滤**
     ///
-    /// 1. 从后向前扫描，找到每个 user
-    /// 2. 遇到 user 时，从当前位置**继续向前**查找该 user 后的最后一个 assistant
-    /// 3. 找到后记录配对，然后继续扫描
+    /// 首先移除不适合问答对的消息：
+    /// - user 类型的 tool_result 消息
+    /// - assistant 类型的 tool_use 消息
+    /// - 包含 <tool_use_error> 或 <system-reminder> 的消息
+    /// - system 类型的消息
     ///
-    /// 这样确保每个 user 与其后的**最后一个** assistant 配对。
+    /// **步骤 2: 从后向前扫描配对**
+    ///
+    /// 1. 从后向前扫描过滤后的消息列表
+    /// 2. 遇到 user 时，向后查找第一个 assistant 作为答案
+    /// 3. 如果遇到另一个 user，停止查找（该 user 没有答案）
     ///
     /// # 示例
     ///
     /// ```text
-    /// 输入: [user1, assistant1, assistant2, user2, assistant3, assistant4]
-    /// 输出: [(user1, assistant2), (user2, assistant4)]
-    ///       说明：每个user与其后的最后一个assistant配对
+    /// 原始消息序列:
+    /// 1:  user (text)              → 保留
+    /// 2:  assistant (text)         → 保留，配对给 1
+    /// 3:  assistant (tool_use)     → 过滤
+    /// 4:  user (tool_result)       → 过滤
+    /// 5:  assistant (text)         → 保留，但没有对应的 question，忽略
+    /// 6:  assistant (tool_use)     → 过滤
+    /// 7:  user (tool_result)       → 过滤
+    /// 8:  assistant (tool_use)     → 过滤
+    /// 9:  user (text)              → 保留
+    /// 10: user (tool_result)       → 过滤
+    /// 11: assistant (text)         → 保留，配对给 9
+    /// 12: user (text)              → 保留，无答案
     ///
-    /// 输入: [user1, assistant1, user2, assistant2]
-    /// 输出: [(user1, assistant1), (user2, assistant2)]
-    ///
-    /// 输入: [user1, thinking, assistant1, user2]
-    /// 输出: [(user1, assistant1), (user2, null)]
-    ///       说明：thinking被跳过，user2没有答案
+    /// 过滤后序列: [1(user), 2(assistant), 5(assistant), 9(user), 11(assistant), 12(user)]
+    /// 问答对: [(1, 2), (9, 11), (12, None)]
     /// ```
     ///
     /// # 参数
@@ -287,30 +298,32 @@ impl MessageFilter {
     /// - 时间复杂度: O(n²)，n 为消息数量（最坏情况）
     /// - 空间复杂度: O(m)，m 为问答对数量
     pub fn extract_qa_pairs(&self, messages: Vec<Message>) -> Vec<QAPair> {
+        // 步骤 1: 预过滤，移除不适合问答对的消息
+        let filtered_messages = self.pre_filter_for_qa(messages);
+
         let mut qa_pairs = Vec::new();
-        let mut last_user_idx: Option<usize> = None;  // 记录最后一个user的位置
 
         // 调试日志
         #[cfg(debug_assertions)]
         {
-            eprintln!("🔍 [extract_qa_pairs] 输入消息数量: {}", messages.len());
+            eprintln!("🔍 [extract_qa_pairs] 原始消息数量: {}, 过滤后: {}", filtered_messages.len(), filtered_messages.len());
             let mut user_count = 0;
             let mut assistant_count = 0;
-            for msg in &messages {
+            for msg in &filtered_messages {
                 match msg.msg_type.as_str() {
                     "user" => user_count += 1,
                     "assistant" => assistant_count += 1,
                     _ => {}
                 }
             }
-            eprintln!("🔍 [extract_qa_pairs] 统计: user={}, assistant={}", user_count, assistant_count);
+            eprintln!("🔍 [extract_qa_pairs] 过滤后统计: user={}, assistant={}", user_count, assistant_count);
         }
 
-        // 从后向前扫描
-        let mut i = messages.len();
+        // 步骤 2: 从后向前扫描，配对 user 和 assistant
+        let mut i = filtered_messages.len();
         while i > 0 {
             i -= 1;
-            let msg = &messages[i];
+            let msg = &filtered_messages[i];
 
             #[cfg(debug_assertions)]
             {
@@ -319,74 +332,74 @@ impl MessageFilter {
 
             match msg.msg_type.as_str() {
                 "user" => {
-                    // 找到一个user，向前查找该user后的最后一个assistant
+                    // 找到一个 user，向后查找第一个 assistant 作为答案
                     let mut answer: Option<Message> = None;
 
-                    // 从当前user之后开始向前找assistant
+                    // 从当前 user 之后开始向后找 assistant
                     let mut j = i + 1;
-                    while j < messages.len() {
-                        let next_msg = &messages[j];
+                    while j < filtered_messages.len() {
+                        let next_msg = &filtered_messages[j];
                         match next_msg.msg_type.as_str() {
                             "assistant" => {
-                                // 检查 assistant 的 summary 是否包含 tool_result
-                                let should_skip = if let Some(ref summary) = next_msg.summary {
-                                    summary.contains("\"type\":\"tool_result\"") ||
-                                    summary.contains("\"type\": \"tool_result\"") ||
-                                    summary.contains("tool_result")
-                                } else {
-                                    false
-                                };
-
-                                if should_skip {
-                                    #[cfg(debug_assertions)]
-                                    {
-                                        eprintln!("   → [j={}] 跳过包含 tool_result 的 assistant", j);
-                                    }
-                                    j += 1;
-                                } else {
-                                    // 找到assistant，更新答案（继续找，直到遇到非assistant）
-                                    answer = Some(next_msg.clone());
-                                    #[cfg(debug_assertions)]
-                                    {
-                                        eprintln!("   → [j={}] 找到assistant", j);
-                                    }
-                                    j += 1;
-                                }
-                            }
-                            "thinking" => {
-                                // 跳过thinking，继续找
+                                // 找到 assistant，记录为答案
+                                answer = Some(next_msg.clone());
                                 #[cfg(debug_assertions)]
                                 {
-                                    eprintln!("   → [j={}] 跳过thinking", j);
+                                    eprintln!("   → [j={}] 找到 assistant 作为答案", j);
                                 }
+                                // 继续查找，可能有更合适的 assistant
                                 j += 1;
+                            }
+                            "user" => {
+                                // 遇到新的 user，停止查找
+                                #[cfg(debug_assertions)]
+                                {
+                                    eprintln!("   → [j={}] 遇到新 user，停止查找", j);
+                                }
+                                break;
                             }
                             _ => {
                                 // 遇到其他类型，停止查找
                                 #[cfg(debug_assertions)]
                                 {
-                                    eprintln!("   → [j={}] 遇到其他类型，停止查找", j);
+                                    eprintln!("   → [j={}] 遇到其他类型 {}，停止查找", j, next_msg.msg_type);
                                 }
                                 break;
                             }
                         }
                     }
 
-                    #[cfg(debug_assertions)]
-                    {
-                        eprintln!("   → 创建问答对: user={}, has_answer={}",
-                            &msg.uuid[..8.min(msg.uuid.len())],
-                            answer.is_some()
-                        );
+                    // 只有当找到答案时才创建问答对
+                    if answer.is_some() {
+                        #[cfg(debug_assertions)]
+                        {
+                            eprintln!("   → 创建问答对: user={}, has_answer=true",
+                                &msg.uuid[..8.min(msg.uuid.len())]
+                            );
+                        }
+                        qa_pairs.push(QAPair {
+                            question: msg.clone(),
+                            answer,
+                            timestamp: msg.timestamp.clone(),
+                        });
+                    } else {
+                        // user 没有找到答案，记录但创建 None 答案
+                        #[cfg(debug_assertions)]
+                        {
+                            eprintln!("   → 创建问答对: user={}, has_answer=false",
+                                &msg.uuid[..8.min(msg.uuid.len())]
+                            );
+                        }
+                        qa_pairs.push(QAPair {
+                            question: msg.clone(),
+                            answer: None,
+                            timestamp: msg.timestamp.clone(),
+                        });
                     }
-                    qa_pairs.push(QAPair {
-                        question: msg.clone(),
-                        answer,
-                        timestamp: msg.timestamp.clone(),
-                    });
                 }
                 _ => {
-                    // 其他类型，跳过
+                    // 其他类型（如 assistant），跳过
+                    // 这些消息会在找到对应的 user 时作为答案被处理
                 }
             }
         }
@@ -405,6 +418,103 @@ impl MessageFilter {
     /// 获取当前等级
     pub fn view_level(&self) -> ViewLevel {
         self.view_level
+    }
+
+    // ========== 问答对过滤辅助方法 ==========
+
+    /// 检测消息是否为 tool_use 类型
+    ///
+    /// 通过解析 summary 中的 JSON 结构来判断消息的实际内容类型。
+    /// 如果 message.content[0].type 为 "tool_use"，则返回 true。
+    fn is_tool_use_message(&self, msg: &Message) -> bool {
+        if let Some(ref summary) = msg.summary {
+            // 尝试解析 JSON
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(summary) {
+                // 检查 message.content 数组
+                if let Some(content) = parsed.get("content").and_then(|v| v.as_array()) {
+                    if !content.is_empty() {
+                        if let Some(content_type) = content[0].get("type").and_then(|v| v.as_str()) {
+                            return content_type == "tool_use";
+                        }
+                    }
+                }
+            }
+
+            // 回退：使用字符串匹配（处理不同的 JSON 格式化风格）
+            return summary.contains("\"type\":\"tool_use\"") ||
+                   summary.contains("\"type\": \"tool_use\"");
+        }
+        false
+    }
+
+    /// 检测消息是否为 tool_result 类型
+    ///
+    /// 通过解析 summary 中的 JSON 结构来判断消息的实际内容类型。
+    /// 如果 message.content[0].type 为 "tool_result"，则返回 true。
+    fn is_tool_result_message(&self, msg: &Message) -> bool {
+        if let Some(ref summary) = msg.summary {
+            // 尝试解析 JSON
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(summary) {
+                // 检查 message.content 数组
+                if let Some(content) = parsed.get("content").and_then(|v| v.as_array()) {
+                    if !content.is_empty() {
+                        if let Some(content_type) = content[0].get("type").and_then(|v| v.as_str()) {
+                            return content_type == "tool_result";
+                        }
+                    }
+                }
+            }
+
+            // 回退：使用字符串匹配（处理不同的 JSON 格式化风格）
+            return summary.contains("\"type\":\"tool_result\"") ||
+                   summary.contains("\"type\": \"tool_result\"");
+        }
+        false
+    }
+
+    /// 检测消息是否包含系统标签
+    ///
+    /// 检查消息内容是否包含 <tool_use_error> 或 <system-reminder> 标签。
+    fn contains_system_tags(&self, msg: &Message) -> bool {
+        if let Some(ref summary) = msg.summary {
+            return summary.contains("<tool_use_error>") ||
+                   summary.contains("<system-reminder>");
+        }
+        false
+    }
+
+    /// 预过滤消息列表用于问答对提取
+    ///
+    /// 移除不适合问答对的消息：
+    /// - user 类型的 tool_result 消息
+    /// - assistant 类型的 tool_use 消息
+    /// - 包含系统标签的消息
+    /// - system 类型的消息
+    ///
+    /// # 参数
+    ///
+    /// - `messages`: 原始消息列表
+    ///
+    /// # 返回
+    ///
+    /// 过滤后的消息列表，只包含适合问答对的消息
+    fn pre_filter_for_qa(&self, messages: Vec<Message>) -> Vec<Message> {
+        messages.into_iter()
+            .filter(|msg| {
+                // 保留 user 类型的消息，但排除 tool_result 和包含系统标签的
+                if msg.msg_type == "user" {
+                    return !self.is_tool_result_message(msg) && !self.contains_system_tags(msg);
+                }
+
+                // 保留 assistant 类型的消息，但排除 tool_use 和包含系统标签的
+                if msg.msg_type == "assistant" {
+                    return !self.is_tool_use_message(msg) && !self.contains_system_tags(msg);
+                }
+
+                // 过滤掉其他类型（system, tool_use, tool_result 等）
+                false
+            })
+            .collect()
     }
 }
 
@@ -595,10 +705,12 @@ mod tests {
         let messages = vec![user_msg1.clone(), thinking_msg, user_msg2.clone(), assistant_msg.clone()];
         let qa_pairs = filter.extract_qa_pairs(messages);
 
-        // 从后向前：assistant -> user2（跳过 thinking），user1 没有答案
+        // 新逻辑：thinking 被预过滤，过滤后序列：[user1, user2, assistant]
+        // 从后向前：assistant -> user2（配对），user1 -> 无答案（遇到 user2 停止）
         assert_eq!(qa_pairs.len(), 2);
         assert_eq!(qa_pairs[0].question.uuid, user_msg1.uuid);
-        assert!(qa_pairs[0].answer.is_none());
+        assert!(qa_pairs[0].answer.is_none()); // user1 无答案
+
         assert_eq!(qa_pairs[1].question.uuid, user_msg2.uuid);
         assert!(qa_pairs[1].answer.is_some());
         assert_eq!(qa_pairs[1].answer.as_ref().unwrap().uuid, assistant_msg.uuid);
@@ -646,6 +758,77 @@ mod tests {
         assert_eq!(qa_pairs[0].answer.as_ref().unwrap().uuid, assistant2.uuid); // 注意是 assistant2
         assert_eq!(qa_pairs[1].question.uuid, user2.uuid);
         assert!(qa_pairs[1].answer.is_none());
+    }
+
+    #[test]
+    fn test_extract_qa_pairs_skip_intermediate_users() {
+        let filter = MessageFilter::new(ViewLevel::QAPairs);
+        let user1 = create_test_message("user", "uuid1", None);
+        let user2 = create_test_message("user", "uuid2", None);
+        let user3 = create_test_message("user", "uuid3", None);
+        let assistant1 = create_test_message("assistant", "uuid4", None);
+        let assistant2 = create_test_message("assistant", "uuid5", None);
+
+        // 多个 user 后跟多个 assistant：user -> user -> user -> assistant -> assistant
+        let messages = vec![
+            user1.clone(),
+            user2.clone(),
+            user3.clone(),
+            assistant1.clone(),
+            assistant2.clone(),
+        ];
+        let qa_pairs = filter.extract_qa_pairs(messages);
+
+        // 新逻辑：只有最后一个 user3 才能配对到 assistant，user1 和 user2 无答案
+        // 过滤后序列：[user1, user2, user3, assistant1, assistant2]
+        // 从后向前：assistant2 -> user3（配对），user2 -> 无答案（遇到 user3），user1 -> 无答案（遇到 user2）
+        assert_eq!(qa_pairs.len(), 3);
+        assert_eq!(qa_pairs[0].question.uuid, user1.uuid);
+        assert!(qa_pairs[0].answer.is_none()); // user1 无答案
+
+        assert_eq!(qa_pairs[1].question.uuid, user2.uuid);
+        assert!(qa_pairs[1].answer.is_none()); // user2 无答案
+
+        assert_eq!(qa_pairs[2].question.uuid, user3.uuid);
+        assert!(qa_pairs[2].answer.is_some()); // user3 有答案
+        assert_eq!(qa_pairs[2].answer.as_ref().unwrap().uuid, assistant2.uuid);
+    }
+
+    #[test]
+    fn test_extract_qa_pairs_mixed_pattern() {
+        let filter = MessageFilter::new(ViewLevel::QAPairs);
+        let user1 = create_test_message("user", "uuid1", None);
+        let assistant1 = create_test_message("assistant", "uuid2", None);
+        let user2 = create_test_message("user", "uuid3", None);
+        let user3 = create_test_message("user", "uuid4", None);
+        let thinking = create_test_message("thinking", "uuid5", None);
+        let assistant2 = create_test_message("assistant", "uuid6", None);
+
+        // 混合模式：user -> assistant -> user -> user -> thinking -> assistant
+        let messages = vec![
+            user1.clone(),
+            assistant1.clone(),
+            user2.clone(),
+            user3.clone(),
+            thinking,
+            assistant2.clone(),
+        ];
+        let qa_pairs = filter.extract_qa_pairs(messages);
+
+        // 新逻辑：thinking 被预过滤，过滤后序列：[user1, assistant1, user2, user3, assistant2]
+        // 从后向前：assistant2 -> user3（配对），user2 -> 无答案（遇到 user3）
+        //          assistant1 -> user1（配对）
+        assert_eq!(qa_pairs.len(), 3);
+        assert_eq!(qa_pairs[0].question.uuid, user1.uuid);
+        assert!(qa_pairs[0].answer.is_some());
+        assert_eq!(qa_pairs[0].answer.as_ref().unwrap().uuid, assistant1.uuid);
+
+        assert_eq!(qa_pairs[1].question.uuid, user2.uuid);
+        assert!(qa_pairs[1].answer.is_none()); // user2 无答案
+
+        assert_eq!(qa_pairs[2].question.uuid, user3.uuid);
+        assert!(qa_pairs[2].answer.is_some()); // user3 有答案
+        assert_eq!(qa_pairs[2].answer.as_ref().unwrap().uuid, assistant2.uuid);
     }
 
     #[test]
