@@ -8,7 +8,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { ChevronLeft, RefreshCw, Filter, ArrowUpDown } from 'lucide-react';
+import { ChevronLeft, RefreshCw, Filter, ArrowUpDown, Repeat } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -90,8 +90,27 @@ export function SessionContentView({
     messages,
     isLoading: contentLoading,
     error: contentError,
-    refresh: refreshContent
+    refresh: refreshContent,
+    forceRefresh,
   } = useSessionContent(sessionInfo.session_id, currentViewLevel, sessionInfo.file_path);
+
+  // ===== 清除缓存并重新加载 =====
+  const [isClearingCache, setIsClearingCache] = useState(false);
+
+  const handleClearCacheAndReload = async () => {
+    setIsClearingCache(true);
+    try {
+      forceRefresh();
+      debugLog('handleClearCacheAndReload', '缓存已清除，正在重新加载');
+    } catch (error) {
+      console.error('[SessionContentView] 清除缓存失败:', error);
+    } finally {
+      // 延迟重置加载状态，确保用户看到反馈
+      setTimeout(() => {
+        setIsClearingCache(false);
+      }, 500);
+    }
+  };
 
   // ===== 排序后的消息列表 =====
   const sortedMessages = useMemo(() => {
@@ -240,6 +259,18 @@ export function SessionContentView({
             title={t(`detailView.sortOrder.${sortOrder}`)}
           >
             <ArrowUpDown className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
+          </Button>
+
+          {/* 清除缓存并重新加载按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleClearCacheAndReload}
+            disabled={contentLoading || isClearingCache}
+            className="shrink-0 hover:bg-[var(--color-app-secondary)]"
+            title={t('detailView.clearCache')}
+          >
+            <Repeat className={cn('h-4 w-4', isClearingCache && 'animate-spin')} style={{ color: 'var(--color-text-primary)' }} />
           </Button>
 
           {/* 导出按钮（下拉菜单） */}

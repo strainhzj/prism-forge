@@ -57,6 +57,7 @@
   "detailView": {
     "title": "Session Details",
     "refresh": "Refresh",
+    "clearCache": "Clear cache and reload",
     "loadFailed": "Load failed",
     "retry": "Retry",
     "noContent": "No content",

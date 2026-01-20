@@ -57,6 +57,7 @@
   "detailView": {
     "title": "会话详情",
     "refresh": "刷新",
+    "clearCache": "清除缓存并重新加载",
     "loadFailed": "加载失败",
     "retry": "重试",
     "noContent": "暂无内容",

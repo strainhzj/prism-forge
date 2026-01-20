@@ -219,6 +219,7 @@ export function useSessionContent(
   viewLevel: ViewLevel,
   filePath?: string
 ) {
+  const queryClient = useQueryClient();
   const isQAPairsMode = viewLevel === ViewLevel.QAPairs;
 
   // 加载消息列表（非问答模式）
@@ -235,6 +236,29 @@ export function useSessionContent(
   // 将问答对转换为消息列表
   const qaMessages = qaPairsQuery.data ? convertQAPairsToMessages(qaPairsQuery.data) : undefined;
 
+  // 清除缓存并强制刷新
+  const forceRefresh = () => {
+    // 失效当前会话和视图等级的所有缓存
+    queryClient.invalidateQueries({
+      queryKey: viewLevelQueryKeys.messages(sessionId, viewLevel),
+    });
+    queryClient.invalidateQueries({
+      queryKey: viewLevelQueryKeys.qaPairs(sessionId, viewLevel),
+    });
+    queryClient.invalidateQueries({
+      queryKey: viewLevelQueryKeys.preference(sessionId),
+    });
+
+    // 开发模式下输出日志
+    if (import.meta.env.DEV) {
+      console.log('[useSessionContent] 强制刷新缓存:', {
+        sessionId,
+        viewLevel,
+        filePath,
+      });
+    }
+  };
+
   return {
     // 数据 - 问答模式使用转换后的消息，否则使用原始消息
     messages: isQAPairsMode ? qaMessages : messagesQuery.data,
@@ -248,6 +272,9 @@ export function useSessionContent(
       messagesQuery.refetch();
       qaPairsQuery.refetch();
     },
+
+    // 强制刷新（清除缓存）
+    forceRefresh,
   };
 }
 
@@ -272,6 +299,9 @@ function convertQAPairsToMessages(qaPairs: import('@/types/viewLevel').QAPair[])
       msgType: pair.question.msgType,
       timestamp: pair.question.timestamp,
       summary: pair.question.summary,
+      offset: 0,
+      length: 0,
+      createdAt: pair.question.timestamp,
     });
 
     // 添加答案消息（如果存在）
@@ -283,6 +313,9 @@ function convertQAPairsToMessages(qaPairs: import('@/types/viewLevel').QAPair[])
         msgType: pair.answer.msgType,
         timestamp: pair.answer.timestamp,
         summary: pair.answer.summary,
+        offset: 0,
+        length: 0,
+        createdAt: pair.answer.timestamp,
       });
     }
   }

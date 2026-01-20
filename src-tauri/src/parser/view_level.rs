@@ -23,6 +23,23 @@ use anyhow::Result;
 
 use crate::database::models::Message;
 
+// ==================== 辅助函数 ====================
+
+/// 安全地将字符串截断到指定字符数
+///
+/// 确保截断位置不会落在 UTF-8 多字节字符的中间
+///
+/// # 参数
+/// * `s` - 要截断的字符串
+/// * `max_chars` - 最大字符数
+///
+/// # 返回
+/// 截断后的字符串（不会超过字符边界）
+fn truncate_str_to_chars(s: &str, max_chars: usize) -> String {
+    // 使用 chars() 迭代器按字符计数
+    s.chars().take(max_chars).collect()
+}
+
 /// 日志读取等级
 ///
 /// 定义五种不同的日志读取等级，按信息完整度排序。
@@ -374,7 +391,7 @@ impl MessageFilter {
                         #[cfg(debug_assertions)]
                         {
                             eprintln!("   → 创建问答对: user={}, has_answer=true",
-                                &msg.uuid[..8.min(msg.uuid.len())]
+                                truncate_str_to_chars(&msg.uuid, 8)
                             );
                         }
                         qa_pairs.push(QAPair {
@@ -387,7 +404,7 @@ impl MessageFilter {
                         #[cfg(debug_assertions)]
                         {
                             eprintln!("   → 创建问答对: user={}, has_answer=false",
-                                &msg.uuid[..8.min(msg.uuid.len())]
+                                truncate_str_to_chars(&msg.uuid, 8)
                             );
                         }
                         qa_pairs.push(QAPair {
@@ -490,6 +507,7 @@ impl MessageFilter {
     /// - assistant 类型的 tool_use 消息
     /// - 包含系统标签的消息
     /// - system 类型的消息
+    /// - 被内容过滤规则标记的消息（通过 FilterConfigManager）
     ///
     /// # 参数
     ///
@@ -499,8 +517,39 @@ impl MessageFilter {
     ///
     /// 过滤后的消息列表，只包含适合问答对的消息
     fn pre_filter_for_qa(&self, messages: Vec<Message>) -> Vec<Message> {
+        use crate::filter_config::FilterConfigManager;
+
         messages.into_iter()
             .filter(|msg| {
+                // ========== 内容过滤检查（集成 FilterConfigManager）==========
+                // 如果消息有 summary，先应用内容过滤规则
+                if let Some(ref summary) = msg.summary {
+                    // 尝试加载 FilterConfigManager 进行内容过滤
+                    match FilterConfigManager::with_default_path() {
+                        Ok(manager) => {
+                            // 如果内容被过滤规则标记，则排除
+                            if manager.should_filter(summary) {
+                                #[cfg(debug_assertions)]
+                                {
+                                    // 安全地截断字符串到字符边界
+                                    let uuid_preview = truncate_str_to_chars(&msg.uuid, 8);
+                                    let summary_preview = truncate_str_to_chars(summary, 50);
+                                    eprintln!("[pre_filter_for_qa] 消息被内容过滤规则排除: uuid={}, summary={:?}",
+                                        uuid_preview,
+                                        summary_preview
+                                    );
+                                }
+                                return false;
+                            }
+                        }
+                        Err(e) => {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[pre_filter_for_qa] FilterConfigManager 加载失败: {}, 跳过内容过滤", e);
+                        }
+                    }
+                }
+
+                // ========== 原有过滤逻辑 ==========
                 // 保留 user 类型的消息，但排除 tool_result 和包含系统标签的
                 if msg.msg_type == "user" {
                     return !self.is_tool_result_message(msg) && !self.contains_system_tags(msg);

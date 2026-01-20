@@ -72,15 +72,43 @@ impl Default for FilterConfig {
                     name: "clear_command".to_string(),
                     enabled: true,
                     match_type: MatchType::Contains,
-                    pattern: "[操作] 调用工具: clear".to_string(),
+                    pattern: "<command-name>/clear</command-name>".to_string(),
                     description: Some("过滤 /clear 命令".to_string()),
                 },
                 FilterRule {
-                    name: "empty_tool_result".to_string(),
+                    name: "local_command_caveat".to_string(),
                     enabled: true,
                     match_type: MatchType::Contains,
-                    pattern: "[工具结果] 输出: ...".to_string(),
-                    description: Some("过滤空的工具输出".to_string()),
+                    pattern: "<local-command-caveat>".to_string(),
+                    description: Some("过滤本地命令警告".to_string()),
+                },
+                FilterRule {
+                    name: "local_command_stdout".to_string(),
+                    enabled: true,
+                    match_type: MatchType::Contains,
+                    pattern: "<local-command-stdout>".to_string(),
+                    description: Some("过滤本地命令输出".to_string()),
+                },
+                FilterRule {
+                    name: "command_name_tag".to_string(),
+                    enabled: true,
+                    match_type: MatchType::Contains,
+                    pattern: "<command-name>".to_string(),
+                    description: Some("过滤命令名称标签".to_string()),
+                },
+                FilterRule {
+                    name: "command_message_tag".to_string(),
+                    enabled: true,
+                    match_type: MatchType::Contains,
+                    pattern: "<command-message>".to_string(),
+                    description: Some("过滤命令消息标签".to_string()),
+                },
+                FilterRule {
+                    name: "command_args_tag".to_string(),
+                    enabled: true,
+                    match_type: MatchType::Contains,
+                    pattern: "<command-args>".to_string(),
+                    description: Some("过滤命令参数标签".to_string()),
                 },
             ],
         }
@@ -258,34 +286,52 @@ impl FilterConfigManager {
 
     /// 检测是否为简单格式的 user 消息
     ///
-    /// 简单格式是指 message 字段直接包含 role 和 content 的 JSON 结构：
-    /// ```json
-    /// {"role":"user","content":"..."}
-    /// ```
+    /// 简单格式有两种可能的结构：
+    /// 1. **顶层结构**（完整 JSONL 条目）：
+    ///    ```json
+    ///    {"message":{"role":"user","content":"..."}}
+    ///    ```
+    /// 2. **消息结构**（message 字段的值）：
+    ///    ```json
+    ///    {"role":"user","content":"..."}
+    ///    ```
     ///
     /// 这种格式表示用户直接输入的文本内容，应该被保护不过滤。
     ///
     /// # 参数
-    /// * `content` - 要检查的内容字符串
+    /// * `content` - 要检查的内容字符串（可能是完整条目或仅 message 字段）
     ///
     /// # 返回
     /// 返回 true 表示是简单格式的 user 消息（应该保护）
     fn is_simple_user_message(content: &str) -> bool {
         // 尝试解析 JSON
         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
-            // 检查是否有 message 字段
+            // 情况 1: 检查是否有顶层 message 字段（完整 JSONL 条目格式）
             if let Some(message) = parsed.get("message") {
-                // 检查 message 是否是对象（不是数组）
                 if let Some(obj) = message.as_object() {
                     // 检查是否有 role 字段且值为 "user"
                     if let Some(role) = obj.get("role").and_then(|v| v.as_str()) {
                         if role == "user" {
                             // 检查是否有 content 字段
-                            if obj.contains_key("content") {
+                            if obj.get("content").is_some() {
                                 #[cfg(debug_assertions)]
-                                eprintln!("[FilterConfigManager] 检测到简单格式 user 消息，保护不过滤");
+                                eprintln!("[FilterConfigManager] 检测到顶层结构简单格式 user 消息，保护不过滤");
                                 return true;
                             }
+                        }
+                    }
+                }
+            }
+
+            // 情况 2: 直接检查是否为 message 字段值（仅 message 对象）
+            // 这个结构是 {"role":"user","content":"..."}
+            if let Some(obj) = parsed.as_object() {
+                if let Some(role) = obj.get("role").and_then(|v| v.as_str()) {
+                    if role == "user" {
+                        if obj.get("content").is_some() {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[FilterConfigManager] 检测到消息对象结构简单格式 user 消息，保护不过滤");
+                            return true;
                         }
                     }
                 }
@@ -300,6 +346,16 @@ impl FilterConfigManager {
     /// 检查消息中是否包含 stop_sequence 字段且不为 null。
     /// 这种标记表示 assistant 的完整回复，应该被保护不过滤。
     ///
+    /// 支持两种格式：
+    /// 1. **顶层结构**（完整 JSONL 条目）：
+    ///    ```json
+    ///    {"message":{"stop_sequence":"end"}}
+    ///    ```
+    /// 2. **消息结构**（message 字段的值）：
+    ///    ```json
+    ///    {"stop_sequence":"end"}
+    ///    ```
+    ///
     /// # 参数
     /// * `content` - 要检查的内容字符串
     ///
@@ -308,19 +364,25 @@ impl FilterConfigManager {
     fn has_explicit_stop_sequence(content: &str) -> bool {
         // 尝试解析 JSON
         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
-            // 检查是否有 message 字段
+            // 情况 1: 检查是否有顶层 message 字段（完整 JSONL 条目格式）
             if let Some(message) = parsed.get("message") {
-                // 检查 message 是否是对象
                 if let Some(obj) = message.as_object() {
-                    // 检查是否有 stop_sequence 字段
                     if let Some(stop_sequence) = obj.get("stop_sequence") {
-                        // 如果 stop_sequence 不是 null，则表示有明确停止标记
                         if !stop_sequence.is_null() {
                             #[cfg(debug_assertions)]
-                            eprintln!("[FilterConfigManager] 检测到明确停止序列标记，保护不过滤: {:?}", stop_sequence);
+                            eprintln!("[FilterConfigManager] 检测到顶层结构停止序列标记，保护不过滤: {:?}", stop_sequence);
                             return true;
                         }
                     }
+                }
+            }
+
+            // 情况 2: 直接检查是否有 stop_sequence 字段（仅 message 对象）
+            if let Some(stop_sequence) = parsed.get("stop_sequence") {
+                if !stop_sequence.is_null() {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[FilterConfigManager] 检测到消息对象停止序列标记，保护不过滤: {:?}", stop_sequence);
+                    return true;
                 }
             }
         }
@@ -402,7 +464,7 @@ mod tests {
         let config = FilterConfig::default();
         assert_eq!(config.version, "1.0");
         assert!(config.enabled);
-        assert_eq!(config.rules.len(), 2);
+        assert_eq!(config.rules.len(), 6);  // 更新为 6 条规则
     }
 
     #[test]
