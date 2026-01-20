@@ -5,7 +5,7 @@
  * 集成多级日志读取功能
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { ChevronLeft, RefreshCw, Download, ArrowUpDown, Repeat } from 'lucide-react';
@@ -76,6 +76,28 @@ export function SessionContentView({
 
   // ===== 排序状态管理 =====
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc'); // 默认倒序
+
+  // ===== 导出下拉框状态管理 =====
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
+
+  // 点击外部关闭下拉框
+  const handleClickOutside = useCallback((event: MouseEvent) => {
+    if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+      setIsExportDropdownOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isExportDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isExportDropdownOpen, handleClickOutside]);
 
   // ===== 多级日志读取功能 =====
   // 使用视图等级管理 hook
@@ -274,34 +296,43 @@ export function SessionContentView({
           </Button>
 
           {/* 导出按钮（下拉菜单） */}
-          <div className="relative group">
+          <div className="relative" ref={exportDropdownRef}>
             <Button
               variant="ghost"
               size="icon"
+              onClick={() => setIsExportDropdownOpen(prev => !prev)}
               className="shrink-0 hover:bg-[var(--color-app-secondary)]"
               title={t('viewLevel.export.title')}
             >
               <Download className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
             </Button>
             {/* 下拉菜单 */}
-            <div className="absolute right-0 top-full mt-1 hidden group-hover:block bg-card border rounded-md shadow-lg z-50" style={{ minWidth: '120px', backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
-              <button
-                onClick={() => handleExport('markdown')}
-                disabled={exportMutation.isPending}
-                className="block w-full text-left px-4 py-2 text-sm hover:bg-accent"
-                style={{ color: 'var(--color-text-primary)' }}
-              >
-                {t('viewLevel.export.formats.markdown')}
-              </button>
-              <button
-                onClick={() => handleExport('json')}
-                disabled={exportMutation.isPending}
-                className="block w-full text-left px-4 py-2 text-sm hover:bg-accent"
-                style={{ color: 'var(--color-text-primary)' }}
-              >
-                {t('viewLevel.export.formats.json')}
-              </button>
-            </div>
+            {isExportDropdownOpen && (
+              <div className="absolute right-0 top-full bg-card border rounded-md shadow-lg z-50" style={{ minWidth: '120px', backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
+                <button
+                  onClick={() => {
+                    handleExport('markdown');
+                    setIsExportDropdownOpen(false);
+                  }}
+                  disabled={exportMutation.isPending}
+                  className="block w-full text-left px-4 py-2 text-sm hover:bg-accent"
+                  style={{ color: 'var(--color-text-primary)' }}
+                >
+                  {t('viewLevel.export.formats.markdown')}
+                </button>
+                <button
+                  onClick={() => {
+                    handleExport('json');
+                    setIsExportDropdownOpen(false);
+                  }}
+                  disabled={exportMutation.isPending}
+                  className="block w-full text-left px-4 py-2 text-sm hover:bg-accent"
+                  style={{ color: 'var(--color-text-primary)' }}
+                >
+                  {t('viewLevel.export.formats.json')}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
