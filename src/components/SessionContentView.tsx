@@ -8,7 +8,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { ChevronLeft, RefreshCw, Filter, ArrowUpDown, Repeat } from 'lucide-react';
+import { ChevronLeft, RefreshCw, Download, ArrowUpDown, Repeat } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -279,9 +279,9 @@ export function SessionContentView({
               variant="ghost"
               size="icon"
               className="shrink-0 hover:bg-[var(--color-app-secondary)]"
-              title="导出"
+              title={t('viewLevel.export.title')}
             >
-              <Filter className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
+              <Download className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
             </Button>
             {/* 下拉菜单 */}
             <div className="absolute right-0 top-full mt-1 hidden group-hover:block bg-card border rounded-md shadow-lg z-50" style={{ minWidth: '120px', backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
@@ -291,7 +291,7 @@ export function SessionContentView({
                 className="block w-full text-left px-4 py-2 text-sm hover:bg-accent"
                 style={{ color: 'var(--color-text-primary)' }}
               >
-                Markdown
+                {t('viewLevel.export.formats.markdown')}
               </button>
               <button
                 onClick={() => handleExport('json')}
@@ -299,7 +299,7 @@ export function SessionContentView({
                 className="block w-full text-left px-4 py-2 text-sm hover:bg-accent"
                 style={{ color: 'var(--color-text-primary)' }}
               >
-                JSON
+                {t('viewLevel.export.formats.json')}
               </button>
             </div>
           </div>
