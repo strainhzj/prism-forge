@@ -72,22 +72,15 @@ impl Default for FilterConfig {
                     name: "clear_command".to_string(),
                     enabled: true,
                     match_type: MatchType::Contains,
-                    pattern: "<command-name>/clear</command-name>".to_string(),
+                    pattern: "[操作] 调用工具: clear".to_string(),
                     description: Some("过滤 /clear 命令".to_string()),
                 },
                 FilterRule {
-                    name: "local_command_caveat".to_string(),
+                    name: "empty_tool_result".to_string(),
                     enabled: true,
                     match_type: MatchType::Contains,
-                    pattern: "<local-command-caveat>".to_string(),
-                    description: Some("过滤本地命令提示信息".to_string()),
-                },
-                FilterRule {
-                    name: "empty_stdout".to_string(),
-                    enabled: true,
-                    match_type: MatchType::Contains,
-                    pattern: "<local-command-stdout></local-command-stdout>".to_string(),
-                    description: Some("过滤空的命令输出".to_string()),
+                    pattern: "[工具结果] 输出: ...".to_string(),
+                    description: Some("过滤空的工具输出".to_string()),
                 },
             ],
         }
@@ -320,7 +313,7 @@ mod tests {
         let config = FilterConfig::default();
         assert_eq!(config.version, "1.0");
         assert!(config.enabled);
-        assert_eq!(config.rules.len(), 3);
+        assert_eq!(config.rules.len(), 2);
     }
 
     #[test]
@@ -328,9 +321,8 @@ mod tests {
         let config = FilterConfig::default();
 
         // 测试过滤规则
-        assert!(config.rules[0].pattern.contains("/clear"));
-        assert!(config.rules[1].pattern.contains("local-command-caveat"));
-        assert!(config.rules[2].pattern.contains("local-command-stdout"));
+        assert!(config.rules[0].pattern.contains("clear"));
+        assert!(config.rules[1].pattern.contains("工具结果"));
     }
 
     #[test]
