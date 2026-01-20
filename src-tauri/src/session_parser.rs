@@ -310,20 +310,47 @@ impl SessionParserService {
     }
 
     /// 判断是否应该过滤该消息（基于内容）
+    ///
+    /// 使用 FilterConfigManager 进行内容过滤，如果配置加载失败则回退到不过滤
     fn should_filter_content(&self, msg: &Message) -> bool {
-        // TODO: 集成 FilterConfigManager
-        // 当前实现简单过滤逻辑
-        if let Some(ref summary) = msg.summary {
-            // 过滤 /clear 命令
-            if summary.trim().starts_with("/clear") {
-                return true;
+        use crate::filter_config::FilterConfigManager;
+
+        // 如果没有摘要内容，不过滤
+        let summary = match &msg.summary {
+            Some(s) => s,
+            None => return false,
+        };
+
+        // 尝试加载 FilterConfigManager
+        match FilterConfigManager::with_default_path() {
+            Ok(manager) => {
+                // 使用配置管理器进行过滤
+                let should_filter = manager.should_filter(summary);
+
+                // 调试日志
+                if self.config.debug && should_filter {
+                    eprintln!(
+                        "[SessionParser] 内容被过滤配置规则过滤: uuid={}",
+                        &msg.uuid[..msg.uuid.len().min(8)]
+                    );
+                }
+
+                should_filter
             }
-            // 过滤系统命令
-            if summary.trim().starts_with("/") && !summary.contains(" ") {
-                return true;
+            Err(e) => {
+                // 配置加载失败时，回退到简单过滤逻辑
+                if self.config.debug {
+                    eprintln!(
+                        "[SessionParser] FilterConfigManager 加载失败: {}, 回退到简单过滤",
+                        e
+                    );
+                }
+
+                // 简单回退逻辑：仅过滤 /clear 命令
+                let trimmed = summary.trim();
+                trimmed.starts_with("/clear") || (trimmed.starts_with("/") && !trimmed.contains(" "))
             }
         }
-        false
     }
 
     /// 应用视图等级过滤（步骤 3）
@@ -420,8 +447,20 @@ mod integration_tests {
 {"timestamp":"2025-01-19T12:00:01Z","type":"assistant","uuid":"msg-002","message":"I'm doing well, thank you!","parentUuid":"msg-001"}
 {"timestamp":"2025-01-19T12:00:02Z","type":"user","uuid":"msg-003","message":"What's the weather like?","parentUuid":"msg-002"}
 {"timestamp":"2025-01-19T12:00:03Z","type":"assistant","uuid":"msg-004","message":"I don't have access to real-time weather data.","parentUuid":"msg-003"}
-{"timestamp":"2025-01-19T12:00:04Z","type":"user","uuid":"msg-005","message":"/clear","parentUuid":"msg-004"}
-{"timestamp":"2025-01-19T12:00:05Z","type":"system","uuid":"msg-006","message":"Conversation cleared","parentUuid":"msg-005"}
+{"timestamp":"2025-01-19T12:00:04Z","type":"user","uuid":"msg-005","message":"Some text with <command-name>/clear</command-name> inside","parentUuid":"msg-004"}
+{"timestamp":"2025-01-19T12:00:05Z","type":"system","uuid":"msg-006","message":"Conversation cleared with <local-command-caveat>","parentUuid":"msg-005"}
+"#.to_string()
+    }
+
+    /// 创建包含可过滤内容的测试数据（用于内容过滤测试）
+    fn create_filterable_test_jsonl_content() -> String {
+        r#"{"timestamp":"2025-01-19T12:00:00Z","type":"user","uuid":"msg-001","message":"Hello, how are you?","parentUuid":null}
+{"timestamp":"2025-01-19T12:00:01Z","type":"assistant","uuid":"msg-002","message":"I'm doing well, thank you!","parentUuid":"msg-001"}
+{"timestamp":"2025-01-19T12:00:02Z","type":"user","uuid":"msg-003","message":"What's the weather like?","parentUuid":"msg-002"}
+{"timestamp":"2025-01-19T12:00:03Z","type":"assistant","uuid":"msg-004","message":"I don't have access to real-time weather data.","parentUuid":"msg-003"}
+{"timestamp":"2025-01-19T12:00:04Z","type":"user","uuid":"msg-005","message":"Execute <command-name>/clear</command-name> now","parentUuid":"msg-004"}
+{"timestamp":"2025-01-19T12:00:05Z","type":"system","uuid":"msg-006","message":"System notification message","parentUuid":"msg-005"}
+{"timestamp":"2025-01-19T12:00:06Z","type":"user","uuid":"msg-007","message":"Warning: <local-command-caveat> this is a local command","parentUuid":"msg-006"}
 "#.to_string()
     }
 
@@ -470,7 +509,7 @@ mod integration_tests {
 
         {
             let mut file = std::fs::File::create(&test_file_path).unwrap();
-            writeln!(file, "{}", create_test_jsonl_content()).unwrap();
+            writeln!(file, "{}", create_filterable_test_jsonl_content()).unwrap();
         }
 
         let file_path = test_file_path.to_str().unwrap();
@@ -489,9 +528,9 @@ mod integration_tests {
         assert!(result.is_ok());
         let parse_result = result.unwrap();
 
-        // 验证 /clear 命令被过滤
+        // 验证包含 <command-name>/clear</command-name> 和 <local-command-caveat> 的消息被过滤
         assert!(parse_result.stats.content_filtered > 0);
-        assert_eq!(parse_result.stats.final_messages, 5); // 6 - 1 (filtered)
+        assert_eq!(parse_result.stats.final_messages, 5); // 7 - 2 (filtered)
     }
 
     #[test]
@@ -531,7 +570,7 @@ mod integration_tests {
 
         {
             let mut file = std::fs::File::create(&test_file_path).unwrap();
-            writeln!(file, "{}", create_test_jsonl_content()).unwrap();
+            writeln!(file, "{}", create_filterable_test_jsonl_content()).unwrap();
         }
 
         let file_path = test_file_path.to_str().unwrap();
