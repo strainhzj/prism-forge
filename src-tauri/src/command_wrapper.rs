@@ -6,7 +6,7 @@
 //! **Feature: fix-command-registration**
 //! **Validates: Requirements 2.1**
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use crate::command_registry::{CommandRegistry, CommandInfo, CommandStatus};
 use crate::startup::StartupManager;
 
@@ -14,7 +14,7 @@ use crate::startup::StartupManager;
 /// 
 /// Tracks command executions and updates the command registry
 pub struct CommandTracker {
-    registry: Arc<Mutex<CommandRegistry>>,
+    registry: Arc<RwLock<CommandRegistry>>,
 }
 
 impl CommandTracker {
@@ -27,14 +27,14 @@ impl CommandTracker {
 
     /// Record that a command was called
     pub fn record_call(&self, command_name: &str) {
-        if let Ok(mut registry) = self.registry.lock() {
+        if let Ok(mut registry) = self.registry.write() {
             registry.record_command_call(command_name);
         }
     }
 
     /// Check if a command is available
     pub fn is_command_available(&self, command_name: &str) -> bool {
-        if let Ok(registry) = self.registry.lock() {
+        if let Ok(registry) = self.registry.read() {
             if let Some(status) = registry.get_command_status(command_name) {
                 return matches!(status, CommandStatus::Registered);
             }
@@ -44,7 +44,7 @@ impl CommandTracker {
 
     /// Get list of available commands
     pub fn get_available_commands(&self) -> Vec<String> {
-        if let Ok(registry) = self.registry.lock() {
+        if let Ok(registry) = self.registry.read() {
             registry.list_available_commands()
         } else {
             Vec::new()
@@ -53,7 +53,7 @@ impl CommandTracker {
 
     /// Get command status
     pub fn get_command_status(&self, command_name: &str) -> Option<CommandStatus> {
-        if let Ok(registry) = self.registry.lock() {
+        if let Ok(registry) = self.registry.read() {
             registry.get_command_status(command_name).cloned()
         } else {
             None
@@ -88,7 +88,7 @@ pub struct CommandValidationResult {
 pub fn validate_all_commands(manager: &StartupManager) -> Vec<CommandValidationResult> {
     let mut results = Vec::new();
     
-    if let Ok(registry) = manager.get_registry().lock() {
+    if let Ok(registry) = manager.get_registry().read() {
         let commands = registry.get_all_commands();
         
         for (name, info) in commands {
@@ -114,7 +114,7 @@ pub fn validate_all_commands(manager: &StartupManager) -> Vec<CommandValidationR
 
 /// Get command not found error with available commands list
 pub fn get_command_not_found_error(command_name: &str, manager: &StartupManager) -> String {
-    let available = if let Ok(registry) = manager.get_registry().lock() {
+    let available = if let Ok(registry) = manager.get_registry().read() {
         registry.list_available_commands()
     } else {
         Vec::new()

@@ -275,6 +275,8 @@ export function useSessionContent(
   return {
     // 数据 - 问答模式使用转换后的消息，否则使用原始消息
     messages: isQAPairsMode ? qaMessages : messagesQuery.data,
+    qaPairs: qaPairsQuery.data,
+    isQAPairsMode,
 
     // 状态
     isLoading: isQAPairsMode ? qaPairsQuery.isLoading : messagesQuery.isLoading,

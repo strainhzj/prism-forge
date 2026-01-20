@@ -7,6 +7,7 @@
 import { MultiLevelViewSelector, MultiLevelViewTabs } from '@/components/MultiLevelViewSelector';
 import { useViewLevelManager, useSessionContent, useExportSessionByLevel } from '@/hooks/useViewLevel';
 import { cn } from '@/lib/utils';
+import type { QAPair } from '@/types/viewLevel';
 
 // 模拟会话 ID（实际使用时从路由或 props 获取）
 const DEMO_SESSION_ID = 'demo-session-123';
@@ -132,7 +133,7 @@ export function MultiLevelViewDemo() {
               // 问答对视图
               <div className="space-y-4">
                 {qaPairs && qaPairs.length > 0 ? (
-                  qaPairs.map((pair, index) => (
+                  qaPairs.map((pair: QAPair, index: number) => (
                     <div key={index} className="p-4 border rounded-lg bg-background">
                       {/* 问题 */}
                       <div className="mb-3">

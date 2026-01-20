@@ -2,7 +2,7 @@
 //!
 //! 根据项目路径解析对应的会话目录
 
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, Component};
 use std::fs;
 use dirs::home_dir;
 use super::converter::WindowsPathConverter;
@@ -106,6 +106,21 @@ impl ClaudePathResolver {
         self.projects_base_dir.join(folder_name)
     }
 
+    fn validate_folder_name(&self, folder_name: &str) -> Result<(), PathResolveError> {
+        if folder_name.is_empty() {
+            return Err(PathResolveError::InvalidFolderName("会话目录名称为空".to_string()));
+        }
+
+        let mut components = Path::new(folder_name).components();
+        match (components.next(), components.next()) {
+            (Some(Component::Normal(_)), None) => Ok(()),
+            _ => Err(PathResolveError::InvalidFolderName(format!(
+                "非法会话目录名称: {}",
+                folder_name
+            ))),
+        }
+    }
+
     /// 列出目录中的所有 .jsonl 文件并按修改时间排序
     fn list_jsonl_files_sorted(&self, dir: &Path) -> Result<Vec<SessionFileInfo>, PathResolveError> {
         let mut sessions = Vec::new();
@@ -180,6 +195,7 @@ impl PathResolver for ClaudePathResolver {
 
         // 步骤 1: 转换路径为文件夹名称
         let folder_name = self.converter.path_to_folder_name(project_path)?;
+        self.validate_folder_name(&folder_name)?;
 
         // 步骤 2: 构建完整路径
         let session_dir = self.build_session_dir_path(&folder_name);

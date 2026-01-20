@@ -19,7 +19,6 @@ import {
   useCurrentSessionFile,
   useProjectLoading,
 } from "./stores/useProjectStore";
-import type { EnhancedPromptRequest } from "@/types/prompt";
 import { cn } from "@/lib/utils";
 import type { EnhancedPrompt } from "@/types/prompt";
 

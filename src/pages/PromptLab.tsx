@@ -88,7 +88,7 @@ export function PromptLab() {
                     <div className="space-y-3">
                       {generatedPrompts.slice(0, 3).map((prompt, index) => (
                         <GeneratedPromptCard
-                          key={`${prompt.original_goal.slice(0, 20)}-${index}`}
+                          key={`${prompt.originalGoal.slice(0, 20)}-${index}`}
                           prompt={prompt}
                         />
                       ))}
@@ -173,7 +173,7 @@ export function PromptLab() {
                       <span className="font-medium">
                         {(
                           generatedPrompts.reduce(
-                            (sum, p) => sum + p.token_stats.savings_percentage,
+                            (sum, p) => sum + p.tokenStats.savingsPercentage,
                             0
                           ) / generatedPrompts.length
                         ).toFixed(1)}
@@ -209,7 +209,7 @@ function GeneratedPromptCard({ prompt }: GeneratedPromptCardProps) {
    */
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(prompt.enhanced_prompt);
+      await navigator.clipboard.writeText(prompt.enhancedPrompt);
     } catch (err) {
       console.error('复制失败:', err);
     }
@@ -220,14 +220,14 @@ function GeneratedPromptCard({ prompt }: GeneratedPromptCardProps) {
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1 min-w-0">
           <p className="font-medium text-sm truncate mb-1">
-            {prompt.original_goal}
+            {prompt.originalGoal}
           </p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{prompt.token_stats.compressed_tokens} tokens</span>
-            {prompt.referenced_sessions.length > 0 && (
+            <span>{prompt.tokenStats.compressedTokens} tokens</span>
+            {prompt.referencedSessions.length > 0 && (
               <>
                 <span>•</span>
-                <span>{prompt.referenced_sessions.length} 个会话</span>
+                <span>{prompt.referencedSessions.length} 个会话</span>
               </>
             )}
           </div>

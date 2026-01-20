@@ -7,7 +7,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-shell';
 import { Settings, FolderOpen, RefreshCw, Check, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -61,7 +60,6 @@ export function FilterConfigSettings({ className }: FilterConfigSettingsProps) {
       setConfig(configData);
       setConfigPath(path);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
       setError(t('filter.error.loadFailed'));
       console.error('加载过滤配置失败:', err);
     } finally {
@@ -204,7 +202,7 @@ export function FilterConfigSettings({ className }: FilterConfigSettingsProps) {
             </div>
           </div>
           <Button
-            variant={config.enabled ? 'default' : 'outline'}
+            variant={config.enabled ? 'primary' : 'outline'}
             size="sm"
             onClick={toggleGlobalFilter}
           >

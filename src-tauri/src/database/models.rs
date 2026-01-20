@@ -858,8 +858,8 @@ mod tests_wave1 {
         // 验证 msg_type 字段不存在（snake_case）
         assert!(parsed.get("msg_type").is_none(), "msg_type 字段不应该存在（应该是 msgType）");
 
-        println!("✅ Message 序列化测试通过");
-        println!("   序列化后的 JSON: {}", json);
+        log::info!("✅ Message 序列化测试通过");
+        log::info!("   序列化后的 JSON: {}", json);
     }
 
     #[test]
@@ -879,7 +879,7 @@ mod tests_wave1 {
         assert_eq!(msg.msg_type, "assistant");
         assert_eq!(msg.uuid, "uuid-456");
 
-        println!("✅ Message 反序列化测试通过");
+        log::info!("✅ Message 反序列化测试通过");
     }
 
     #[test]
@@ -909,8 +909,8 @@ mod tests_wave1 {
         assert!(parsed.get("parentIdx").is_some());
         assert!(parsed.get("createdAt").is_some());
 
-        println!("✅ Message 所有字段 camelCase 测试通过");
-        println!("   完整 JSON:\n{}", json);
+        log::info!("✅ Message 所有字段 camelCase 测试通过");
+        log::info!("   完整 JSON:\n{}", json);
     }
 }
 

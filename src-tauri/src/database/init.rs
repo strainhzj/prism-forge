@@ -151,6 +151,6 @@ mod tests {
         let result: String = guard
             .query_row("SELECT sqlite_version()", [], |row| row.get(0))
             .unwrap();
-        println!("SQLite 版本: {}", result);
+        log::info!("SQLite 版本: {}", result);
     }
 }

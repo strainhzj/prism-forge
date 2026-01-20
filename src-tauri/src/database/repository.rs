@@ -644,35 +644,17 @@ impl SessionRepository {
         let now = Utc::now().to_rfc3339();
 
         self.with_conn_inner(|conn| {
-            // 尝试更新
-            let updated = conn.execute(
-                "UPDATE sessions SET
-                    project_path = ?1,
-                    project_name = ?2,
-                    file_path = ?3,
-                    is_active = ?4,
-                    updated_at = ?5
-                 WHERE session_id = ?6",
-                params![
-                    project_path,
-                    project_name,
-                    file_path,
-                    if is_active { 1 } else { 0 },
-                    now,
-                    session_id,
-                ],
-            )?;
-
-            if updated > 0 {
-                return Ok(updated);
-            }
-
-            // 不存在则插入
-            let inserted = conn.execute(
+            conn.execute(
                 "INSERT INTO sessions (
                     session_id, project_path, project_name, file_path,
                     is_active, created_at, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    project_path = excluded.project_path,
+                    project_name = excluded.project_name,
+                    file_path = excluded.file_path,
+                    is_active = excluded.is_active,
+                    updated_at = excluded.updated_at",
                 params![
                     session_id,
                     project_path,
@@ -682,9 +664,8 @@ impl SessionRepository {
                     now,
                     now,
                 ],
-            )?;
-
-            Ok(inserted)
+            )
+            .map_err(Into::into)
         })
     }
 

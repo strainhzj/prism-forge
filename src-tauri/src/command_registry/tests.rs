@@ -2217,16 +2217,16 @@ mod tests {
                     
                     // Debug information for failing tests
                     if !result.passed && !only_invalid_param_failures {
-                        println!("Command '{}' failed validation despite satisfied dependencies:", command_name);
-                        println!("  Dependencies: {:?}", deps);
-                        println!("  Errors: {:?}", result.errors);
-                        println!("  Test results: {:?}", result.test_results);
+                        log::warn!("Command '{}' failed validation despite satisfied dependencies:", command_name);
+                        log::warn!("  Dependencies: {:?}", deps);
+                        log::warn!("  Errors: {:?}", result.errors);
+                        log::warn!("  Test results: {:?}", result.test_results);
                         
                         // Check if the command exists in registry
                         if !registry.has_command(command_name) {
-                            println!("  Command not found in registry");
+                            log::warn!("  Command not found in registry");
                         } else {
-                            println!("  Command status: {:?}", registry.get_command_status(command_name));
+                            log::warn!("  Command status: {:?}", registry.get_command_status(command_name));
                         }
                     }
                     

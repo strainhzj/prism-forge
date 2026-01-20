@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useTranslation } from "react-i18next";
-import { RefreshCw, Settings, Save, RotateCcw } from "lucide-react";
+import { RefreshCw, Settings, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface OptimizerConfig {
@@ -42,7 +41,6 @@ interface OptimizerConfig {
 }
 
 export function OptimizerSettings() {
-  const { t } = useTranslation('settings');
   const [config, setConfig] = useState<OptimizerConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

@@ -123,7 +123,7 @@ function extractTextFromContent(content: string, isUser: boolean, displayMode: '
     }
 
     // 如果找不到对应字段，返回格式化的原始内容
-    return displayMode === 'raw' ? JSON.stringify(parsed, null, 2) : content;
+    return content;
   } catch {
     // 解析失败，返回原始内容
     return content;

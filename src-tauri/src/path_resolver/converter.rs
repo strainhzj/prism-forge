@@ -33,11 +33,8 @@ impl WindowsPathConverter {
         path.to_string()
     }
 
-    /// 替换反斜杠和其他特殊字符为连字符
-    /// Claude Code 会将所有非字母数字字符都转换为连字符
     fn replace_backslashes(path: &str) -> String {
-        // 先替换反斜杠
-        let with_dashes = path.replace('\\', "-");
+        let with_dashes = path.replace('\\', "-").replace('/', "-");
         // 再替换下划线为连字符（与 Claude Code 的转换逻辑保持一致）
         with_dashes.replace('_', "-")
     }
