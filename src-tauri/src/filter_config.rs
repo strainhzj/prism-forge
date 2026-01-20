@@ -254,6 +254,80 @@ impl FilterConfigManager {
         Ok(())
     }
 
+    // ==================== 内容保护辅助方法 ====================
+
+    /// 检测是否为简单格式的 user 消息
+    ///
+    /// 简单格式是指 message 字段直接包含 role 和 content 的 JSON 结构：
+    /// ```json
+    /// {"role":"user","content":"..."}
+    /// ```
+    ///
+    /// 这种格式表示用户直接输入的文本内容，应该被保护不过滤。
+    ///
+    /// # 参数
+    /// * `content` - 要检查的内容字符串
+    ///
+    /// # 返回
+    /// 返回 true 表示是简单格式的 user 消息（应该保护）
+    fn is_simple_user_message(content: &str) -> bool {
+        // 尝试解析 JSON
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
+            // 检查是否有 message 字段
+            if let Some(message) = parsed.get("message") {
+                // 检查 message 是否是对象（不是数组）
+                if let Some(obj) = message.as_object() {
+                    // 检查是否有 role 字段且值为 "user"
+                    if let Some(role) = obj.get("role").and_then(|v| v.as_str()) {
+                        if role == "user" {
+                            // 检查是否有 content 字段
+                            if obj.contains_key("content") {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[FilterConfigManager] 检测到简单格式 user 消息，保护不过滤");
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
+    /// 检测是否有明确的停止序列标记
+    ///
+    /// 检查消息中是否包含 stop_sequence 字段且不为 null。
+    /// 这种标记表示 assistant 的完整回复，应该被保护不过滤。
+    ///
+    /// # 参数
+    /// * `content` - 要检查的内容字符串
+    ///
+    /// # 返回
+    /// 返回 true 表示有明确的停止序列（应该保护）
+    fn has_explicit_stop_sequence(content: &str) -> bool {
+        // 尝试解析 JSON
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
+            // 检查是否有 message 字段
+            if let Some(message) = parsed.get("message") {
+                // 检查 message 是否是对象
+                if let Some(obj) = message.as_object() {
+                    // 检查是否有 stop_sequence 字段
+                    if let Some(stop_sequence) = obj.get("stop_sequence") {
+                        // 如果 stop_sequence 不是 null，则表示有明确停止标记
+                        if !stop_sequence.is_null() {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[FilterConfigManager] 检测到明确停止序列标记，保护不过滤: {:?}", stop_sequence);
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        false
+    }
+
     /// 检查内容是否应该被过滤
     ///
     /// # 参数
@@ -262,6 +336,21 @@ impl FilterConfigManager {
     /// # 返回
     /// 返回 true 表示应该过滤，false 表示不过滤
     pub fn should_filter(&self, content: &str) -> bool {
+        // ========== 内容保护检查（预处理）==========
+        // 保护条件优先于所有过滤规则
+
+        // 保护 1: 简单格式的 user 消息
+        if Self::is_simple_user_message(content) {
+            return false;
+        }
+
+        // 保护 2: 带明确停止序列的 assistant 消息
+        if Self::has_explicit_stop_sequence(content) {
+            return false;
+        }
+
+        // ========== 原有过滤逻辑 ==========
+
         // 如果全局过滤未启用，不过滤任何内容
         if !self.config.enabled {
             return false;
@@ -333,5 +422,76 @@ mod tests {
 
         let deserialized: MatchType = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, MatchType::Contains);
+    }
+
+    // ==================== 内容保护测试 ====================
+
+    #[test]
+    fn test_is_simple_user_message() {
+        // 测试简单格式的 user 消息（应该被保护）
+        let simple_user = r#"{"message":{"role":"user","content":"Hello world"}}"#;
+        assert!(FilterConfigManager::is_simple_user_message(simple_user));
+
+        // 测试包含额外字段的简单 user 消息
+        let user_with_extra = r#"{"message":{"role":"user","content":"test","timestamp":"2026-01-20"}}"#;
+        assert!(FilterConfigManager::is_simple_user_message(user_with_extra));
+
+        // 测试非 user 角色消息（不应该被保护）
+        let assistant_msg = r#"{"message":{"role":"assistant","content":"Hi there"}}"#;
+        assert!(!FilterConfigManager::is_simple_user_message(assistant_msg));
+
+        // 测试嵌套的 content 数组（不是简单格式）
+        let complex_user = r#"{"message":{"role":"user","content":[{"type":"text","text":"Hello"}]}}"#;
+        // 这种格式虽然有 role 和 content，但 content 是数组，仍然有 content 字段
+        assert!(FilterConfigManager::is_simple_user_message(complex_user));
+
+        // 测试没有 message 字段的内容
+        let no_message = r#"{"type":"user","content":"test"}"#;
+        assert!(!FilterConfigManager::is_simple_user_message(no_message));
+    }
+
+    #[test]
+    fn test_has_explicit_stop_sequence() {
+        // 测试有明确停止序列的消息（应该被保护）
+        let with_stop = r#"{"message":{"stop_sequence":"end"}}"#;
+        assert!(FilterConfigManager::has_explicit_stop_sequence(with_stop));
+
+        // 测试停止序列为空字符串（应该被保护）
+        let with_empty_stop = r#"{"message":{"stop_sequence":""}}"#;
+        assert!(FilterConfigManager::has_explicit_stop_sequence(with_empty_stop));
+
+        // 测试停止序列为 null（不应该被保护）
+        let with_null_stop = r#"{"message":{"stop_sequence":null}}"#;
+        assert!(!FilterConfigManager::has_explicit_stop_sequence(with_null_stop));
+
+        // 测试没有 stop_sequence 字段的消息
+        let no_stop = r#"{"message":{"role":"assistant","content":"Hello"}}"#;
+        assert!(!FilterConfigManager::has_explicit_stop_sequence(no_stop));
+    }
+
+    #[test]
+    fn test_should_filter_with_protection() {
+        // 创建配置管理器
+        let manager = FilterConfigManager::with_default_path().unwrap();
+
+        // 测试 1: 简单 user 消息即使匹配过滤规则也不应被过滤
+        let simple_user_with_command = r#"{"message":{"role":"user","content":"Execute <command-name>/clear</command-name> now"}}"#;
+        assert!(!manager.should_filter(simple_user_with_command),
+            "简单 user 消息应该被保护，即使包含 <command-name>/clear</command-name>");
+
+        // 测试 2: 带停止序列的 assistant 消息即使匹配过滤规则也不应被过滤
+        let assistant_with_stop_and_caveat = r#"{"message":{"stop_sequence":"end","text":"Warning: <local-command-caveat> this is important"}}"#;
+        assert!(!manager.should_filter(assistant_with_stop_and_caveat),
+            "带停止序列的消息应该被保护，即使包含 <local-command-caveat>");
+
+        // 测试 3: 不满足保护条件的消息应该正常过滤
+        let normal_message_with_caveat = "This contains <local-command-caveat> inside";
+        assert!(manager.should_filter(normal_message_with_caveat),
+            "不满足保护条件的消息应该正常被过滤");
+
+        // 测试 4: 不匹配过滤规则的普通消息不过滤
+        let normal_message = "This is a normal message";
+        assert!(!manager.should_filter(normal_message),
+            "不匹配过滤规则的普通消息不应被过滤");
     }
 }
