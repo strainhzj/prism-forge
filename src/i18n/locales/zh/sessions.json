@@ -71,7 +71,20 @@
       "asc": "时间正序"
     },
     "collapse": "收起",
-    "expand": "展开"
+    "expand": "展开",
+    "autoRefresh": {
+      "enable": "开启自动刷新",
+      "disable": "关闭自动刷新",
+      "enabled": "自动刷新：开启 (每5秒)",
+      "disabled": "自动刷新：关闭"
+    },
+    "forceReParse": {
+      "tooltip": "强制重新解析",
+      "confirmTitle": "强制重新解析",
+      "confirmMessage": "这将清除缓存并重新解析整个 JSONL 文件，是否继续？",
+      "confirm": "确认",
+      "cancel": "取消"
+    }
   },
   "viewLevel": {
     "title": "视图等级",

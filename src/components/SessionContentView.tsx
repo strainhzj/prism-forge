@@ -9,7 +9,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
-import { ChevronLeft, RefreshCw, Download, ArrowUpDown, Repeat, Code } from 'lucide-react';
+import { ChevronLeft, RefreshCw, Download, ArrowUpDown, Repeat, Code, RefreshCwOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -83,6 +83,7 @@ export function SessionContentView({
 
   // ===== 导出下拉框状态管理 =====
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
+  const [showForceReParseConfirm, setShowForceReParseConfirm] = useState(false);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
 
   // 点击外部关闭下拉框
@@ -259,8 +260,20 @@ export function SessionContentView({
     }
   };
 
+  // 强制重新解析处理函数
+  const handleForceReParse = async () => {
+    setShowForceReParseConfirm(false);
+    try {
+      await forceRefresh(); // 调用现有的 forceRefresh 函数
+      debugLog('handleForceReParse', '强制重新解析完成');
+    } catch (error) {
+      console.error('[SessionContentView] 强制重新解析失败:', error);
+    }
+  };
+
   return (
-    <div className={cn('flex flex-col h-full', className)} style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+    <>
+      <div className={cn('flex flex-col h-full', className)} style={{ backgroundColor: 'var(--color-bg-primary)' }}>
       {/* 头部 */}
       <div className="flex items-center gap-3 px-6 py-4 border-b" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
         <Button
@@ -292,6 +305,17 @@ export function SessionContentView({
             title={t('detailView.refresh')}
           >
             <RefreshCw className={cn('h-4 w-4', contentLoading && 'animate-spin')} style={{ color: 'var(--color-text-primary)' }} />
+          </Button>
+
+          {/* 强制重新解析按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowForceReParseConfirm(true)}
+            className="shrink-0 hover:bg-[var(--color-app-secondary)]"
+            title={t('detailView.forceReParse.tooltip')}
+          >
+            <RefreshCwOff className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
           </Button>
 
           {/* 内容显示模式切换按钮 */}
@@ -468,5 +492,35 @@ export function SessionContentView({
         </div>
       )}
     </div>
+
+    {/* 强制重新解析确认对话框 */}
+    {showForceReParseConfirm && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-card rounded-lg shadow-lg p-6 max-w-md" style={{ backgroundColor: 'var(--color-bg-card)' }}>
+          <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+            {t('detailView.forceReParse.confirmTitle')}
+          </h3>
+          <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
+            {t('detailView.forceReParse.confirmMessage')}
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowForceReParseConfirm(false)}
+            >
+              {t('detailView.forceReParse.cancel')}
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleForceReParse}
+            >
+              {t('detailView.forceReParse.confirm')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

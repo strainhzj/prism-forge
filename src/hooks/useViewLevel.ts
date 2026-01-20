@@ -83,7 +83,8 @@ export function useMessagesByLevel(
   sessionId: string,
   viewLevel: ViewLevel,
   enabled: boolean = true,
-  filePath?: string
+  filePath?: string,
+  autoRefreshEnabled: boolean = true
 ) {
   return useQuery({
     queryKey: viewLevelQueryKeys.messages(sessionId, viewLevel),
@@ -92,6 +93,7 @@ export function useMessagesByLevel(
     staleTime: 5 * 60 * 1000, // 5 分钟内数据视为新鲜
     gcTime: 10 * 60 * 1000, // 10 分钟后垃圾回收
     retry: 2, // 重试两次
+    refetchInterval: autoRefreshEnabled ? 5000 : false, // 5 秒自动刷新
   });
 }
 
@@ -108,7 +110,8 @@ export function useQAPairsByLevel(
   sessionId: string,
   viewLevel: ViewLevel,
   filePath?: string,
-  enabled: boolean = true
+  enabled: boolean = true,
+  autoRefreshEnabled: boolean = true
 ) {
   return useQuery({
     queryKey: viewLevelQueryKeys.qaPairs(sessionId, viewLevel),
@@ -117,6 +120,7 @@ export function useQAPairsByLevel(
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     retry: 2,
+    refetchInterval: autoRefreshEnabled ? 5000 : false, // 5 秒自动刷新
   });
 }
 
@@ -212,12 +216,14 @@ export function useViewLevelManager(sessionId: string) {
  * @param sessionId - 会话 ID
  * @param viewLevel - 视图等级
  * @param filePath - 可选的文件路径
+ * @param autoRefreshEnabled - 是否启用自动刷新（默认 true）
  * @returns 会话内容的查询结果
  */
 export function useSessionContent(
   sessionId: string,
   viewLevel: ViewLevel,
-  filePath?: string
+  filePath?: string,
+  autoRefreshEnabled: boolean = true
 ) {
   const queryClient = useQueryClient();
   const isQAPairsMode = viewLevel === ViewLevel.QAPairs;
@@ -227,25 +233,32 @@ export function useSessionContent(
     sessionId,
     viewLevel,
     !isQAPairsMode, // 问答模式禁用此查询
-    filePath
+    filePath,
+    autoRefreshEnabled
   );
 
   // 加载问答对（仅问答模式）
-  const qaPairsQuery = useQAPairsByLevel(sessionId, viewLevel, filePath);
+  const qaPairsQuery = useQAPairsByLevel(
+    sessionId,
+    viewLevel,
+    filePath,
+    true,
+    autoRefreshEnabled
+  );
 
   // 将问答对转换为消息列表
   const qaMessages = qaPairsQuery.data ? convertQAPairsToMessages(qaPairsQuery.data) : undefined;
 
   // 清除缓存并强制刷新
-  const forceRefresh = () => {
-    // 失效当前会话和视图等级的所有缓存
-    queryClient.invalidateQueries({
+  const forceRefresh = async () => {
+    // 使用 refetchQueries 替代 invalidateQueries，等待数据重新加载完成
+    await queryClient.refetchQueries({
       queryKey: viewLevelQueryKeys.messages(sessionId, viewLevel),
     });
-    queryClient.invalidateQueries({
+    await queryClient.refetchQueries({
       queryKey: viewLevelQueryKeys.qaPairs(sessionId, viewLevel),
     });
-    queryClient.invalidateQueries({
+    await queryClient.refetchQueries({
       queryKey: viewLevelQueryKeys.preference(sessionId),
     });
 

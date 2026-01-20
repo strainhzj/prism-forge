@@ -71,7 +71,20 @@
       "asc": "Oldest First"
     },
     "collapse": "Collapse",
-    "expand": "Expand"
+    "expand": "Expand",
+    "autoRefresh": {
+      "enable": "Enable Auto Refresh",
+      "disable": "Disable Auto Refresh",
+      "enabled": "Auto Refresh: On (every 5s)",
+      "disabled": "Auto Refresh: Off"
+    },
+    "forceReParse": {
+      "tooltip": "Force Re-parse",
+      "confirmTitle": "Force Re-parse",
+      "confirmMessage": "This will clear the cache and re-parse the entire JSONL file. Continue?",
+      "confirm": "Confirm",
+      "cancel": "Cancel"
+    }
   },
   "viewLevel": {
     "title": "View Level",
