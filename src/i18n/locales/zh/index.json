@@ -23,6 +23,7 @@
     "collapse": "折叠侧边栏",
     "refresh": "刷新",
     "autoRefresh": "自动刷新",
+    "autoRefreshing": "自动刷新中",
     "stopAutoRefresh": "停止自动刷新",
     "startAutoRefresh": "开启自动刷新",
     "logDetail": "日志详情",

@@ -23,6 +23,7 @@
     "collapse": "Collapse Sidebar",
     "refresh": "Refresh",
     "autoRefresh": "Auto Refresh",
+    "autoRefreshing": "Auto Refreshing",
     "stopAutoRefresh": "Stop Auto Refresh",
     "startAutoRefresh": "Start Auto Refresh",
     "logDetail": "Log Details",
