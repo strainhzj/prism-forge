@@ -31,6 +31,10 @@ export interface TimelineMessageListProps {
    */
   messages: MessageNode[];
   /**
+   * 内容显示模式：raw = 显示原始JSON，extracted = 提取content字段
+   */
+  contentDisplayMode?: 'raw' | 'extracted';
+  /**
    * 自定义类名
    */
   className?: string;
@@ -57,33 +61,69 @@ function formatTimestamp(timestamp?: string): string {
 /**
  * 从内容中提取文本
  *
- * 根据角色类型使用不同的提取方式：
- * - 用户消息：直接返回 content 的内容
- * - 助手消息：提取 content 中 text 字段的内容
+ * 根据显示模式和角色类型使用不同的提取方式：
+ * - raw 模式：返回格式化的 JSON 字符串
+ * - extracted 模式：
+ *   - 用户消息：提取 JSON 中 content 字段的内容
+ *     - 如果 content 是字符串，直接返回
+ *     - 如果 content 是数组，提取每个元素的 text 字段并用双换行拼接
+ *   - 助手消息：提取 JSON 中 content 字段的内容
+ *     - 如果 content 是字符串，直接返回
+ *     - 如果 content 是数组，提取每个元素的 text 字段并用双换行拼接
+ *     - 如果有顶级 text 字段，返回 text
  *
  * @param content - 原始内容
  * @param isUser - 是否是用户消息
- * @returns 提取的文本内容
+ * @param displayMode - 显示模式
+ * @returns 显示的文本内容
  */
-function extractTextFromContent(content: string, isUser: boolean): string {
+function extractTextFromContent(content: string, isUser: boolean, displayMode: 'raw' | 'extracted'): string {
   if (!content) return '';
 
-  // 用户消息：直接返回 content 的内容
-  if (isUser) {
-    return content;
-  }
-
-  // 助手消息：提取 text 字段
   try {
     const parsed = JSON.parse(content);
 
-    // 如果是对象且包含 text 字段，返回 text
-    if (typeof parsed === 'object' && parsed !== null && 'text' in parsed) {
-      return String(parsed.text);
+    // raw 模式：返回格式化的 JSON
+    if (displayMode === 'raw') {
+      return JSON.stringify(parsed, null, 2);
     }
 
-    // 否则返回原始内容
-    return content;
+    // extracted 模式：从 JSON 中提取内容
+    if (typeof parsed === 'object' && parsed !== null) {
+      // 用户消息或助手消息：提取 content 字段
+      if ('content' in parsed) {
+        const msgContent = parsed.content;
+
+        // 如果 content 是数组，提取所有 text 字段
+        if (Array.isArray(msgContent)) {
+          const texts = msgContent
+            .map((item: unknown) => {
+              if (typeof item === 'object' && item !== null && 'text' in item) {
+                return String((item as { text: unknown }).text);
+              }
+              return null;
+            })
+            .filter((text): text is string => text !== null);
+          return texts.join('\n\n');
+        }
+
+        // 如果 content 是字符串，直接返回
+        if (typeof msgContent === 'string') {
+          return msgContent;
+        }
+
+        // 如果 content 是其他类型，尝试转字符串
+        return String(msgContent);
+      }
+
+      // 兼容：如果有顶级 text 字段，返回 text（主要针对助手消息）
+      if (!isUser && 'text' in parsed) {
+        return String(parsed.text);
+      }
+    }
+
+    // 如果找不到对应字段，返回格式化的原始内容
+    return displayMode === 'raw' ? JSON.stringify(parsed, null, 2) : content;
   } catch {
     // 解析失败，返回原始内容
     return content;
@@ -113,19 +153,33 @@ interface TimelineMessageItemProps {
   message: MessageNode;
   isExpanded: boolean;
   onToggleExpand: () => void;
+  displayMode: 'raw' | 'extracted';
 }
 
-function TimelineMessageItem({ message, isExpanded, onToggleExpand }: TimelineMessageItemProps) {
+function TimelineMessageItem({ message, isExpanded, onToggleExpand, displayMode }: TimelineMessageItemProps) {
   const isUser = message.role?.toLowerCase() === 'user';
 
-  // 提取内容：用户消息直接显示，助手消息提取 text 字段
-  const rawContent = isExpanded ? (message.fullContent || message.content || '') : (message.content || '');
-  const textContent = extractTextFromContent(rawContent, isUser);
+  // 计算显示的内容（用于判断是否需要展开/折叠）
+  const collapsedRawContent = message.content || '';
+  const expandedRawContent = message.fullContent || message.content || '';
+  const collapsedTextContent = extractTextFromContent(collapsedRawContent, isUser, displayMode);
+  const expandedTextContent = extractTextFromContent(expandedRawContent, isUser, displayMode);
 
-  // 格式化文本（处理 \n）
-  const displayContent = formatTextContent(textContent);
+  // 格式化文本（仅在 extracted 模式下处理 \n，raw 模式保持原样）
+  const collapsedDisplayContent = displayMode === 'extracted' ? formatTextContent(collapsedTextContent) : collapsedTextContent;
+  const expandedDisplayContent = displayMode === 'extracted' ? formatTextContent(expandedTextContent) : expandedTextContent;
 
-  const hasMoreContent = message.fullContent && message.fullContent !== message.content;
+  // 当前显示的内容
+  const displayContent = isExpanded ? expandedDisplayContent : collapsedDisplayContent;
+
+  // 根据实际显示内容长度判断是否需要展开/折叠按钮
+  // 内容长度超过 500 字符，且展开后内容确实不同，才显示展开按钮
+  const hasMoreContent = (
+    message.fullContent &&
+    message.fullContent !== message.content &&
+    expandedDisplayContent.length > 500 &&
+    collapsedDisplayContent !== expandedDisplayContent
+  );
 
   debugLog('render message', {
     id: message.id,
@@ -259,10 +313,11 @@ function TimelineMessageItem({ message, isExpanded, onToggleExpand }: TimelineMe
  */
 export function TimelineMessageList({
   messages,
+  contentDisplayMode = 'raw',
   className,
 }: TimelineMessageListProps) {
   // 🔴 调试：组件渲染时立即输出
-  console.log('🎨 [TimelineMessageList] 组件渲染！！！', { messageCount: messages.length });
+  console.log('🎨 [TimelineMessageList] 组件渲染！！！', { messageCount: messages.length, contentDisplayMode });
 
   // 管理每个消息的展开状态
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
@@ -304,6 +359,7 @@ export function TimelineMessageList({
           message={message}
           isExpanded={expandedMessages.has(message.id)}
           onToggleExpand={() => toggleExpand(message.id)}
+          displayMode={contentDisplayMode}
         />
       ))}
     </div>

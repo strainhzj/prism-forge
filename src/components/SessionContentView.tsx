@@ -9,7 +9,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
-import { ChevronLeft, RefreshCw, Download, ArrowUpDown, Repeat } from 'lucide-react';
+import { ChevronLeft, RefreshCw, Download, ArrowUpDown, Repeat, Code } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -77,6 +77,9 @@ export function SessionContentView({
 
   // ===== 排序状态管理 =====
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc'); // 默认倒序
+
+  // ===== 内容显示模式管理 =====
+  const [contentDisplayMode, setContentDisplayMode] = useState<'raw' | 'extracted'>('raw'); // 默认显示原始JSON
 
   // ===== 导出下拉框状态管理 =====
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
@@ -291,6 +294,20 @@ export function SessionContentView({
             <RefreshCw className={cn('h-4 w-4', contentLoading && 'animate-spin')} style={{ color: 'var(--color-text-primary)' }} />
           </Button>
 
+          {/* 内容显示模式切换按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setContentDisplayMode(prev => prev === 'raw' ? 'extracted' : 'raw');
+            }}
+            disabled={contentLoading}
+            className={cn('shrink-0 hover:bg-[var(--color-app-secondary)]', contentDisplayMode === 'extracted' && 'bg-[var(--color-app-secondary)]')}
+            title={contentDisplayMode === 'raw' ? t('detailView.showExtracted') : t('detailView.showRaw')}
+          >
+            <Code className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
+          </Button>
+
           {/* 排序切换按钮 */}
           <Button
             variant="ghost"
@@ -397,21 +414,39 @@ export function SessionContentView({
           <div className="p-4">
             {sortedMessages && sortedMessages.length > 0 ? (
               <TimelineMessageList
-                messages={sortedMessages.map((msg): MessageNode => ({
-                  id: msg.uuid,
-                  parent_id: msg.parentUuid || null,
-                  depth: 0,
-                  // 使用 msgType 字段
-                  role: msg.msgType || 'unknown',
-                  type: msg.msgType || 'unknown',
-                  content: msg.summary && msg.summary.length > 500
-                    ? msg.summary.substring(0, 500) + '...'
-                    : msg.summary || '无内容',
-                  fullContent: msg.summary || undefined,
-                  timestamp: msg.timestamp,
-                  children: [],
-                  thread_id: null,
-                }))}
+                contentDisplayMode={contentDisplayMode}
+                messages={sortedMessages.map((msg): MessageNode => {
+                  const summary = msg.summary || '无内容';
+
+                  // extracted 模式：直接使用完整内容，不截断
+                  if (contentDisplayMode === 'extracted') {
+                    return {
+                      id: msg.uuid,
+                      parent_id: msg.parentUuid || null,
+                      depth: 0,
+                      role: msg.msgType || 'unknown',
+                      type: msg.msgType || 'unknown',
+                      content: summary,
+                      timestamp: msg.timestamp,
+                      children: [],
+                      thread_id: null,
+                    };
+                  }
+
+                  // raw 模式：保留截断逻辑
+                  return {
+                    id: msg.uuid,
+                    parent_id: msg.parentUuid || null,
+                    depth: 0,
+                    role: msg.msgType || 'unknown',
+                    type: msg.msgType || 'unknown',
+                    content: summary.length > 500 ? summary.substring(0, 500) + '...' : summary,
+                    fullContent: summary,
+                    timestamp: msg.timestamp,
+                    children: [],
+                    thread_id: null,
+                  };
+                })}
               />
             ) : (
               // 空状态

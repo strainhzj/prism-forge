@@ -57,6 +57,8 @@
   "detailView": {
     "title": "Session Details",
     "refresh": "Refresh",
+    "showRaw": "Show Raw JSON",
+    "showExtracted": "Show Extracted Content",
     "clearCache": "Clear cache and reload",
     "loadFailed": "Load failed",
     "retry": "Retry",
