@@ -8,6 +8,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
 import { ChevronLeft, RefreshCw, Download, ArrowUpDown, Repeat } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -215,22 +216,43 @@ export function SessionContentView({
         filePath: sessionInfo.file_path,
       });
 
-      // 创建下载链接
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${sessionInfo.session_id.slice(0, 8)}-${currentViewLevel}.${format === 'markdown' ? 'md' : 'json'}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // 生成默认文件名
+      const defaultFileName = `${sessionInfo.session_id.slice(0, 8)}-${currentViewLevel}.${format === 'markdown' ? 'md' : 'json'}`;
 
-      debugLog('handleExport', '导出成功', format);
+      // 使用 Tauri 原生文件保存对话框
+      const filePath = await save({
+        defaultPath: defaultFileName,
+        filters: [
+          {
+            name: format === 'markdown' ? 'Markdown Files' : 'JSON Files',
+            extensions: [format === 'markdown' ? 'md' : 'json'],
+          },
+          {
+            name: 'All Files',
+            extensions: ['*'],
+          },
+        ],
+      });
+
+      // 用户取消选择
+      if (!filePath) {
+        debugLog('handleExport', '用户取消保存');
+        return;
+      }
+
+      // 写入文件（使用 Tauri 的 fs API）
+      const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+      await writeTextFile(filePath, content);
+
+      debugLog('handleExport', '导出成功', { filePath, format });
+
+      // 显示成功提示
+      const formatLabel = t(`viewLevel.export.formats.${format}`);
+      alert(`${t('viewLevel.export.success')}\n\n${formatLabel}: ${filePath}`);
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       debugLog('handleExport', '导出失败', error);
-      alert(`导出失败: ${error}`);
+      alert(`${t('viewLevel.export.failed')}: ${error}`);
     }
   };
 
