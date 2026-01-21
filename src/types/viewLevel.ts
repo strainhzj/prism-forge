@@ -6,9 +6,11 @@
 
 /**
  * 视图等级枚举
+ *
+ * @deprecated Full 模式已禁用，留待后续优化
  */
 export enum ViewLevel {
-  /** 完整模式 - 显示所有消息类型 */
+  /** 完整模式 - 显示所有消息类型（已禁用） */
   Full = 'full',
   /** 会话模式 - 仅显示用户、助手和思考消息 */
   Conversation = 'conversation',
@@ -19,6 +21,16 @@ export enum ViewLevel {
   /** 仅用户模式 - 仅显示用户输入 */
   UserOnly = 'user_only',
 }
+
+/**
+ * 可用的视图等级列表（排除 Full 模式）
+ */
+export const AVAILABLE_VIEW_LEVELS: ViewLevel[] = [
+  ViewLevel.Conversation,
+  ViewLevel.QAPairs,
+  ViewLevel.AssistantOnly,
+  ViewLevel.UserOnly,
+];
 
 /**
  * 视图等级显示信息

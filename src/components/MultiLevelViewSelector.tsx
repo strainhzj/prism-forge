@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ViewLevel, VIEW_LEVEL_INFO } from '@/types/viewLevel';
+import { ViewLevel, VIEW_LEVEL_INFO, AVAILABLE_VIEW_LEVELS } from '@/types/viewLevel';
 
 export interface MultiLevelViewSelectorProps {
   /**
@@ -71,9 +71,9 @@ export function MultiLevelViewSelector({
 }: MultiLevelViewSelectorProps) {
   const { t } = useTranslation('sessions');
 
-  // 获取所有视图等级选项
+  // 获取所有视图等级选项（排除 Full 模式）
   const viewLevels = useMemo(() => {
-    return Object.values(ViewLevel).map((level) => ({
+    return AVAILABLE_VIEW_LEVELS.map((level) => ({
       ...VIEW_LEVEL_INFO[level],
       value: level,
     }));
@@ -194,7 +194,7 @@ export function MultiLevelViewTabs({
   const { t } = useTranslation('sessions');
 
   const viewLevels = useMemo(() => {
-    return Object.values(ViewLevel).map((level) => ({
+    return AVAILABLE_VIEW_LEVELS.map((level) => ({
       ...VIEW_LEVEL_INFO[level],
       value: level,
     }));
@@ -254,7 +254,7 @@ export function MultiLevelViewDropdown({
   const { t } = useTranslation('sessions');
 
   const viewLevels = useMemo(() => {
-    return Object.values(ViewLevel).map((level) => ({
+    return AVAILABLE_VIEW_LEVELS.map((level) => ({
       ...VIEW_LEVEL_INFO[level],
       value: level,
     }));
