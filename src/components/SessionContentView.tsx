@@ -423,38 +423,17 @@ export function SessionContentView({
             {sortedMessages && sortedMessages.length > 0 ? (
               <TimelineMessageList
                 contentDisplayMode={contentDisplayMode}
-                messages={sortedMessages.map((msg): MessageNode => {
-                  const summary = msg.summary || '无内容';
-
-                  // extracted 模式：直接使用完整内容，不截断
-                  if (contentDisplayMode === 'extracted') {
-                    return {
-                      id: msg.uuid,
-                      parent_id: msg.parentUuid || null,
-                      depth: 0,
-                      role: msg.msgType || 'unknown',
-                      type: msg.msgType || 'unknown',
-                      content: summary,
-                      timestamp: msg.timestamp,
-                      children: [],
-                      thread_id: null,
-                    };
-                  }
-
-                  // raw 模式：保留截断逻辑
-                  return {
-                    id: msg.uuid,
-                    parent_id: msg.parentUuid || null,
-                    depth: 0,
-                    role: msg.msgType || 'unknown',
-                    type: msg.msgType || 'unknown',
-                    content: summary.length > 500 ? summary.substring(0, 500) + '...' : summary,
-                    fullContent: summary,
-                    timestamp: msg.timestamp,
-                    children: [],
-                    thread_id: null,
-                  };
-                })}
+                messages={sortedMessages.map((msg): MessageNode => ({
+                  id: msg.uuid,
+                  parent_id: msg.parentUuid || null,
+                  depth: 0,
+                  role: msg.msgType || 'unknown',
+                  type: msg.msgType || 'unknown',
+                  content: msg.summary || '无内容',
+                  timestamp: msg.timestamp,
+                  children: [],
+                  thread_id: null,
+                }))}
               />
             ) : (
               // 空状态

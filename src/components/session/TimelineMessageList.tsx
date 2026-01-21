@@ -7,6 +7,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { User, Bot, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MessageNode } from '@/types/message';
@@ -157,29 +158,21 @@ interface TimelineMessageItemProps {
 }
 
 function TimelineMessageItem({ message, isExpanded, onToggleExpand, displayMode }: TimelineMessageItemProps) {
+  const { t } = useTranslation('sessions');
   const isUser = message.role?.toLowerCase() === 'user';
 
-  // 计算显示的内容（用于判断是否需要展开/折叠）
-  const collapsedRawContent = message.content || '';
-  const expandedRawContent = message.fullContent || message.content || '';
-  const collapsedTextContent = extractTextFromContent(collapsedRawContent, isUser, displayMode);
-  const expandedTextContent = extractTextFromContent(expandedRawContent, isUser, displayMode);
+  // 从原始内容中提取并格式化文本（最终展示给用户的文本）
+  const rawContent = message.content || '';
+  const extractedText = extractTextFromContent(rawContent, isUser, displayMode);
+  const formattedText = displayMode === 'extracted' ? formatTextContent(extractedText) : extractedText;
 
-  // 格式化文本（仅在 extracted 模式下处理 \n，raw 模式保持原样）
-  const collapsedDisplayContent = displayMode === 'extracted' ? formatTextContent(collapsedTextContent) : collapsedTextContent;
-  const expandedDisplayContent = displayMode === 'extracted' ? formatTextContent(expandedTextContent) : expandedTextContent;
+  // 判断最终展示文本是否超过200字
+  const isTextLong = formattedText.length > 200;
 
-  // 当前显示的内容
-  const displayContent = isExpanded ? expandedDisplayContent : collapsedDisplayContent;
-
-  // 根据实际显示内容长度判断是否需要展开/折叠按钮
-  // 内容长度超过 500 字符，且展开后内容确实不同，才显示展开按钮
-  const hasMoreContent = (
-    message.fullContent &&
-    message.fullContent !== message.content &&
-    expandedDisplayContent.length > 500 &&
-    collapsedDisplayContent !== expandedDisplayContent
-  );
+  // 计算当前显示的内容（折叠时显示前200字+省略号，展开时显示完整内容）
+  const collapsedText = isTextLong ? formattedText.substring(0, 200) + '...' : formattedText;
+  const displayContent = isExpanded ? formattedText : collapsedText;
+  const hasMoreContent = isTextLong;
 
   debugLog('render message', {
     id: message.id,
@@ -258,7 +251,7 @@ function TimelineMessageItem({ message, isExpanded, onToggleExpand, displayMode 
             onClick={onToggleExpand}
             className="ml-auto p-1 rounded transition-colors hover:bg-[var(--color-app-secondary)]"
             style={{ color: 'var(--color-text-secondary)' }}
-            title={isExpanded ? '收起' : '展开'}
+            title={isExpanded ? t('detailView.collapse') : t('detailView.expand')}
           >
             {isExpanded ? (
               <ChevronDown className="w-4 h-4" />
@@ -289,7 +282,7 @@ function TimelineMessageItem({ message, isExpanded, onToggleExpand, displayMode 
           style={{ color: 'var(--color-text-secondary)' }}
           onClick={onToggleExpand}
         >
-          点击查看完整内容...
+          {t('detailView.expand')}
         </div>
       )}
       {isExpanded && hasMoreContent && (
@@ -298,7 +291,7 @@ function TimelineMessageItem({ message, isExpanded, onToggleExpand, displayMode 
           style={{ color: 'var(--color-text-secondary)' }}
           onClick={onToggleExpand}
         >
-          点击收起
+          {t('detailView.collapse')}
         </div>
       )}
     </div>
