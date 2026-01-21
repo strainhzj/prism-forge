@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "predev": "npm run generate:types",
     "build": "tsc && vite build",
+    "prebuild": "npm run generate:types",
     "preview": "vite preview",
     "tauri": "tauri",
+    "generate:types": "cargo run --bin generate_types --manifest-path src-tauri/Cargo.toml",
     "test": "vitest",
     "test:perf": "vitest run src/tests/performance",
     "test:ui": "vitest --ui",
