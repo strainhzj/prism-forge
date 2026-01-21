@@ -159,11 +159,11 @@ mod tests {
     #[test]
     fn test_validate_all_commands() {
         let manager = create_startup_manager();
-        
+
         // Register a test command
         {
             let registry_arc = manager.get_registry();
-            let mut registry = registry_arc.lock().unwrap();
+            let mut registry = registry_arc.write().unwrap();
             let command_info = CommandInfo::new("test_command".to_string()).mark_registered();
             registry.register_command(command_info).unwrap();
         }

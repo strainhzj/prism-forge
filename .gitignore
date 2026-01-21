@@ -25,6 +25,8 @@ dist-ssr
 # Development documentation and plans
 docs/
 .kiro/
+.serena/
+.spec-workflow/
 
 # Development plans and temporary files
 dev_plans/
@@ -39,3 +41,5 @@ dev_plans/
 # UI plugin and test reports
 penpot-ui-plugin/
 playwright-report/
+test-results/
+tests/
