@@ -2,43 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { RefreshCw, Settings, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-interface OptimizerConfig {
-  meta_prompt: {
-    template: string;
-  };
-  llm_params: {
-    temperature: number;
-    max_tokens: number;
-    top_p: number;
-    frequency_penalty: number;
-    presence_penalty: number;
-  };
-  prompt_structure: {
-    structure: string;
-  };
-  fallback: {
-    no_sessions_template: string;
-    llm_error_template: string;
-  };
-  session_context: {
-    max_summary_length: number;
-    include_rating: boolean;
-    include_project: boolean;
-    session_format: string;
-  };
-  compression: {
-    level: string;
-    preserve_formatting: boolean;
-    min_compression_ratio: number;
-  };
-  advanced: {
-    parallel_processing: number;
-    cache_strategy: string;
-    debug: boolean;
-    timeout: number;
-  };
-}
+import type { OptimizerConfig } from "@/types/generated";
 
 export function OptimizerSettings() {
   const [config, setConfig] = useState<OptimizerConfig | null>(null);

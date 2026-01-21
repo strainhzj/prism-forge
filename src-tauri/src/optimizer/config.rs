@@ -4,11 +4,12 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 /// 优化器配置
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct OptimizerConfig {
     pub meta_prompt: MetaPromptConfig,
     pub llm_params: LLMParamsConfig,
@@ -19,12 +20,12 @@ pub struct OptimizerConfig {
     pub advanced: AdvancedConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct MetaPromptConfig {
     pub template: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct LLMParamsConfig {
     pub temperature: f32,
     pub max_tokens: usize,
@@ -33,18 +34,18 @@ pub struct LLMParamsConfig {
     pub presence_penalty: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct PromptStructureConfig {
     pub structure: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct FallbackConfig {
     pub no_sessions_template: String,
     pub llm_error_template: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct SessionContextConfig {
     pub max_summary_length: usize,
     pub include_rating: bool,
@@ -52,18 +53,19 @@ pub struct SessionContextConfig {
     pub session_format: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct CompressionConfig {
     pub level: String,
     pub preserve_formatting: bool,
     pub min_compression_ratio: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct AdvancedConfig {
     pub parallel_processing: usize,
     pub cache_strategy: String,
     pub debug: bool,
+    #[ts(type = "number")]
     pub timeout: u64,
 }
 
