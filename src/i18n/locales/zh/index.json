@@ -29,7 +29,8 @@
     "logDetail": "日志详情",
     "user": "用户",
     "assistant": "助手",
-    "recordCount": "条记录"
+    "recordCount": "条记录",
+    "noLogs": "暂无日志"
   },
   "project": {
     "switchProject": "切换项目",

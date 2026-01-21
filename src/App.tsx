@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -203,6 +203,16 @@ function App() {
     debugLog('handleProjectChange', 'project changed');
     // 移除自动检测，避免覆盖用户选择的会话文件
   }, []);
+
+  // 从文件路径提取 sessionId
+  // 会话文件名格式：claude-UUID.jsonl，提取 UUID 作为 sessionId
+  const sessionId = useMemo(() => {
+    if (!currentSessionFile) return '';
+    const fileName = currentSessionFile.split(/[\\/]/).pop() || '';
+    // 移除 .jsonl 扩展名和 claude- 前缀
+    const match = fileName.match(/claude-([^.]+)\.jsonl$/);
+    return match ? match[1] : fileName.replace(/\.jsonl$/, '');
+  }, [currentSessionFile]);
 
   return (
     <div className="flex h-screen relative" style={{ fontFamily: 'sans-serif', backgroundColor: 'var(--color-bg-primary)' }}>
@@ -440,6 +450,7 @@ function App() {
         >
           <TimelineSidebar
             filePath={currentSessionFile || ''}
+            sessionId={sessionId}
             autoRefreshInterval={3000}
             className="h-full"
             collapsed={rightCollapsed}

@@ -164,8 +164,8 @@ export function useViewLevelManager(sessionId: string) {
   // 保存偏好 mutation
   const savePreferenceMutation = useSaveViewLevelPreference();
 
-  // 当前视图等级（优先使用偏好设置，否则使用默认值 Conversation）
-  const currentViewLevel = preferenceQuery.data ?? ViewLevel.Conversation;
+  // 当前视图等级（优先使用偏好设置，否则使用默认值 QAPairs）
+  const currentViewLevel = preferenceQuery.data ?? ViewLevel.QAPairs;
 
   /**
    * 切换视图等级

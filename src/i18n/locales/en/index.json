@@ -29,7 +29,8 @@
     "logDetail": "Log Details",
     "user": "User",
     "assistant": "Assistant",
-    "recordCount": "records"
+    "recordCount": "records",
+    "noLogs": "No logs yet"
   },
   "project": {
     "switchProject": "Switch Project",

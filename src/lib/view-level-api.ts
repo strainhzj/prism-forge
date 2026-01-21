@@ -108,7 +108,7 @@ export async function getViewLevelPreference(
     return viewLevel;
   } catch (error) {
     // 如果获取失败，返回默认值
-    return ViewLevel.Conversation;
+    return ViewLevel.QAPairs;
   }
 }
 
@@ -152,7 +152,7 @@ export async function exportSessionByLevel(
  */
 export async function loadViewLevelWithDefault(
   sessionId: string,
-  defaultLevel: ViewLevel = ViewLevel.Conversation
+  defaultLevel: ViewLevel = ViewLevel.QAPairs
 ): Promise<ViewLevel> {
   try {
     return await getViewLevelPreference(sessionId);
