@@ -86,6 +86,7 @@ export function useMessagesByLevel(
   filePath?: string,
   autoRefreshEnabled: boolean = true
 ) {
+  const refreshInterval = autoRefreshEnabled ? 15000 : false;
   return useQuery({
     queryKey: viewLevelQueryKeys.messages(sessionId, viewLevel),
     queryFn: () => getMessagesByLevel(sessionId, viewLevel, filePath),
@@ -93,7 +94,7 @@ export function useMessagesByLevel(
     staleTime: 5 * 60 * 1000, // 5 分钟内数据视为新鲜
     gcTime: 10 * 60 * 1000, // 10 分钟后垃圾回收
     retry: 2, // 重试两次
-    refetchInterval: autoRefreshEnabled ? 5000 : false, // 5 秒自动刷新
+    refetchInterval: refreshInterval,
   });
 }
 
@@ -113,6 +114,7 @@ export function useQAPairsByLevel(
   enabled: boolean = true,
   autoRefreshEnabled: boolean = true
 ) {
+  const refreshInterval = autoRefreshEnabled ? 15000 : false;
   return useQuery({
     queryKey: viewLevelQueryKeys.qaPairs(sessionId, viewLevel),
     queryFn: () => getQAPairsByLevel(sessionId, viewLevel, filePath),
@@ -120,7 +122,7 @@ export function useQAPairsByLevel(
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     retry: 2,
-    refetchInterval: autoRefreshEnabled ? 5000 : false, // 5 秒自动刷新
+    refetchInterval: refreshInterval,
   });
 }
 

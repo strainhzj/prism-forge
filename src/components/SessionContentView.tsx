@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { MultiLevelViewDropdown } from '@/components/MultiLevelViewSelector';
 import { TimelineMessageList } from '@/components/session/TimelineMessageList';
 import { useViewLevelManager, useSessionContent, useExportSessionByLevel } from '@/hooks/useViewLevel';
+import { useSessionMonitor } from '@/hooks/useSessionMonitor';
 import type { MessageNode } from '@/types/message';
 
 // ==================== 调试模式 ====================
@@ -119,7 +120,20 @@ export function SessionContentView({
     error: contentError,
     refresh: refreshContent,
     forceRefresh,
-  } = useSessionContent(sessionInfo.session_id, currentViewLevel, sessionInfo.file_path);
+  } = useSessionContent(sessionInfo.session_id, currentViewLevel, sessionInfo.file_path, false);
+
+  const handleAutoRefresh = useCallback(async () => {
+    try {
+      await forceRefresh();
+    } catch (error) {
+      console.error('[SessionContentView] 自动刷新失败:', error);
+    }
+  }, [forceRefresh]);
+
+  useSessionMonitor({
+    debounceMs: 2000,
+    onRefresh: handleAutoRefresh,
+  });
 
   // ===== 清除缓存并重新加载 =====
   const [isClearingCache, setIsClearingCache] = useState(false);

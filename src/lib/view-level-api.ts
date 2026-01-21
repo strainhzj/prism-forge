@@ -5,6 +5,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { getErrorMessage } from '@/lib/utils';
 import { ViewLevel, type Message, type QAPair } from '@/types/viewLevel';
 
 // ==================== 类型定义 ====================
@@ -63,8 +64,9 @@ export async function getMessagesByLevel(
 
     return messages;
   } catch (error) {
-    console.error('获取消息失败:', error);
-    throw new Error(`获取消息失败: ${error}`);
+    const message = getErrorMessage(error);
+    console.error('获取消息失败:', message);
+    throw new Error(`获取消息失败: ${message}`);
   }
 }
 
@@ -90,8 +92,9 @@ export async function getQAPairsByLevel(
 
     return qaPairs;
   } catch (error) {
-    console.error('获取问答对失败:', error);
-    throw new Error(`获取问答对失败: ${error}`);
+    const message = getErrorMessage(error);
+    console.error('获取问答对失败:', message);
+    throw new Error(`获取问答对失败: ${message}`);
   }
 }
 
@@ -111,8 +114,9 @@ export async function saveViewLevelPreference(
       viewLevel,
     });
   } catch (error) {
-    console.error('保存视图等级偏好失败:', error);
-    throw new Error(`保存视图等级偏好失败: ${error}`);
+    const message = getErrorMessage(error);
+    console.error('保存视图等级偏好失败:', message);
+    throw new Error(`保存视图等级偏好失败: ${message}`);
   }
 }
 
@@ -131,7 +135,8 @@ export async function getViewLevelPreference(
     });
     return viewLevel;
   } catch (error) {
-    console.error('获取视图等级偏好失败:', error);
+    const message = getErrorMessage(error);
+    console.error('获取视图等级偏好失败:', message);
     // 如果获取失败，返回默认值
     return ViewLevel.Full;
   }
@@ -161,8 +166,9 @@ export async function exportSessionByLevel(
     });
     return content;
   } catch (error) {
-    console.error('导出会话失败:', error);
-    throw new Error(`导出会话失败: ${error}`);
+    const message = getErrorMessage(error);
+    console.error('导出会话失败:', message);
+    throw new Error(`导出会话失败: ${message}`);
   }
 }
 
@@ -182,7 +188,8 @@ export async function loadViewLevelWithDefault(
   try {
     return await getViewLevelPreference(sessionId);
   } catch (error) {
-    console.warn('加载视图等级偏好失败，使用默认值:', error);
+    const message = getErrorMessage(error);
+    console.warn('加载视图等级偏好失败，使用默认值:', message);
     return defaultLevel;
   }
 }
@@ -202,7 +209,8 @@ export async function applyViewLevel(
     await saveViewLevelPreference(sessionId, viewLevel);
     return true;
   } catch (error) {
-    console.error('应用视图等级失败:', error);
+    const message = getErrorMessage(error);
+    console.error('应用视图等级失败:', message);
     return false;
   }
 }
@@ -227,7 +235,8 @@ export async function batchExportSession(
       const content = await exportSessionByLevel(sessionId, viewLevel, format);
       results.set(format, content);
     } catch (error) {
-      console.error(`导出 ${format} 格式失败:`, error);
+      const message = getErrorMessage(error);
+      console.error(`导出 ${format} 格式失败:`, message);
       // 继续导出其他格式
     }
   }
