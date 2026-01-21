@@ -7,18 +7,19 @@
 
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
+import { useNavigate } from 'react-router-dom';
 import { save } from '@tauri-apps/plugin-dialog';
-import { ChevronLeft, RefreshCw, Download, ArrowUpDown, Code, RefreshCwOff } from 'lucide-react';
+import { ChevronLeft, RefreshCw, Download, ArrowUpDown, Code, RefreshCwOff, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import { MultiLevelViewDropdown } from '@/components/MultiLevelViewSelector';
 import { TimelineMessageList } from '@/components/session/TimelineMessageList';
 import { useViewLevelManager, useSessionContent, useExportSessionByLevel } from '@/hooks/useViewLevel';
 import { useSessionMonitor } from '@/hooks/useSessionMonitor';
+import { useProjectActions, useProjects, useProjectStore } from '@/stores/useProjectStore';
 import type { MessageNode } from '@/types/message';
-import { ViewLevel } from '@/types/viewLevel';
 
 // ==================== 类型定义 ====================
 
@@ -30,6 +31,7 @@ export interface SessionFileInfo {
   file_path: string;
   file_size: number;
   modified_time: string;
+  projectPath: string;
 }
 
 export interface SessionContentViewProps {
@@ -67,6 +69,17 @@ export function SessionContentView({
   className,
 }: SessionContentViewProps) {
   const { t } = useTranslation('sessions');
+  const navigate = useNavigate();
+  const projects = useProjects();
+  const fetchProjects = useProjectStore(state => state.fetchProjects);
+  const { setCurrentProject, setCurrentSessionFile } = useProjectActions();
+
+  // 组件初始化时确保项目列表已加载
+  useEffect(() => {
+    if (!projects || projects.length === 0) {
+      fetchProjects();
+    }
+  }, [projects, fetchProjects]);
 
   // ===== 排序状态管理 =====
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc'); // 默认倒序
@@ -78,6 +91,18 @@ export function SessionContentView({
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
   const [showForceReParseConfirm, setShowForceReParseConfirm] = useState(false);
   const exportDropdownRef = useRef<HTMLDivElement>(null);
+
+  // ===== 跟踪会话确认对话框状态管理 =====
+  const [showTrackConfirm, setShowTrackConfirm] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+
+  // 从 localStorage 读取"下次不再提醒"的设置
+  useEffect(() => {
+    const saved = localStorage.getItem('track-session-dont-show-again');
+    if (saved === 'true') {
+      setDontShowAgain(true);
+    }
+  }, []);
 
   // 点击外部关闭下拉框
   const handleClickOutside = useCallback((event: MouseEvent) => {
@@ -198,6 +223,58 @@ export function SessionContentView({
     }
   };
 
+  // 跟踪会话处理函数
+  const handleTrackSession = useCallback(async () => {
+    // 如果用户勾选了"下次不再提醒"，保存设置
+    if (dontShowAgain) {
+      localStorage.setItem('track-session-dont-show-again', 'true');
+    }
+
+    // 关闭确认对话框
+    setShowTrackConfirm(false);
+
+    // 调试输出
+    console.log('[handleTrackSession] sessionInfo.projectPath:', sessionInfo.projectPath);
+    console.log('[handleTrackSession] projects:', projects);
+
+    // 检查项目列表是否存在
+    if (!projects || projects.length === 0) {
+      alert(t('detailView.trackSession.projectNotFound'));
+      return;
+    }
+
+    // 根据 sessionInfo.projectPath 匹配项目
+    const matchedProject = projects.find((p) => p.path === sessionInfo.projectPath);
+
+    if (!matchedProject) {
+      console.error('[handleTrackSession] 未找到匹配的项目');
+      console.error('[handleTrackSession] 查找的路径:', sessionInfo.projectPath);
+      console.error('[handleTrackSession] 可用项目路径:', projects.map(p => p.path));
+      alert(t('detailView.trackSession.projectNotFound'));
+      return;
+    }
+
+    console.log('[handleTrackSession] 匹配成功:', matchedProject);
+
+    // 设置当前项目和会话文件
+    setCurrentProject(matchedProject);
+    setCurrentSessionFile(sessionInfo.file_path);
+
+    // 跳转到首页
+    navigate('/');
+  }, [dontShowAgain, projects, setCurrentProject, setCurrentSessionFile, sessionInfo.file_path, sessionInfo.projectPath, navigate, t]);
+
+  // 点击跟踪会话按钮
+  const handleTrackSessionClick = useCallback(() => {
+    if (dontShowAgain) {
+      // 如果用户勾选了"下次不再提醒"，直接执行跟踪
+      handleTrackSession();
+    } else {
+      // 否则显示确认对话框
+      setShowTrackConfirm(true);
+    }
+  }, [dontShowAgain, handleTrackSession]);
+
   return (
     <>
       <div className={cn('flex flex-col h-full', className)} style={{ backgroundColor: 'var(--color-bg-primary)' }}>
@@ -220,6 +297,17 @@ export function SessionContentView({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* 跟踪会话按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleTrackSessionClick}
+            className="shrink-0 hover:bg-[var(--color-app-secondary)]"
+            title={t('detailView.trackSession.tooltip')}
+          >
+            <Eye className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
+          </Button>
+
           {/* 刷新按钮 */}
           <Button
             variant="ghost"
@@ -410,6 +498,69 @@ export function SessionContentView({
               onClick={handleForceReParse}
             >
               {t('detailView.forceReParse.confirm')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* 跟踪会话确认对话框 */}
+    {showTrackConfirm && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        {/* 背景遮罩 */}
+        <div
+          className="absolute inset-0 bg-black/80"
+          onClick={() => setShowTrackConfirm(false)}
+        />
+
+        {/* 对话框内容 */}
+        <div
+          className="relative z-50 grid w-full max-w-lg gap-4 border p-6 shadow-lg sm:rounded-lg"
+          style={{
+            backgroundColor: 'var(--color-bg-card)',
+            borderColor: 'var(--color-border-light)',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)'
+          }}
+        >
+          {/* 标题 */}
+          <h3 className="text-lg font-semibold leading-none tracking-tight" style={{ color: 'var(--color-text-primary)' }}>
+            {t('detailView.trackSession.confirmTitle')}
+          </h3>
+
+          {/* 描述 */}
+          <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+            {t('detailView.trackSession.confirmMessage')}
+          </p>
+
+          {/* 复选框 */}
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+            <Checkbox
+              id="dont-show-again"
+              checked={dontShowAgain}
+              onCheckedChange={(checked) => setDontShowAgain(checked as boolean)}
+            />
+            <label
+              htmlFor="dont-show-again"
+              className="text-sm cursor-pointer select-none user-select-none flex-1"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              {t('detailView.trackSession.dontShowAgain')}
+            </label>
+          </div>
+
+          {/* 按钮区域 */}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowTrackConfirm(false)}
+            >
+              {t('detailView.trackSession.cancel')}
+            </Button>
+            <Button
+              onClick={handleTrackSession}
+              style={{ backgroundColor: 'var(--color-accent-warm)' }}
+            >
+              {t('detailView.trackSession.confirm')}
             </Button>
           </div>
         </div>

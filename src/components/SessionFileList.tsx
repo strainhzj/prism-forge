@@ -38,6 +38,8 @@ export interface SessionFileInfo {
   file_path: string;
   file_size: number;
   modified_time: string;
+  /** 项目路径（所属监控目录路径） */
+  projectPath: string;
   /** 会话摘要（从 .jsonl 文件读取，向后兼容） */
   summary?: string;
   /** 显示名称（智能提取，优先使用） */

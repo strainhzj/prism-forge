@@ -61,7 +61,7 @@ export function useSaveViewLevelPreference() {
   return useMutation({
     mutationFn: ({ sessionId, viewLevel }: { sessionId: string; viewLevel: ViewLevel }) =>
       saveViewLevelPreference(sessionId, viewLevel),
-    onSuccess: (data, variables) => {
+    onSuccess: (_data, variables) => {
       // 成功后直接更新缓存，不触发 refetch
       queryClient.setQueryData(
         viewLevelQueryKeys.preference(variables.sessionId),

@@ -84,6 +84,15 @@
       "confirmMessage": "这将清除缓存并重新解析整个 JSONL 文件，是否继续？",
       "confirm": "确认",
       "cancel": "取消"
+    },
+    "trackSession": {
+      "tooltip": "跟踪此会话",
+      "confirmTitle": "跟踪此会话",
+      "confirmMessage": "跳转到首页并开始跟踪此会话，是否继续？",
+      "confirm": "确认",
+      "cancel": "取消",
+      "dontShowAgain": "下次不再提醒",
+      "projectNotFound": "未找到对应的项目，请确保该项目仍在监控列表中"
     }
   },
   "viewLevel": {

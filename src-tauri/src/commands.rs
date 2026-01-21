@@ -2183,6 +2183,9 @@ pub struct SessionFileInfo {
     pub file_size: u64,
     /// 修改时间（RFC3339）
     pub modified_time: String,
+    /// 项目路径（所属监控目录路径）
+    #[serde(rename = "projectPath")]
+    pub project_path: String,
     /// 会话摘要（从 .jsonl 文件读取，向后兼容）
     #[serde(rename = "summary")]
     pub summary: Option<String>,
@@ -2315,6 +2318,7 @@ pub async fn get_sessions_by_monitored_directory(
                 file_path: info.full_path.to_string_lossy().to_string(),
                 file_size: info.file_size,
                 modified_time: info.modified_time.clone(),
+                project_path: monitored_path.clone(), // 添加项目路径
                 summary, // 向后兼容
                 display_name,
                 name_source,

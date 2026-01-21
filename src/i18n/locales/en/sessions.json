@@ -84,6 +84,15 @@
       "confirmMessage": "This will clear the cache and re-parse the entire JSONL file. Continue?",
       "confirm": "Confirm",
       "cancel": "Cancel"
+    },
+    "trackSession": {
+      "tooltip": "Track this session",
+      "confirmTitle": "Track this session",
+      "confirmMessage": "Navigate to homepage and start tracking this session. Continue?",
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "dontShowAgain": "Don't show again",
+      "projectNotFound": "Cannot find the corresponding project. Please make sure it is still in the monitoring list"
     }
   },
   "viewLevel": {
