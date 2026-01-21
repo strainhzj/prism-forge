@@ -2833,7 +2833,7 @@ pub async fn cmd_save_view_level_preference(
 /// - `session_id`: 会话 ID
 ///
 /// # 返回
-/// 视图等级，如果不存在则返回默认值 Full
+/// 视图等级，如果不存在则返回默认值 Conversation
 #[tauri::command]
 pub async fn cmd_get_view_level_preference(
     session_id: String,

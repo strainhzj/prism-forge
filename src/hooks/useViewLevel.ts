@@ -61,11 +61,12 @@ export function useSaveViewLevelPreference() {
   return useMutation({
     mutationFn: ({ sessionId, viewLevel }: { sessionId: string; viewLevel: ViewLevel }) =>
       saveViewLevelPreference(sessionId, viewLevel),
-    onSuccess: (_, variables) => {
-      // 成功后刷新偏好缓存
-      queryClient.invalidateQueries({
-        queryKey: viewLevelQueryKeys.preference(variables.sessionId),
-      });
+    onSuccess: (data, variables) => {
+      // 成功后直接更新缓存，不触发 refetch
+      queryClient.setQueryData(
+        viewLevelQueryKeys.preference(variables.sessionId),
+        variables.viewLevel
+      );
     },
   });
 }
@@ -163,24 +164,22 @@ export function useViewLevelManager(sessionId: string) {
   // 保存偏好 mutation
   const savePreferenceMutation = useSaveViewLevelPreference();
 
-  // 当前视图等级（优先使用偏好设置，否则使用默认值）
-  const currentViewLevel = preferenceQuery.data ?? ViewLevel.Full;
+  // 当前视图等级（优先使用偏好设置，否则使用默认值 Conversation）
+  const currentViewLevel = preferenceQuery.data ?? ViewLevel.Conversation;
 
   /**
    * 切换视图等级
    */
   const changeViewLevel = async (newLevel: ViewLevel) => {
-    // 先失效旧的视图等级的查询缓存
+    // 立即更新本地缓存，确保 currentViewLevel 立即变化
+    queryClient.setQueryData(
+      viewLevelQueryKeys.preference(sessionId),
+      newLevel
+    );
+
+    // 失效旧的视图等级的查询缓存
     queryClient.invalidateQueries({
       queryKey: viewLevelQueryKeys.messages(sessionId, currentViewLevel),
-    });
-
-    // 保存偏好设置（异步，不阻塞）
-    savePreferenceMutation.mutateAsync({
-      sessionId,
-      viewLevel: newLevel,
-    }).catch((error) => {
-      console.error('[useViewLevelManager] 保存视图等级偏好失败:', error);
     });
 
     // 失效新的视图等级的查询缓存，触发重新加载
@@ -188,10 +187,10 @@ export function useViewLevelManager(sessionId: string) {
       queryKey: viewLevelQueryKeys.messages(sessionId, newLevel),
     });
 
-    // 失效偏好查询缓存，确保 currentViewLevel 更新
-    queryClient.invalidateQueries({
-      queryKey: viewLevelQueryKeys.preference(sessionId),
-    });
+    // 保存偏好设置（异步，不阻塞）
+    savePreferenceMutation.mutate(
+      { sessionId, viewLevel: newLevel }
+    );
   };
 
   return {
@@ -244,7 +243,7 @@ export function useSessionContent(
     sessionId,
     viewLevel,
     filePath,
-    true,
+    isQAPairsMode, // 仅在问答模式下启用
     autoRefreshEnabled
   );
 
@@ -263,15 +262,6 @@ export function useSessionContent(
     await queryClient.refetchQueries({
       queryKey: viewLevelQueryKeys.preference(sessionId),
     });
-
-    // 开发模式下输出日志
-    if (import.meta.env.DEV) {
-      console.log('[useSessionContent] 强制刷新缓存:', {
-        sessionId,
-        viewLevel,
-        filePath,
-      });
-    }
   };
 
   return {

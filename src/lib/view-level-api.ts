@@ -34,38 +34,12 @@ export async function getMessagesByLevel(
     const messages = await invoke<Message[]>('cmd_get_messages_by_level', {
       sessionId,
       viewLevel,
-      filePath, // 添加可选的文件路径参数
+      filePath,
     });
-
-    // 🔍 调试：检查接收到的原始数据
-    const DEBUG = import.meta.env.DEV;
-    if (DEBUG && messages && messages.length > 0) {
-      console.log('🔍 [getMessagesByLevel] 接收到消息数量:', messages.length);
-      const firstMsg = messages[0];
-
-      console.log('🔍 [getMessagesByLevel] 第一条消息的所有键名:', Object.keys(firstMsg));
-      console.log('🔍 [getMessagesByLevel] 第一条消息详情:');
-      console.log('  - msgType:', firstMsg.msgType);
-      console.log('  - uuid:', firstMsg.uuid);
-      console.log('  - sessionId:', firstMsg.sessionId);
-      console.log('  - parentUuid:', firstMsg.parentUuid);
-      console.log('  - timestamp:', firstMsg.timestamp);
-
-      // 统计所有消息的类型分布
-      const typeCounts: Record<string, number> = {};
-      messages.forEach(msg => {
-        typeCounts[msg.msgType] = (typeCounts[msg.msgType] || 0) + 1;
-      });
-      console.log('🔍 [getMessagesByLevel] 消息类型分布:', typeCounts);
-
-      // 完整输出第一条消息的 JSON（用于对比 Rust 端输出）
-      console.log('🔍 [getMessagesByLevel] 第一条消息完整 JSON:', JSON.stringify(firstMsg, null, 2));
-    }
 
     return messages;
   } catch (error) {
     const message = getErrorMessage(error);
-    console.error('获取消息失败:', message);
     throw new Error(`获取消息失败: ${message}`);
   }
 }
@@ -93,7 +67,6 @@ export async function getQAPairsByLevel(
     return qaPairs;
   } catch (error) {
     const message = getErrorMessage(error);
-    console.error('获取问答对失败:', message);
     throw new Error(`获取问答对失败: ${message}`);
   }
 }
@@ -115,7 +88,6 @@ export async function saveViewLevelPreference(
     });
   } catch (error) {
     const message = getErrorMessage(error);
-    console.error('保存视图等级偏好失败:', message);
     throw new Error(`保存视图等级偏好失败: ${message}`);
   }
 }
@@ -135,10 +107,8 @@ export async function getViewLevelPreference(
     });
     return viewLevel;
   } catch (error) {
-    const message = getErrorMessage(error);
-    console.error('获取视图等级偏好失败:', message);
     // 如果获取失败，返回默认值
-    return ViewLevel.Full;
+    return ViewLevel.Conversation;
   }
 }
 
@@ -162,12 +132,11 @@ export async function exportSessionByLevel(
       sessionId,
       viewLevel,
       format,
-      filePath, // 添加可选的文件路径参数
+      filePath,
     });
     return content;
   } catch (error) {
     const message = getErrorMessage(error);
-    console.error('导出会话失败:', message);
     throw new Error(`导出会话失败: ${message}`);
   }
 }
@@ -183,13 +152,11 @@ export async function exportSessionByLevel(
  */
 export async function loadViewLevelWithDefault(
   sessionId: string,
-  defaultLevel: ViewLevel = ViewLevel.Full
+  defaultLevel: ViewLevel = ViewLevel.Conversation
 ): Promise<ViewLevel> {
   try {
     return await getViewLevelPreference(sessionId);
   } catch (error) {
-    const message = getErrorMessage(error);
-    console.warn('加载视图等级偏好失败，使用默认值:', message);
     return defaultLevel;
   }
 }
@@ -209,8 +176,6 @@ export async function applyViewLevel(
     await saveViewLevelPreference(sessionId, viewLevel);
     return true;
   } catch (error) {
-    const message = getErrorMessage(error);
-    console.error('应用视图等级失败:', message);
     return false;
   }
 }
@@ -235,9 +200,7 @@ export async function batchExportSession(
       const content = await exportSessionByLevel(sessionId, viewLevel, format);
       results.set(format, content);
     } catch (error) {
-      const message = getErrorMessage(error);
-      console.error(`导出 ${format} 格式失败:`, message);
-      // 继续导出其他格式
+      // 导出失败，继续导出其他格式
     }
   }
 

@@ -18,15 +18,7 @@ import { TimelineMessageList } from '@/components/session/TimelineMessageList';
 import { useViewLevelManager, useSessionContent, useExportSessionByLevel } from '@/hooks/useViewLevel';
 import { useSessionMonitor } from '@/hooks/useSessionMonitor';
 import type { MessageNode } from '@/types/message';
-
-// ==================== 调试模式 ====================
-const DEBUG = import.meta.env.DEV;
-
-function debugLog(action: string, ...args: unknown[]) {
-  if (DEBUG) {
-    console.log(`[SessionContentView] ${action}`, ...args);
-  }
-}
+import { ViewLevel } from '@/types/viewLevel';
 
 // ==================== 类型定义 ====================
 
@@ -126,7 +118,7 @@ export function SessionContentView({
     try {
       await forceRefresh();
     } catch (error) {
-      console.error('[SessionContentView] 自动刷新失败:', error);
+      // 自动刷新失败，静默处理
     }
   }, [forceRefresh]);
 
@@ -147,62 +139,6 @@ export function SessionContentView({
 
     return sorted;
   }, [messages, sortOrder]);
-
-  // 调试日志：检查返回的数据
-  useEffect(() => {
-    if (!messages || messages.length === 0) return;
-
-    // 统计所有 msgType 的分布
-    const typeCounts: Record<string, number> = {};
-    messages.forEach(msg => {
-      typeCounts[msg.msgType] = (typeCounts[msg.msgType] || 0) + 1;
-    });
-
-    // 显示前 5 条消息的详细信息
-    const firstFive = messages.slice(0, 5).map(msg => ({
-      uuid: msg.uuid.substring(0, 8),
-      msgType: msg.msgType,
-      summary_preview: msg.summary?.substring(0, 50) || '(empty)',
-      timestamp: msg.timestamp?.substring(11, 19) || '(empty)',
-    }));
-
-    debugLog('useSessionContent', 'messages analysis:', {
-      totalCount: messages.length,
-      typeDistribution: typeCounts,
-      firstFiveMessages: firstFive,
-      viewLevel: currentViewLevel,
-      filePath: sessionInfo.file_path,
-    });
-
-    // 检查是否有 "unknown" 或其他非标准的 msgType
-    const nonStandardTypes = Object.keys(typeCounts).filter(
-      t => !['user', 'assistant', 'system'].includes(t)
-    );
-    if (nonStandardTypes.length > 0) {
-      console.warn('[SessionContentView] 发现非标准消息类型:', nonStandardTypes);
-
-      // 🔍 临时调试：直接读取 JSONL 文件的前几行
-      invoke<string>('read_file_first_lines', {
-        path: sessionInfo.file_path,
-        count: 5
-      }).then(result => {
-        console.log('[SessionContentView] JSONL 前 5 行:');
-        const lines = result.split('\n');
-        lines.forEach((line, i) => {
-          if (line.trim()) {
-            try {
-              const parsed = JSON.parse(line);
-              console.log(`  [${i}]`, parsed);
-            } catch {
-              console.log(`  [${i}] (解析失败):`, line.substring(0, 200));
-            }
-          }
-        });
-      }).catch(() => {
-        console.log('[SessionContentView] read_file_first_lines 不可用，跳过');
-      });
-    }
-  }, [messages, currentViewLevel, sessionInfo.file_path]);
 
   // 导出功能
   const exportMutation = useExportSessionByLevel();
@@ -236,7 +172,6 @@ export function SessionContentView({
 
       // 用户取消选择
       if (!filePath) {
-        debugLog('handleExport', '用户取消保存');
         return;
       }
 
@@ -244,14 +179,11 @@ export function SessionContentView({
       const { writeTextFile } = await import('@tauri-apps/plugin-fs');
       await writeTextFile(filePath, content);
 
-      debugLog('handleExport', '导出成功', { filePath, format });
-
       // 显示成功提示
       const formatLabel = t(`viewLevel.export.formats.${format}`);
       alert(`${t('viewLevel.export.success')}\n\n${formatLabel}: ${filePath}`);
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      debugLog('handleExport', '导出失败', error);
       alert(`${t('viewLevel.export.failed')}: ${error}`);
     }
   };
@@ -260,10 +192,9 @@ export function SessionContentView({
   const handleForceReParse = async () => {
     setShowForceReParseConfirm(false);
     try {
-      await forceRefresh(); // 调用现有的 forceRefresh 函数
-      debugLog('handleForceReParse', '强制重新解析完成');
+      await forceRefresh();
     } catch (error) {
-      console.error('[SessionContentView] 强制重新解析失败:', error);
+      // 强制重新解析失败，静默处理
     }
   };
 
@@ -389,7 +320,7 @@ export function SessionContentView({
         <MultiLevelViewDropdown
           value={currentViewLevel}
           onChange={changeViewLevel}
-          disabled={viewLevelSaving || contentLoading}
+          disabled={viewLevelSaving}
         />
       </div>
 
