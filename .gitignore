@@ -43,3 +43,8 @@ penpot-ui-plugin/
 playwright-report/
 test-results/
 tests/
+
+# Backup files
+*.backup*
+*.before_fix
+*.orig

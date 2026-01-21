@@ -233,9 +233,11 @@ export function SessionContentView({
     // 关闭确认对话框
     setShowTrackConfirm(false);
 
-    // 调试输出
-    console.log('[handleTrackSession] sessionInfo.projectPath:', sessionInfo.projectPath);
-    console.log('[handleTrackSession] projects:', projects);
+    // 仅在开发环境输出调试信息
+    if (import.meta.env.DEV) {
+      console.log('[handleTrackSession] sessionInfo.projectPath:', sessionInfo.projectPath);
+      console.log('[handleTrackSession] projects:', projects);
+    }
 
     // 检查项目列表是否存在
     if (!projects || projects.length === 0) {
@@ -247,14 +249,20 @@ export function SessionContentView({
     const matchedProject = projects.find((p) => p.path === sessionInfo.projectPath);
 
     if (!matchedProject) {
-      console.error('[handleTrackSession] 未找到匹配的项目');
-      console.error('[handleTrackSession] 查找的路径:', sessionInfo.projectPath);
-      console.error('[handleTrackSession] 可用项目路径:', projects.map(p => p.path));
+      // 仅在开发环境输出详细错误信息
+      if (import.meta.env.DEV) {
+        console.error('[handleTrackSession] 未找到匹配的项目');
+        console.error('[handleTrackSession] 查找的路径:', sessionInfo.projectPath);
+        console.error('[handleTrackSession] 可用项目路径:', projects.map(p => p.path));
+      }
       alert(t('detailView.trackSession.projectNotFound'));
       return;
     }
 
-    console.log('[handleTrackSession] 匹配成功:', matchedProject);
+    // 仅在开发环境输出成功日志
+    if (import.meta.env.DEV) {
+      console.log('[handleTrackSession] 匹配成功:', matchedProject);
+    }
 
     // 设置当前项目和会话文件
     setCurrentProject(matchedProject);

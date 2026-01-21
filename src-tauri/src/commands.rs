@@ -2029,6 +2029,19 @@ pub fn reload_optimizer_config() -> Result<String, CommandError> {
     // 配置验证通过
     eprintln!("[reload_optimizer_config] 配置文件验证成功: {:?}", config_path);
 
+    // 获取全局配置管理器并重新加载配置
+    let manager = crate::optimizer::config::get_config_manager()
+        .ok_or_else(|| CommandError {
+            message: "配置管理器未初始化".to_string(),
+        })?;
+
+    manager.reload()
+        .map_err(|e| CommandError {
+            message: format!("重新加载配置失败: {}", e),
+        })?;
+
+    eprintln!("[reload_optimizer_config] 配置已成功应用到运行时");
+
     Ok("配置已重新加载".to_string())
 }
 
@@ -2037,19 +2050,10 @@ pub fn reload_optimizer_config() -> Result<String, CommandError> {
 /// 返回当前优化器配置的 JSON 表示
 #[tauri::command]
 pub fn get_optimizer_config() -> Result<String, CommandError> {
-    use crate::optimizer::config::ConfigManager;
-    use std::path::PathBuf;
-
-    let config_path = std::env::current_dir()
-        .map_err(|e| CommandError {
-            message: format!("获取当前目录失败: {}", e),
-        })?
-        .join("src-tauri")
-        .join("optimizer_config.toml");
-
-    let manager = ConfigManager::new(config_path)
-        .map_err(|e| CommandError {
-            message: format!("创建配置管理器失败: {}", e),
+    // 使用全局配置管理器
+    let manager = crate::optimizer::config::get_config_manager()
+        .ok_or_else(|| CommandError {
+            message: "配置管理器未初始化".to_string(),
         })?;
 
     let config = manager.get_config();

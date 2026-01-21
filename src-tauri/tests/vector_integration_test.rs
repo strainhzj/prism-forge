@@ -16,7 +16,7 @@ mod integration_tests {
     #[test]
     fn test_vector_repository_crud() {
         // 创建内存数据库
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
         conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
 
         // 执行迁移

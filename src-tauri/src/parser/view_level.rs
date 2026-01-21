@@ -219,18 +219,7 @@ impl MessageFilter {
             ViewLevel::AssistantOnly => message.msg_type == "assistant",
             ViewLevel::UserOnly => {
                 // UserOnly: 只包含 user 类型，且排除 tool_result 类型
-                if message.msg_type != "user" {
-                    return false;
-                }
-
-                // 使用 content_type 准确判断是否为 tool_result
-                if let Some(ref content_type) = message.content_type {
-                    if content_type == "tool_result" {
-                        return false;
-                    }
-                }
-
-                true
+                message.msg_type == "user" && !self.is_tool_result_message(message)
             }
         }
     }
@@ -520,32 +509,28 @@ impl MessageFilter {
     fn pre_filter_for_qa(&self, messages: Vec<Message>) -> Vec<Message> {
         use crate::filter_config::FilterConfigManager;
 
+        // 在迭代器之前创建一次 FilterConfigManager，避免为每条消息重复创建
+        let filter_mgr = FilterConfigManager::with_default_path().ok();
+
         messages.into_iter()
             .filter(|msg| {
                 // ========== 内容过滤检查（集成 FilterConfigManager）==========
                 // 如果消息有 summary，先应用内容过滤规则
                 if let Some(ref summary) = msg.summary {
-                    // 尝试加载 FilterConfigManager 进行内容过滤
-                    match FilterConfigManager::with_default_path() {
-                        Ok(manager) => {
-                            // 如果内容被过滤规则标记，则排除
-                            if manager.should_filter(summary) {
-                                #[cfg(debug_assertions)]
-                                {
-                                    // 安全地截断字符串到字符边界
-                                    let uuid_preview = truncate_str_to_chars(&msg.uuid, 8);
-                                    let summary_preview = truncate_str_to_chars(summary, 50);
-                                    eprintln!("[pre_filter_for_qa] 消息被内容过滤规则排除: uuid={}, summary={:?}",
-                                        uuid_preview,
-                                        summary_preview
-                                    );
-                                }
-                                return false;
-                            }
-                        }
-                        Err(e) => {
+                    // 复用已创建的 manager
+                    if let Some(ref manager) = filter_mgr {
+                        if manager.should_filter(summary) {
                             #[cfg(debug_assertions)]
-                            eprintln!("[pre_filter_for_qa] FilterConfigManager 加载失败: {}, 跳过内容过滤", e);
+                            {
+                                // 安全地截断字符串到字符边界
+                                let uuid_preview = truncate_str_to_chars(&msg.uuid, 8);
+                                let summary_preview = truncate_str_to_chars(summary, 50);
+                                eprintln!("[pre_filter_for_qa] 消息被内容过滤规则排除: uuid={}, summary={:?}",
+                                    uuid_preview,
+                                    summary_preview
+                                );
+                            }
+                            return false;
                         }
                     }
                 }

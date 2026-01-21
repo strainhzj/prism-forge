@@ -77,6 +77,9 @@
   --color-settings-toggle-shadow: rgba(0, 0, 0, 0.2);  /* 开关阴影 */
   --color-settings-error: #EF4444;                    /* 错误文字颜色 */
   --color-settings-input-disabled: #F3F4F6;           /* 禁用输入框背景 */
+
+  /* 滚动条阴影颜色 - 浅色模式 */
+  --color-accent-warm-shadow: rgba(245, 158, 11, 0.4);
 }
 
 /* ==================== 暗色模式 ==================== */
@@ -155,6 +158,9 @@
   --color-settings-toggle-shadow: rgba(0, 0, 0, 0.4);  /* 开关阴影（更深） */
   --color-settings-error: #F87171;                    /* 错误文字颜色（更亮） */
   --color-settings-input-disabled: #2D2D2D;           /* 禁用输入框背景 */
+
+  /* 滚动条阴影颜色 - 暗色模式 */
+  --color-accent-warm-shadow: rgba(255, 107, 107, 0.4);
 }
 
 /* ==================== 系统主题检测（降级支持） ==================== */
@@ -335,12 +341,7 @@ body {
 /* 滚动条滑块悬停状态 */
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--color-accent-warm);
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
-}
-
-/* 暗色模式下的滑块悬停效果增强 */
-:root.dark ::-webkit-scrollbar-thumb:hover {
-  box-shadow: 0 0 8px rgba(255, 107, 107, 0.4);
+  box-shadow: 0 0 8px var(--color-accent-warm-shadow);
 }
 
 /* 滚动条角落（水平和垂直滚动条交汇处） */

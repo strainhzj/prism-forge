@@ -203,9 +203,15 @@ impl MessageNode {
                     return (None, None);
                 }
 
-                // 截断版本
-                let content = if trimmed.len() > 500 {
-                    Some(format!("{}...", &trimmed[..500]))
+                // 截断版本（安全的 UTF-8 处理）
+                let content = if trimmed.chars().count() > 500 {
+                    // 找到第 500 个字符的字节边界
+                    let safe_end = trimmed
+                        .char_indices()
+                        .nth(500)
+                        .map(|(idx, _)| idx)
+                        .unwrap_or(trimmed.len());
+                    Some(format!("{}...", &trimmed[..safe_end]))
                 } else {
                     Some(trimmed.to_string())
                 };
