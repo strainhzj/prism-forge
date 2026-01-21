@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 14;
+const CURRENT_DB_VERSION: i32 = 15;
 
 /// 初始化数据库
 ///
@@ -83,6 +83,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             12 => migrate_v12(conn)?,
             13 => migrate_v13(conn)?,
             14 => migrate_v14(conn)?,
+            15 => migrate_v15(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -774,6 +775,44 @@ pub fn migrate_v14_impl(conn: &mut Connection) -> Result<()> {
         log::warn!("创建 message_embeddings 虚拟表失败（可能 sqlite-vec 扩展未加载）: {}", e);
     } else {
         log::info!("message_embeddings 虚拟表创建成功");
+    }
+
+    Ok(())
+}
+
+/// 迁移到版本 15: 添加 content_type 列到 messages 表
+///
+/// # 功能
+/// - 为 messages 表添加 content_type 列
+/// - 用于存储 message.content[0].type 的值（text/tool_use/tool_result/thinking）
+/// - 支持更准确的问答对匹配
+#[cfg(test)]
+pub fn migrate_v15(conn: &mut Connection) -> Result<()> {
+    migrate_v15_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v15(conn: &mut Connection) -> Result<()> {
+    migrate_v15_impl(conn)
+}
+
+pub fn migrate_v15_impl(conn: &mut Connection) -> Result<()> {
+    // 检查列是否已存在
+    let column_exists: i32 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('messages') WHERE name='content_type'",
+        [],
+        |row| row.get(0),
+    )?;
+
+    if column_exists == 0 {
+        // 列不存在，添加列
+        conn.execute(
+            "ALTER TABLE messages ADD COLUMN content_type TEXT",
+            [],
+        )?;
+        log::info!("✅ 已添加 content_type 列到 messages 表");
+    } else {
+        log::info!("ℹ️  content_type 列已存在，跳过迁移");
     }
 
     Ok(())

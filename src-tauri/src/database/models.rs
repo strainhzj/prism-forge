@@ -460,6 +460,12 @@ pub struct Message {
     /// 序列化为 msgType (遵循 camelCase 规则)
     pub msg_type: String,
 
+    /// 内容类型 (text/tool_use/tool_result/thinking)
+    /// 从 message.content[0].type 提取
+    /// 序列化为 contentType (遵循 camelCase 规则)
+    #[serde(rename = "contentType")]
+    pub content_type: Option<String>,
+
     /// 消息时间戳 (RFC3339)
     pub timestamp: String,
 

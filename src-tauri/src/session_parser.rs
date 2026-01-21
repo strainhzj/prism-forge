@@ -274,18 +274,20 @@ impl SessionParserService {
             }
         });
 
+        // 提取 content_type（从 message.content[0].type）
+        let content_type = self.extract_content_type(&entry.data);
+
         // 在非完整模式下过滤 tool_use 和 tool_result
         // 完整模式（Full）需要保留所有消息，包括工具调用
         if self.config.view_level != ViewLevel::Full {
-            if let Some(ref content) = summary {
-                if content.contains("\"type\":\"tool_use\"") ||
-                   content.contains("\"type\": \"tool_use\"") ||
-                   content.contains("\"type\":\"tool_result\"") ||
-                   content.contains("\"type\": \"tool_result\"") {
+            // 检查 content_type 是否为 tool_use 或 tool_result
+            if let Some(ref ct) = content_type {
+                if matches!(ct.as_str(), "tool_use" | "tool_result") {
                     if self.config.debug {
-                        eprintln!("[SessionParser] 跳过包含 tool_use/tool_result 的消息: uuid={}, msg_type={}",
+                        eprintln!("[SessionParser] 跳过包含 tool_use/tool_result 的消息: uuid={}, msg_type={}, content_type={}",
                             &uuid[..uuid.len().min(8)],
-                            msg_type
+                            msg_type,
+                            ct
                         );
                     }
                     return None;
@@ -300,6 +302,7 @@ impl SessionParserService {
             uuid,
             parent_uuid,
             msg_type,
+            content_type,
             timestamp: timestamp.clone(),
             offset: entry.offset as i64,
             length: entry.length as i64,
@@ -307,6 +310,44 @@ impl SessionParserService {
             parent_idx: None,
             created_at: timestamp,
         })
+    }
+
+    /// 提取内容类型
+    ///
+    /// 从 message.content[0].type 提取内容类型（text/tool_use/tool_result/thinking）
+    fn extract_content_type(&self, data: &serde_json::Value) -> Option<String> {
+        // 获取 message 对象
+        let message = data.get("message")?;
+
+        // 尝试解析为对象
+        let message_obj = message.as_object()?;
+
+        // 获取 content 字段
+        let content = message_obj.get("content")?;
+
+        // 检查 content 是否为数组
+        if let Some(content_array) = content.as_array() {
+            if !content_array.is_empty() {
+                // 提取第一个元素的 type 字段
+                let first_element = &content_array[0];
+                if let Some(content_type) = first_element.get("type") {
+                    if let Some(type_str) = content_type.as_str() {
+                        return Some(type_str.to_string());
+                    }
+                }
+            }
+        }
+
+        // 回退：如果是 thinking 类型的消息，直接返回 "thinking"
+        if let Some(type_val) = data.get("type") {
+            if let Some(type_str) = type_val.as_str() {
+                if type_str == "thinking" {
+                    return Some("thinking".to_string());
+                }
+            }
+        }
+
+        None
     }
 
     /// 判断是否应该过滤该消息（基于内容）

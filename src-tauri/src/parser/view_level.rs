@@ -223,12 +223,9 @@ impl MessageFilter {
                     return false;
                 }
 
-                // 额外检查：如果 summary 内容包含 "tool_result" 标记，则过滤掉
-                if let Some(ref summary) = message.summary {
-                    // 检查是否包含 tool_result 的 JSON 标记
-                    if summary.contains("\"type\":\"tool_result\"") ||
-                       summary.contains("\"type\": \"tool_result\"") ||
-                       summary.contains("tool_result") {
+                // 使用 content_type 准确判断是否为 tool_result
+                if let Some(ref content_type) = message.content_type {
+                    if content_type == "tool_result" {
                         return false;
                     }
                 }
@@ -441,9 +438,14 @@ impl MessageFilter {
 
     /// 检测消息是否为 tool_use 类型
     ///
-    /// 通过解析 summary 中的 JSON 结构来判断消息的实际内容类型。
-    /// 如果 message.content[0].type 为 "tool_use"，则返回 true。
+    /// 使用 content_type 字段进行准确判断
     fn is_tool_use_message(&self, msg: &Message) -> bool {
+        // 使用 content_type 字段
+        if let Some(ref content_type) = msg.content_type {
+            return content_type == "tool_use";
+        }
+
+        // 如果没有 content_type，尝试从 summary 解析
         if let Some(ref summary) = msg.summary {
             // 尝试解析 JSON
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(summary) {
@@ -456,19 +458,21 @@ impl MessageFilter {
                     }
                 }
             }
-
-            // 回退：使用字符串匹配（处理不同的 JSON 格式化风格）
-            return summary.contains("\"type\":\"tool_use\"") ||
-                   summary.contains("\"type\": \"tool_use\"");
         }
+
         false
     }
 
     /// 检测消息是否为 tool_result 类型
     ///
-    /// 通过解析 summary 中的 JSON 结构来判断消息的实际内容类型。
-    /// 如果 message.content[0].type 为 "tool_result"，则返回 true。
+    /// 使用 content_type 字段进行准确判断
     fn is_tool_result_message(&self, msg: &Message) -> bool {
+        // 使用 content_type 字段
+        if let Some(ref content_type) = msg.content_type {
+            return content_type == "tool_result";
+        }
+
+        // 如果没有 content_type，尝试从 summary 解析
         if let Some(ref summary) = msg.summary {
             // 尝试解析 JSON
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(summary) {
@@ -481,11 +485,8 @@ impl MessageFilter {
                     }
                 }
             }
-
-            // 回退：使用字符串匹配（处理不同的 JSON 格式化风格）
-            return summary.contains("\"type\":\"tool_result\"") ||
-                   summary.contains("\"type\": \"tool_result\"");
         }
+
         false
     }
 
