@@ -72,6 +72,11 @@
     },
     "collapse": "Collapse",
     "expand": "Expand",
+    "user": "User",
+    "assistant": "Assistant",
+    "loading": "Loading...",
+    "noMessages": "No messages yet",
+    "noMessagesHint": "This session file is empty or has incorrect format",
     "autoRefresh": {
       "enable": "Enable Auto Refresh",
       "disable": "Disable Auto Refresh",

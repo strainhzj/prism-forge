@@ -136,7 +136,7 @@ function App() {
         debugLog('autoDetectFile', 'no files found');
       }
     } catch (e) {
-      const errorMsg = `自动检测文件失败: ${e}`;
+      const errorMsg = t('messages.autoDetectFileError', { error: String(e) });
       debugLog('autoDetectFile', 'error', errorMsg);
     }
   };
@@ -158,7 +158,7 @@ function App() {
         const sessionFiles = await getSessionFiles(currentProject.path, false);
         // 获取最近的几个会话文件
         sessionFilePaths = sessionFiles.slice(0, 10).map(f => f.file_path);
-        console.log(`[App] 找到 ${sessionFilePaths.length} 个会话文件`);
+        console.log(`[App] ${t('messages.foundSessionFiles', { count: sessionFilePaths.length })}`);
       }
 
       // 使用正确的请求结构调用 optimize_prompt
@@ -376,10 +376,10 @@ function App() {
                             <span>Token: {analysisResult.tokenStats.compressedTokens} / {analysisResult.tokenStats.originalTokens}</span>
                             {analysisResult.tokenStats.savingsPercentage > 0 && (
                               <span style={{ color: 'var(--color-accent-blue)' }}>
-                                节省 {analysisResult.tokenStats.savingsPercentage.toFixed(1)}%
+                                {t('messages.tokenStats.saved')} {analysisResult.tokenStats.savingsPercentage.toFixed(1)}%
                               </span>
                             )}
-                            <span>置信度: {(analysisResult.confidence * 100).toFixed(0)}%</span>
+                            <span>{t('messages.tokenStats.confidence')}: {(analysisResult.confidence * 100).toFixed(0)}%</span>
                           </div>
                         )}
 
@@ -387,7 +387,7 @@ function App() {
                         {analysisResult.referencedSessions && analysisResult.referencedSessions.length > 0 && (
                           <div className="space-y-2">
                             <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                              引用的会话 ({analysisResult.referencedSessions.length}):
+                              {t('messages.referencedSessions', { count: analysisResult.referencedSessions.length })}
                             </p>
                             {analysisResult.referencedSessions.map((session, idx) => (
                               <div key={idx} className="text-sm p-2 rounded" style={{
@@ -396,9 +396,9 @@ function App() {
                               }}>
                                 <div className="flex justify-between items-start">
                                   <div className="flex-1">
-                                    <p className="font-medium">{session.summary || '无摘要'}</p>
+                                    <p className="font-medium">{session.summary || t('messages.noSummary')}</p>
                                     <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                                      相似度: {((session.similarityScore || 0) * 100).toFixed(0)}%
+                                      {t('messages.similarity')}: {((session.similarityScore || 0) * 100).toFixed(0)}%
                                     </p>
                                   </div>
                                 </div>
@@ -410,7 +410,7 @@ function App() {
                         {/* 增强的提示词 */}
                         <div>
                           <p className="text-sm font-medium mb-2" style={{ color: 'var(--color-text-primary)' }}>
-                            增强的提示词:
+                            {t('messages.enhancedPrompt')}
                           </p>
                           <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed p-3 rounded" style={{
                             color: 'var(--color-text-primary)',
@@ -425,7 +425,7 @@ function App() {
                     ) : (
                       <div className="flex items-center justify-center h-full">
                         <p style={{ color: 'var(--color-text-secondary)' }}>
-                          {analyzing ? '分析中...' : t('messages.analysisResultPlaceholder')}
+                          {analyzing ? t('messages.analyzing') : t('messages.analysisResultPlaceholder')}
                         </p>
                       </div>
                     )}

@@ -232,7 +232,7 @@ function TimelineMessageItem({ message, isExpanded, onToggleExpand, displayMode 
           className="text-xs font-medium"
           style={{ color: 'var(--color-text-secondary)' }}
         >
-          {isUser ? '用户' : '助手'}
+          {isUser ? t('detailView.user') : t('detailView.assistant')}
         </span>
 
         {/* 时间戳 */}
@@ -309,6 +309,8 @@ export function TimelineMessageList({
   contentDisplayMode = 'raw',
   className,
 }: TimelineMessageListProps) {
+  const { t } = useTranslation('sessions');
+
   // 🔴 调试：组件渲染时立即输出
   console.log('🎨 [TimelineMessageList] 组件渲染！！！', { messageCount: messages.length, contentDisplayMode });
 
@@ -337,9 +339,9 @@ export function TimelineMessageList({
         style={{ color: 'var(--color-text-secondary)' }}
       >
         <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
-          暂无消息
+          {t('detailView.noMessages')}
         </p>
-        <p className="text-sm mt-2">该会话文件为空或格式不正确</p>
+        <p className="text-sm mt-2">{t('detailView.noMessagesHint')}</p>
       </div>
     );
   }

@@ -10,12 +10,25 @@
   },
   "buttons": {
     "analyzeAndGenerate": "Analyze & Generate Prompt",
-    "analyzeButton": "Analyze & Generate Prompt ➔"
+    "analyzeButton": "Analyze & Generate Prompt →"
+  },
+  "status": {
+    "analyzing": "Analyzing..."
   },
   "messages": {
     "fillGoalAlert": "Please fill in the goal content",
     "analysisResultPlaceholder": "Analysis results will be displayed here...",
-    "autoDetectFileError": "Auto-detect file failed: {{error}}"
+    "autoDetectFileError": "Auto-detect file failed: {{error}}",
+    "foundSessionFiles": "Found {{count}} session files",
+    "tokenStats": {
+      "saved": "Saved",
+      "confidence": "Confidence"
+    },
+    "referencedSessions": "Referenced Sessions ({{count}}):",
+    "noSummary": "No summary",
+    "similarity": "Similarity",
+    "enhancedPrompt": "Enhanced Prompt:",
+    "analyzing": "Analyzing..."
   },
   "timeline": {
     "title": "Timeline Log",

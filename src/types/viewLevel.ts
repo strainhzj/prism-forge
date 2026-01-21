@@ -47,6 +47,20 @@ export interface ViewLevelInfo {
 }
 
 /**
+ * 视图等级基础信息（不含国际化文本）
+ */
+export interface ViewLevelBaseInfo {
+  /** 视图等级值 */
+  value: ViewLevel;
+  /** 图标 */
+  icon: string;
+  /** 翻译键（用于 i18n） */
+  labelKey: string;
+  /** 描述翻译键 */
+  descriptionKey: string;
+}
+
+/**
  * 问答对
  */
 export interface QAPair {
@@ -111,7 +125,45 @@ export interface ViewLevelPreference {
 }
 
 /**
- * 视图等级映射表（用于显示）
+ * 视图等级基础信息映射表（不含国际化文本）
+ * 用于获取图标和翻译键，显示名称和描述需要通过 i18n 获取
+ */
+export const VIEW_LEVEL_BASE_INFO: Record<ViewLevel, ViewLevelBaseInfo> = {
+  [ViewLevel.Full]: {
+    value: ViewLevel.Full,
+    icon: '📄',
+    labelKey: 'full',
+    descriptionKey: 'full',
+  },
+  [ViewLevel.Conversation]: {
+    value: ViewLevel.Conversation,
+    icon: '💬',
+    labelKey: 'conversation',
+    descriptionKey: 'conversation',
+  },
+  [ViewLevel.QAPairs]: {
+    value: ViewLevel.QAPairs,
+    icon: '❓',
+    labelKey: 'qa_pairs',
+    descriptionKey: 'qa_pairs',
+  },
+  [ViewLevel.AssistantOnly]: {
+    value: ViewLevel.AssistantOnly,
+    icon: '🤖',
+    labelKey: 'assistant_only',
+    descriptionKey: 'assistant_only',
+  },
+  [ViewLevel.UserOnly]: {
+    value: ViewLevel.UserOnly,
+    icon: '👤',
+    labelKey: 'user_only',
+    descriptionKey: 'user_only',
+  },
+};
+
+/**
+ * @deprecated 使用 getViewLevelInfo() 替代
+ * 保留此导出以避免破坏现有代码，后续版本将移除
  */
 export const VIEW_LEVEL_INFO: Record<ViewLevel, ViewLevelInfo> = {
   [ViewLevel.Full]: {
@@ -158,4 +210,32 @@ export function getViewLevelInfo(viewLevel: ViewLevel): ViewLevelInfo {
  */
 export function getViewLevelOptions(): ViewLevelInfo[] {
   return Object.values(VIEW_LEVEL_INFO);
+}
+
+/**
+ * 获取国际化的视图等级信息
+ * @param viewLevel - 视图等级
+ * @param t - i18n 翻译函数
+ * @returns 国际化的视图等级信息
+ */
+export function getViewLevelInfoI18n(
+  viewLevel: ViewLevel,
+  t: (key: string) => string
+): ViewLevelInfo {
+  const baseInfo = VIEW_LEVEL_BASE_INFO[viewLevel];
+  return {
+    value: baseInfo.value,
+    displayName: t(`viewLevel.levels.${baseInfo.labelKey}.label`),
+    description: t(`viewLevel.levels.${baseInfo.descriptionKey}.description`),
+    icon: baseInfo.icon,
+  };
+}
+
+/**
+ * 获取所有国际化的视图等级选项
+ * @param t - i18n 翻译函数
+ * @returns 国际化的视图等级信息数组
+ */
+export function getViewLevelOptionsI18n(t: (key: string) => string): ViewLevelInfo[] {
+  return AVAILABLE_VIEW_LEVELS.map((level) => getViewLevelInfoI18n(level, t));
 }

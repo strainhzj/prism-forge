@@ -10,12 +10,25 @@
   },
   "buttons": {
     "analyzeAndGenerate": "分析并生成提示词",
-    "analyzeButton": "Analyze & Generate Prompt ➔"
+    "analyzeButton": "分析并生成提示词 →"
+  },
+  "status": {
+    "analyzing": "分析中..."
   },
   "messages": {
     "fillGoalAlert": "请填写目标内容",
     "analysisResultPlaceholder": "分析结果将显示在这里...",
-    "autoDetectFileError": "自动检测文件失败: {{error}}"
+    "autoDetectFileError": "自动检测文件失败: {{error}}",
+    "foundSessionFiles": "找到 {{count}} 个会话文件",
+    "tokenStats": {
+      "saved": "节省",
+      "confidence": "置信度"
+    },
+    "referencedSessions": "引用的会话 ({{count}}):",
+    "noSummary": "无摘要",
+    "similarity": "相似度",
+    "enhancedPrompt": "增强的提示词:",
+    "analyzing": "分析中..."
   },
   "timeline": {
     "title": "时间线日志",

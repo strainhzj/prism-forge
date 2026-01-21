@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useViewLevelManager, useSessionContent } from '@/hooks/useViewLevel';
-import { VIEW_LEVEL_INFO, AVAILABLE_VIEW_LEVELS } from '@/types/viewLevel';
+import { useViewLevelInfo, useViewLevelOptions } from '@/hooks/useViewLevelInfo';
 
 // ==================== 调试模式 ====================
 const DEBUG = import.meta.env.DEV;
@@ -284,6 +284,9 @@ export function TimelineSidebar({
   const [dropdownAlign, setDropdownAlign] = useState<'left' | 'right'>('left');
   const viewLevelDropdownRef = useRef<HTMLDivElement>(null);
 
+  // 获取国际化的视图等级选项
+  const viewLevelOptions = useViewLevelOptions();
+
   // ===== 多级日志读取功能 =====
   // 使用视图等级管理 hook，默认使用问答对模式
   const {
@@ -403,10 +406,9 @@ export function TimelineSidebar({
     };
   }, [viewLevelDropdownOpen, handleClickOutside]);
 
-  // 获取当前视图等级的显示名称
-  const currentViewLevelLabel = useMemo(() => {
-    return VIEW_LEVEL_INFO[currentViewLevel]?.displayName || currentViewLevel;
-  }, [currentViewLevel]);
+  // 获取当前视图等级的显示名称（使用国际化）
+  const currentViewLevelInfo = useViewLevelInfo(currentViewLevel);
+  const currentViewLevelLabel = currentViewLevelInfo.displayName;
 
   // 切换自动刷新开关
   const toggleAutoRefresh = useCallback(() => {
@@ -496,14 +498,13 @@ export function TimelineSidebar({
                   border: '1px solid var(--color-border-light)',
                 }}
               >
-                {AVAILABLE_VIEW_LEVELS.map((level) => {
-                  const isSelected = level === currentViewLevel;
-                  const levelInfo = VIEW_LEVEL_INFO[level];
+                {viewLevelOptions.map((levelInfo) => {
+                  const isSelected = levelInfo.value === currentViewLevel;
                   return (
                     <button
-                      key={level}
+                      key={levelInfo.value}
                       onClick={() => {
-                        changeViewLevel(level);
+                        changeViewLevel(levelInfo.value);
                         setViewLevelDropdownOpen(false);
                       }}
                       disabled={viewLevelSaving || contentLoading}
@@ -516,8 +517,8 @@ export function TimelineSidebar({
                         color: isSelected ? 'var(--color-accent-warm)' : 'var(--color-text-primary)',
                       }}
                     >
-                      <span className="text-base">{levelInfo?.icon}</span>
-                      <span className="flex-1">{levelInfo?.displayName}</span>
+                      <span className="text-base">{levelInfo.icon}</span>
+                      <span className="flex-1">{levelInfo.displayName}</span>
                       {isSelected && <Check className="h-3 w-3" style={{ color: 'var(--color-accent-warm)' }} />}
                     </button>
                   );
@@ -574,7 +575,7 @@ export function TimelineSidebar({
         {contentLoading && timelineLogs.length === 0 && (
           <div className="text-center py-8">
             <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              加载中...
+              {tSessions('detailView.loading')}
             </p>
           </div>
         )}
