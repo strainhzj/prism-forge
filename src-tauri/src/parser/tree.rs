@@ -100,6 +100,22 @@ pub struct MessageNode {
     /// 提取的元数据（工具调用、错误、代码变更等）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<MessageMetadata>,
+
+    /// 消息内容（截断后的显示内容）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+
+    /// 完整内容（用于详情查看）
+    #[serde(rename = "fullContent", skip_serializing_if = "Option::is_none")]
+    pub full_content: Option<String>,
+
+    /// 消息角色（缓存的 role 字段，方便前端使用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+
+    /// 消息类型（缓存的 type 字段，方便前端使用）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub msg_type: Option<String>,
 }
 
 impl MessageNode {
@@ -109,6 +125,13 @@ impl MessageNode {
         parent_id: Option<String>,
         message_data: Value,
     ) -> Self {
+        // 提取并缓存 role 和 type 字段
+        let role = message_data.get("role").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let msg_type = message_data.get("type").and_then(|v| v.as_str()).map(|s| s.to_string());
+
+        // 提取消息内容
+        let (content, full_content) = Self::extract_message_content(&message_data, role.as_deref());
+
         Self {
             id,
             parent_id,
@@ -117,7 +140,94 @@ impl MessageNode {
             children: Vec::new(),
             thread_id: None,
             metadata: None,
+            content,
+            full_content,
+            role,
+            msg_type,
         }
+    }
+
+    /// 提取消息内容（截断版本和完整版本）
+    ///
+    /// 参照 optimizer 模块的 parse_session_file 逻辑处理
+    fn extract_message_content(message_data: &Value, role: Option<&str>) -> (Option<String>, Option<String>) {
+        let role = role.unwrap_or("unknown");
+
+        // 处理 content 字段（可能是字符串或数组）
+        if let Some(content) = message_data.get("content") {
+            if let Some(content_arr) = content.as_array() {
+                // content 是数组格式
+                let mut full_text = String::new();
+                let mut display_text = String::new();
+
+                for part in content_arr {
+                    let p_type = part["type"].as_str().unwrap_or("");
+
+                    if p_type == "text" {
+                        if let Some(text) = part.get("text").and_then(|v| v.as_str()) {
+                            full_text.push_str(text);
+                            full_text.push('\n');
+
+                            // 对于 display，截断到 500 字符
+                            if display_text.len() < 500 {
+                                display_text.push_str(text);
+                                display_text.push('\n');
+                            }
+                        }
+                    } else if p_type == "tool_use" {
+                        if let Some(name) = part.get("name").and_then(|v| v.as_str()) {
+                            let tool_text = format!("[工具] 调用: {}\n", name);
+                            full_text.push_str(&tool_text);
+
+                            if display_text.len() < 500 {
+                                display_text.push_str(&tool_text);
+                            }
+                        }
+                    }
+                }
+
+                let full_content = if !full_text.trim().is_empty() { Some(full_text.trim().to_string()) } else { None };
+                let content = if !display_text.trim().is_empty() {
+                    Some(if display_text.len() > 500 {
+                        format!("{}...", display_text.trim())
+                    } else {
+                        display_text.trim().to_string()
+                    })
+                } else { None };
+
+                return (content, full_content);
+            } else if let Some(content_str) = content.as_str() {
+                // content 是字符串格式
+                let trimmed = content_str.trim();
+                if trimmed.is_empty() {
+                    return (None, None);
+                }
+
+                // 截断版本（安全的 UTF-8 处理）
+                let content = if trimmed.chars().count() > 500 {
+                    // 找到第 500 个字符的字节边界
+                    let safe_end = trimmed
+                        .char_indices()
+                        .nth(500)
+                        .map(|(idx, _)| idx)
+                        .unwrap_or(trimmed.len());
+                    Some(format!("{}...", &trimmed[..safe_end]))
+                } else {
+                    Some(trimmed.to_string())
+                };
+
+                return (content, Some(trimmed.to_string()));
+            }
+        }
+
+        // 如果没有 content 字段，尝试其他方式获取内容
+        // 对于 tool_use 类型，显示工具名称
+        if let Some(name) = message_data.get("name").and_then(|v| v.as_str()) {
+            let text = format!("[工具] 调用: {}", name);
+            return (Some(text.clone()), Some(text));
+        }
+
+        (None, None)
     }
 
     /// 添加子节点
@@ -127,11 +237,19 @@ impl MessageNode {
 
     /// 获取消息类型
     pub fn message_type(&self) -> Option<String> {
+        // 优先使用缓存的值
+        if let Some(ref msg_type) = self.msg_type {
+            return Some(msg_type.clone());
+        }
         self.message_data.get("type")?.as_str().map(|s| s.to_string())
     }
 
     /// 获取消息角色
     pub fn role(&self) -> Option<String> {
+        // 优先使用缓存的值
+        if let Some(ref role) = self.role {
+            return Some(role.clone());
+        }
         self.message_data.get("role")?.as_str().map(|s| s.to_string())
     }
 

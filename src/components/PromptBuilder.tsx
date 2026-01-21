@@ -91,7 +91,7 @@ export function PromptBuilder({
     if (!result) return;
 
     try {
-      await navigator.clipboard.writeText(result.enhanced_prompt);
+      await navigator.clipboard.writeText(result.enhancedPrompt);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -210,15 +210,15 @@ export function PromptBuilder({
                 <p className="text-xs text-muted-foreground mb-1">Token 统计</p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-bold">
-                    {result.token_stats.compressed_tokens.toLocaleString()}
+                    {result.tokenStats.compressedTokens.toLocaleString()}
                   </span>
                   <span className="text-sm text-muted-foreground">
-                    / {result.token_stats.original_tokens.toLocaleString()}
+                    / {result.tokenStats.originalTokens.toLocaleString()}
                   </span>
                 </div>
-                {result.token_stats.savings_percentage > 0 && (
-                  <p className={cn('text-xs font-medium mt-1', getSavingsColor(result.token_stats.savings_percentage))}>
-                    节省 {result.token_stats.savings_percentage.toFixed(1)}%
+                {result.tokenStats.savingsPercentage > 0 && (
+                  <p className={cn('text-xs font-medium mt-1', getSavingsColor(result.tokenStats.savingsPercentage))}>
+                    节省 {result.tokenStats.savingsPercentage.toFixed(1)}%
                   </p>
                 )}
               </div>
@@ -227,10 +227,10 @@ export function PromptBuilder({
               <div className="p-3 bg-muted/30 rounded-md">
                 <p className="text-xs text-muted-foreground mb-1">引用会话</p>
                 <p className="text-2xl font-bold">
-                  {result.referenced_sessions.length}
+                  {result.referencedSessions.length}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {result.referenced_sessions.length > 0 ? '相关历史会话' : '无相关会话'}
+                  {result.referencedSessions.length > 0 ? '相关历史会话' : '无相关会话'}
                 </p>
               </div>
 
@@ -249,29 +249,24 @@ export function PromptBuilder({
             </div>
 
             {/* 引用的会话列表 */}
-            {result.referenced_sessions.length > 0 && (
+            {result.referencedSessions.length > 0 && (
               <div className="space-y-2">
                 <Label className="text-sm font-medium">引用的会话</Label>
                 <div className="space-y-1 max-h-40 overflow-y-auto">
-                  {result.referenced_sessions.map((session) => (
+                  {result.referencedSessions.map((session) => (
                     <div
-                      key={session.session_id}
+                      key={session.sessionId}
                       className="flex items-start justify-between p-2 bg-muted/30 rounded-md text-xs"
                     >
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{session.summary}</p>
                         <p className="text-muted-foreground truncate mt-0.5">
-                          {session.project_path}
+                          {session.projectName}
                         </p>
                       </div>
                       <div className="flex items-center gap-2 ml-2">
-                        {session.rating && (
-                          <Badge variant="secondary" className="text-xs">
-                            ⭐ {session.rating}
-                          </Badge>
-                        )}
                         <Badge variant="outline" className="text-xs">
-                          {(session.similarity * 100).toFixed(0)}%
+                          {(session.similarityScore * 100).toFixed(0)}%
                         </Badge>
                       </div>
                     </div>
@@ -329,13 +324,13 @@ export function PromptBuilder({
 
               <div className="relative">
                 <Textarea
-                  value={result.enhanced_prompt}
+                  value={result.enhancedPrompt}
                   readOnly
                   rows={12}
                   className="resize-none font-mono text-sm bg-background"
                 />
                 <div className="absolute bottom-2 right-2 text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded">
-                  {result.enhanced_prompt.length} 字符
+                  {result.enhancedPrompt.length} 字符
                 </div>
               </div>
             </div>

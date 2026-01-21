@@ -1941,6 +1941,13 @@ pub async fn optimize_prompt(
             message: format!("生成提示词失败: {}", e),
         })?;
 
+    // 调试：输出返回结果
+    eprintln!("[optimize_prompt] 返回结果: original_goal={}, enhanced_prompt长度={}, referenced_sessions数量={}",
+        result.original_goal,
+        result.enhanced_prompt.len(),
+        result.referenced_sessions.len()
+    );
+
     Ok(result)
 }
 
@@ -1987,6 +1994,75 @@ pub fn update_meta_template(
         })?;
 
     Ok(())
+}
+
+// ==================== 优化器配置管理命令 ====================
+
+/// 重新加载优化器配置
+///
+/// 从 optimizer_config.toml 重新加载配置文件，支持运行时热更新
+#[tauri::command]
+pub fn reload_optimizer_config() -> Result<String, CommandError> {
+    use crate::optimizer::prompt_generator::PromptGenerator;
+    use std::path::PathBuf;
+
+    // 创建临时生成器来重新加载配置
+    let config_path = std::env::current_dir()
+        .map_err(|e| CommandError {
+            message: format!("获取当前目录失败: {}", e),
+        })?
+        .join("src-tauri")
+        .join("optimizer_config.toml");
+
+    // 验证配置文件可以成功解析
+    let content = std::fs::read_to_string(&config_path)
+        .map_err(|e| CommandError {
+            message: format!("无法读取配置文件: {}", e),
+        })?;
+
+    // 尝试解析以验证配置正确性
+    toml::from_str::<toml::Value>(&content)
+        .map_err(|e| CommandError {
+            message: format!("配置文件解析失败: {}", e),
+        })?;
+
+    // 配置验证通过
+    eprintln!("[reload_optimizer_config] 配置文件验证成功: {:?}", config_path);
+
+    // 获取全局配置管理器并重新加载配置
+    let manager = crate::optimizer::config::get_config_manager()
+        .ok_or_else(|| CommandError {
+            message: "配置管理器未初始化".to_string(),
+        })?;
+
+    manager.reload()
+        .map_err(|e| CommandError {
+            message: format!("重新加载配置失败: {}", e),
+        })?;
+
+    eprintln!("[reload_optimizer_config] 配置已成功应用到运行时");
+
+    Ok("配置已重新加载".to_string())
+}
+
+/// 获取优化器配置
+///
+/// 返回当前优化器配置的 JSON 表示
+#[tauri::command]
+pub fn get_optimizer_config() -> Result<String, CommandError> {
+    // 使用全局配置管理器
+    let manager = crate::optimizer::config::get_config_manager()
+        .ok_or_else(|| CommandError {
+            message: "配置管理器未初始化".to_string(),
+        })?;
+
+    let config = manager.get_config();
+    let config_json = serde_json::to_string_pretty(&config)
+        .map_err(|e| CommandError {
+            message: format!("序列化配置失败: {}", e),
+        })?;
+
+    Ok(config_json)
 }
 
 // ============================================================================
@@ -2111,6 +2187,9 @@ pub struct SessionFileInfo {
     pub file_size: u64,
     /// 修改时间（RFC3339）
     pub modified_time: String,
+    /// 项目路径（所属监控目录路径）
+    #[serde(rename = "projectPath")]
+    pub project_path: String,
     /// 会话摘要（从 .jsonl 文件读取，向后兼容）
     #[serde(rename = "summary")]
     pub summary: Option<String>,
@@ -2243,6 +2322,7 @@ pub async fn get_sessions_by_monitored_directory(
                 file_path: info.full_path.to_string_lossy().to_string(),
                 file_size: info.file_size,
                 modified_time: info.modified_time.clone(),
+                project_path: monitored_path.clone(), // 添加项目路径
                 summary, // 向后兼容
                 display_name,
                 name_source,
@@ -2527,6 +2607,447 @@ pub async fn sync_embeddings_now(
         .map_err(|e| format!("同步失败: {}", e))?;
 
     Ok(count)
+}
+
+// ============================================================================
+// 多等级日志读取 Commands (Multi-Level Log Reading)
+// ============================================================================
+
+use crate::parser::view_level::{ViewLevel, MessageFilter, QAPair};
+
+/// 根据等级获取会话消息
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+/// - `view_level`: 视图等级
+/// - `file_path`: (可选) 会话文件路径。如果提供，直接使用文件路径而不从数据库查询
+///
+/// # 返回
+/// 过滤后的消息列表
+#[tauri::command]
+pub async fn cmd_get_messages_by_level(
+    session_id: String,
+    view_level: ViewLevel,
+    file_path: Option<String>,
+) -> Result<Vec<crate::database::models::Message>, String> {
+    use crate::database::repository::SessionRepository;
+    use crate::session_parser::{SessionParserService, SessionParserConfig};
+
+    // 确定文件路径
+    let final_file_path = if let Some(fp) = file_path {
+        // 如果提供了文件路径，直接使用
+        fp
+    } else {
+        // 否则从数据库查询会话信息
+        let repo = SessionRepository::from_default_db()
+            .map_err(|e| format!("创建 SessionRepository 失败: {}", e))?;
+        let session = repo.get_session_by_id(&session_id)
+            .map_err(|e| format!("获取会话失败: {}", e))?
+            .ok_or_else(|| format!("会话不存在: {}", session_id))?;
+        session.file_path
+    };
+
+    // 检查会话文件是否存在
+    let path_buf = std::path::PathBuf::from(&final_file_path);
+    if !path_buf.exists() {
+        return Err(format!("会话文件不存在: {}", final_file_path));
+    }
+
+    // 创建解析配置
+    let config = SessionParserConfig {
+        enable_content_filter: true,  // ✅ 启用内容过滤
+        view_level: view_level.clone(),
+        debug: cfg!(debug_assertions),
+    };
+
+    // 创建解析服务
+    let parser = SessionParserService::new(config);
+
+    // 解析会话
+    let result = parser.parse_session(&final_file_path, &session_id)
+        .map_err(|e| format!("解析会话失败: {}", e))?;
+
+    // 输出调试信息
+    #[cfg(debug_assertions)]
+    {
+        eprintln!("[DEBUG] 解析统计: {:?}", result.stats);
+        eprintln!("[DEBUG] 返回 {} 个消息 (view_level: {:?})", result.messages.len(), view_level);
+
+        // 显示前 3 条消息的详细信息
+        if !result.messages.is_empty() {
+            eprintln!("[DEBUG] 前 3 条消息示例:");
+            for (i, msg) in result.messages.iter().take(3).enumerate() {
+                eprintln!("  [{}]:", i);
+                eprintln!("    msg_type: {:?}", msg.msg_type);
+                eprintln!("    uuid: {:?}", msg.uuid.get(..8));
+                eprintln!("    summary: {:?}", msg.summary.as_ref().and_then(|s| s.get(..50)));
+                eprintln!("    timestamp: {:?}", msg.timestamp);
+            }
+
+            // 🔍 序列化调试 - 检查实际输出的 JSON
+            eprintln!("[DEBUG] 🔍 序列化前第一条消息的 msg_type 字段值:");
+            let first_msg = &result.messages[0];
+            eprintln!("  msg_type (原始值) = {:?}", first_msg.msg_type);
+            eprintln!("  msg_type (字符串) = {}", first_msg.msg_type);
+
+            // 尝试序列化第一条消息
+            match serde_json::to_string_pretty(first_msg) {
+                Ok(json) => {
+                    eprintln!("[DEBUG] 序列化后的 JSON:");
+                    for line in json.lines().take(15) {
+                        eprintln!("  {}", line);
+                    }
+
+                    // 解析回来验证字段名
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&json) {
+                        eprintln!("[DEBUG] JSON 中的键名:");
+                        if let Some(obj) = value.as_object() {
+                            for (key, _) in obj.iter() {
+                                eprintln!("  - {}", key);
+                            }
+                            // 特别检查 type/msgType/msg_type 字段
+                            eprintln!("[DEBUG] 特定字段值:");
+                            eprintln!("  type 字段存在: {:?}", obj.get("type"));
+                            eprintln!("  msgType 字段存在: {:?}", obj.get("msgType"));
+                            eprintln!("  msg_type 字段存在: {:?}", obj.get("msg_type"));
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[DEBUG] 序列化失败: {}", e);
+                }
+            }
+        }
+    }
+
+    Ok(result.messages)
+}
+
+
+/// 根据等级提取问答对
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+/// - `view_level`: 视图等级（必须是 QAPairs）
+/// - `file_path`: (可选) 会话文件路径。如果提供，直接使用文件路径而不从数据库查询
+///
+/// # 返回
+/// 问答对列表
+#[tauri::command]
+pub async fn cmd_get_qa_pairs_by_level(
+    session_id: String,
+    view_level: ViewLevel,
+    file_path: Option<String>,
+) -> Result<Vec<QAPair>, String> {
+    use crate::database::repository::SessionRepository;
+    use crate::session_parser::{SessionParserService, SessionParserConfig};
+
+    // 验证等级必须是 QAPairs
+    if view_level != ViewLevel::QAPairs {
+        return Err("问答对提取仅在 QAPairs 等级下可用".to_string());
+    }
+
+    // 确定文件路径
+    let final_file_path = if let Some(fp) = file_path {
+        // 如果提供了文件路径，直接使用
+        fp
+    } else {
+        // 否则从数据库查询会话信息
+        let repo = SessionRepository::from_default_db()
+            .map_err(|e| format!("创建 SessionRepository 失败: {}", e))?;
+        let session = repo.get_session_by_id(&session_id)
+            .map_err(|e| format!("获取会话失败: {}", e))?
+            .ok_or_else(|| format!("会话不存在: {}", session_id))?;
+        session.file_path
+    };
+
+    // 检查会话文件是否存在
+    let path_buf = std::path::PathBuf::from(&final_file_path);
+    if !path_buf.exists() {
+        return Err(format!("会话文件不存在: {}", final_file_path));
+    }
+
+    // 使用 SessionParserService 解析会话（在 Full 视图等级下获取所有消息）
+    let config = SessionParserConfig {
+        enable_content_filter: false,  // 问答对提取不过滤内容
+        view_level: ViewLevel::Full,   // 获取所有消息，后续由 extract_qa_pairs 处理
+        debug: cfg!(debug_assertions),
+    };
+
+    let parser = SessionParserService::new(config);
+    let result = parser.parse_session(&final_file_path, &session_id)
+        .map_err(|e| format!("解析会话失败: {}", e))?;
+
+    #[cfg(debug_assertions)]
+    {
+        eprintln!("[DEBUG] 解析统计: {:?}", result.stats);
+        eprintln!("[DEBUG] 返回 {} 个消息用于问答对提取", result.messages.len());
+    }
+
+    // 提取问答对
+    let filter = MessageFilter::new(view_level);
+    let qa_pairs = filter.extract_qa_pairs(result.messages);
+
+    // 调试日志：检查提取的问答对
+    #[cfg(debug_assertions)]
+    {
+        eprintln!("[DEBUG] 提取的问答对数量: {}", qa_pairs.len());
+        if !qa_pairs.is_empty() {
+            eprintln!("[DEBUG] 前 3 个问答对:");
+            for (i, pair) in qa_pairs.iter().take(3).enumerate() {
+                eprintln!("  [{}] question_uuid={}, question_type={}, has_answer={}",
+                    i,
+                    &pair.question.uuid[..pair.question.uuid.len().min(8)],
+                    pair.question.msg_type,
+                    pair.answer.is_some()
+                );
+                if let Some(ref answer) = pair.answer {
+                    eprintln!("       answer_uuid={}, answer_type={}",
+                        &answer.uuid[..answer.uuid.len().min(8)],
+                        answer.msg_type
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(qa_pairs)
+}
+
+
+/// 保存视图等级偏好
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+/// - `view_level`: 视图等级
+///
+/// # 返回
+/// 成功返回 Ok(())
+#[tauri::command]
+pub async fn cmd_save_view_level_preference(
+    session_id: String,
+    view_level: ViewLevel,
+) -> Result<(), String> {
+    use crate::database::repository::ViewLevelPreferenceRepository;
+
+    let mut repo = ViewLevelPreferenceRepository::new();
+    repo.save_preference(&session_id, view_level)
+        .map_err(|e| format!("保存偏好失败: {}", e))
+}
+
+/// 获取视图等级偏好
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+///
+/// # 返回
+/// 视图等级，如果不存在则返回默认值 Conversation
+#[tauri::command]
+pub async fn cmd_get_view_level_preference(
+    session_id: String,
+) -> Result<ViewLevel, String> {
+    use crate::database::repository::ViewLevelPreferenceRepository;
+
+    let repo = ViewLevelPreferenceRepository::new();
+    let preference = repo.get_preference_or_default(&session_id)
+        .map_err(|e| format!("获取偏好失败: {}", e))?;
+
+    Ok(preference)
+}
+
+/// 导出格式
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ExportFormatType {
+    #[serde(rename = "markdown")]
+    Markdown,
+    #[serde(rename = "json")]
+    Json,
+}
+
+/// 根据等级导出会话
+///
+/// # 参数
+/// - `session_id`: 会话 ID
+/// - `view_level`: 视图等级
+/// - `format`: 导出格式（markdown 或 json）
+/// - `file_path`: (可选) 会话文件路径。如果提供，直接使用文件路径而不从数据库查询
+///
+/// # 返回
+/// 导出的内容字符串
+#[tauri::command]
+pub async fn cmd_export_session_by_level(
+    session_id: String,
+    view_level: ViewLevel,
+    format: ExportFormatType,
+    file_path: Option<String>,
+) -> Result<String, String> {
+    // 获取过滤后的消息
+    let messages = if view_level == ViewLevel::QAPairs {
+        // 对于 QAPairs，先获取问答对
+        let qa_pairs = cmd_get_qa_pairs_by_level(session_id.clone(), view_level, file_path.clone()).await?;
+
+        // 将问答对转换为可导出的格式
+        let export_messages: Vec<crate::database::models::Message> = qa_pairs
+            .into_iter()
+            .flat_map(|qa| {
+                let mut messages = vec![qa.question];
+                if let Some(answer) = qa.answer {
+                    messages.push(answer);
+                }
+                messages
+            })
+            .collect();
+
+        export_messages
+    } else {
+        // 其他等级直接获取消息
+        cmd_get_messages_by_level(session_id.clone(), view_level, file_path.clone()).await?
+    };
+
+    // 保存 file_path 的引用供后续使用
+    let file_path_ref = file_path.as_deref();
+
+    match format {
+        ExportFormatType::Markdown => {
+            // 导出为 Markdown 格式
+            let mut markdown = format!("# 会话导出\n\n");
+            markdown.push_str(&format!("**会话 ID**: {}\n", session_id));
+            if let Some(fp) = file_path_ref {
+                markdown.push_str(&format!("**文件路径**: {}\n", fp));
+            }
+            markdown.push_str(&format!("**视图等级**: {}\n\n", view_level.display_name()));
+            markdown.push_str("---\n\n");
+
+            for msg in &messages {
+                let role_label = match msg.msg_type.as_str() {
+                    "user" => "👤 用户",
+                    "assistant" => "🤖 助手",
+                    "thinking" => "💭 思考",
+                    _ => "📝 其他",
+                };
+
+                markdown.push_str(&format!("## {}\n\n", role_label));
+                markdown.push_str(&format!("**时间**: {}\n\n", msg.timestamp));
+
+                if let Some(summary) = &msg.summary {
+                    markdown.push_str(&format!("{}\n\n", summary));
+                } else {
+                    markdown.push_str("*（无内容）*\n\n");
+                }
+
+                markdown.push_str("---\n\n");
+            }
+
+            Ok(markdown)
+        }
+        ExportFormatType::Json => {
+            // 导出为 JSON 格式
+            let export_data = serde_json::json!({
+                "session": {
+                    "session_id": session_id,
+                    "file_path": file_path,
+                },
+                "view_level": {
+                    "value": view_level.to_string(),
+                    "display_name": view_level.display_name(),
+                    "description": view_level.description(),
+                },
+                "messages": messages,
+                "exported_at": chrono::Utc::now().to_rfc3339()
+            });
+
+            serde_json::to_string_pretty(&export_data)
+                .map_err(|e| format!("JSON 序列化失败: {}", e))
+        }
+    }
+}
+
+// ==================== 日志过滤配置管理命令 ====================
+
+/// 获取过滤配置
+#[tauri::command]
+pub fn get_filter_config() -> Result<crate::filter_config::FilterConfig, CommandError> {
+    use crate::filter_config::FilterConfigManager;
+
+    let manager = FilterConfigManager::with_default_path()
+        .map_err(|e| CommandError {
+            message: format!("加载过滤配置失败: {}", e),
+        })?;
+
+    Ok(manager.get_config().clone())
+}
+
+/// 更新过滤配置
+#[tauri::command]
+pub fn update_filter_config(config: crate::filter_config::FilterConfig) -> Result<(), CommandError> {
+    use crate::filter_config::FilterConfigManager;
+
+    let mut manager = FilterConfigManager::with_default_path()
+        .map_err(|e| CommandError {
+            message: format!("加载过滤配置失败: {}", e),
+        })?;
+
+    manager.update_config(config)
+        .map_err(|e| CommandError {
+            message: format!("更新过滤配置失败: {}", e),
+        })?;
+
+    Ok(())
+}
+
+/// 重新加载过滤配置
+#[tauri::command]
+pub fn reload_filter_config() -> Result<(), CommandError> {
+    use crate::filter_config::FilterConfigManager;
+
+    let mut manager = FilterConfigManager::with_default_path()
+        .map_err(|e| CommandError {
+            message: format!("加载过滤配置失败: {}", e),
+        })?;
+
+    manager.reload()
+        .map_err(|e| CommandError {
+            message: format!("重新加载过滤配置失败: {}", e),
+        })?;
+
+    Ok(())
+}
+
+/// 获取过滤配置文件路径
+#[tauri::command]
+pub fn get_filter_config_path() -> Result<String, CommandError> {
+    use crate::filter_config::FilterConfigManager;
+
+    let manager = FilterConfigManager::with_default_path()
+        .map_err(|e| CommandError {
+            message: format!("获取配置路径失败: {}", e),
+        })?;
+
+    Ok(manager.config_path().to_string_lossy().to_string())
+}
+
+/// 在系统默认文件管理器中打开配置文件所在目录
+#[tauri::command]
+pub fn open_filter_config_folder() -> Result<(), CommandError> {
+    use crate::filter_config::FilterConfigManager;
+
+    let manager = FilterConfigManager::with_default_path()
+        .map_err(|e| CommandError {
+            message: format!("获取配置路径失败: {}", e),
+        })?;
+
+    let config_dir = manager.config_path().parent()
+        .ok_or_else(|| CommandError {
+            message: "无法获取配置目录".to_string(),
+        })?;
+
+    // 使用系统默认程序打开目录
+    open::that(config_dir)
+        .map_err(|e| CommandError {
+            message: format!("打开配置目录失败: {}", e),
+        })?;
+
+    Ok(())
 }
 
 

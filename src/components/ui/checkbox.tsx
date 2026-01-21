@@ -21,8 +21,8 @@ const Checkbox = React.forwardRef<
       'peer h-4 w-4 shrink-0 rounded-sm border transition-all duration-200',
       // 未选中状态（默认）
       'border-border bg-background hover:border-primary/50',
-      // 选中状态：使用 !important 提高优先级
-      checked && '!bg-blue-600 !border-blue-600 hover:!bg-blue-700',
+      // 选中状态：使用主题色（橙色）
+      checked && 'bg-orange-500 border-orange-500 hover:bg-orange-600',
       // 焦点样式
       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background',
       // 禁用状态

@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -20,6 +20,17 @@ import {
   useProjectLoading,
 } from "./stores/useProjectStore";
 import { cn } from "@/lib/utils";
+import type { EnhancedPrompt } from "@/types/prompt";
+
+// ==================== 类型定义 ====================
+
+type AlertType = 'success' | 'error' | 'info';
+
+interface AlertState {
+  show: boolean;
+  type: AlertType;
+  message: string;
+}
 
 // ==================== 调试模式 ====================
 const DEBUG = import.meta.env.DEV;
@@ -37,12 +48,30 @@ function App() {
   const navigate = useNavigate();
   const currentProject = useCurrentProject();
   const currentSessionFile = useCurrentSessionFile();
-  const { fetchProjects, setCurrentSessionFile } = useProjectActions();
+  const { fetchProjects, setCurrentSessionFile, getLatestSessionFile, getSessionFiles } = useProjectActions();
   const projectLoading = useProjectLoading();
+
+  // 全局 Alert 状态
+  const [globalAlert, setGlobalAlert] = useState<AlertState>({
+    show: false,
+    type: 'info',
+    message: '',
+  });
+
+  // 显示全局 Alert
+  const showGlobalAlert = useCallback((type: AlertType, message: string) => {
+    setGlobalAlert({ show: true, type, message });
+
+    // 自动关闭
+    const duration = type === 'success' ? 2000 : 3000;
+    setTimeout(() => {
+      setGlobalAlert(prev => ({ ...prev, show: false }));
+    }, duration);
+  }, []);
 
   // 本地状态
   const [goal, setGoal] = useState("");
-  const [analysisResult, setAnalysisResult] = useState("");
+  const [analysisResult, setAnalysisResult] = useState<EnhancedPrompt | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
 
@@ -99,33 +128,71 @@ function App() {
     if (!currentProject) return;
 
     try {
-      const path = await invoke<string>("get_latest_session_path");
-      debugLog('autoDetectFile', 'latest file:', path);
-      setCurrentSessionFile(path);
+      const path = await getLatestSessionFile(currentProject.path);
+      if (path) {
+        debugLog('autoDetectFile', 'latest file:', path);
+        setCurrentSessionFile(path);
+      } else {
+        debugLog('autoDetectFile', 'no files found');
+      }
     } catch (e) {
-      const errorMsg = `自动检测文件失败: ${e}`;
+      const errorMsg = t('messages.autoDetectFileError', { error: String(e) });
       debugLog('autoDetectFile', 'error', errorMsg);
     }
   };
 
   // 执行分析
   const handleAnalyze = async () => {
-    if (!currentSessionFile || !goal) {
+    if (!goal) {
       alert(t('alerts.fillGoal', { ns: 'common' }));
       return;
     }
 
     setAnalyzing(true);
-    setAnalysisResult("");
+    setAnalysisResult(null);
 
     try {
-      const result = await invoke<string>("optimize_prompt", {
-        sessionFile: currentSessionFile,
-        goal
+      // 获取当前项目的会话文件列表
+      let sessionFilePaths: string[] = [];
+      if (currentProject) {
+        const sessionFiles = await getSessionFiles(currentProject.path, false);
+        // 获取最近的几个会话文件
+        sessionFilePaths = sessionFiles.slice(0, 10).map(f => f.file_path);
+        console.log(`[App] ${t('messages.foundSessionFiles', { count: sessionFilePaths.length })}`);
+      }
+
+      // 使用正确的请求结构调用 optimize_prompt
+      const result = await invoke<EnhancedPrompt>("optimize_prompt", {
+        request: {
+          goal: goal.trim(),
+          sessionFilePaths,  // 传递会话文件路径列表
+          limit: 5,
+          useWeighted: true
+        }
       });
+      debugLog('handleAnalyze', 'result received:', result);
+      debugLog('handleAnalyze', 'result JSON:', JSON.stringify(result, null, 2));
+      debugLog('handleAnalyze', 'enhancedPrompt length:', result?.enhancedPrompt?.length || 0);
+      debugLog('handleAnalyze', 'enhancedPrompt content:', result?.enhancedPrompt || 'EMPTY');
+      debugLog('handleAnalyze', 'result keys:', result ? Object.keys(result) : 'NO KEYS');
       setAnalysisResult(result);
     } catch (e) {
-      setAnalysisResult(`Error: ${e}`);
+      // 更详细的错误处理
+      let errorMsg = 'Unknown error';
+      if (typeof e === 'string') {
+        errorMsg = e;
+      } else if (e instanceof Error) {
+        errorMsg = e.message;
+      } else if (e && typeof e === 'object') {
+        try {
+          errorMsg = JSON.stringify(e);
+        } catch {
+          errorMsg = 'Error object cannot be stringified';
+        }
+      }
+      debugLog('handleAnalyze', 'error', e);
+      setAnalysisResult(null);
+      alert(`Error: ${errorMsg}`);
     } finally {
       setAnalyzing(false);
     }
@@ -133,12 +200,47 @@ function App() {
 
   // 项目切换确认回调
   const handleProjectChange = useCallback(() => {
-    debugLog('handleProjectChange', 'project changed, reloading file');
-    autoDetectFile();
-  }, [currentProject]);
+    debugLog('handleProjectChange', 'project changed');
+    // 移除自动检测，避免覆盖用户选择的会话文件
+  }, []);
+
+  // 从文件路径提取 sessionId
+  // 会话文件名格式：claude-UUID.jsonl，提取 UUID 作为 sessionId
+  const sessionId = useMemo(() => {
+    if (!currentSessionFile) return '';
+    const fileName = currentSessionFile.split(/[\\/]/).pop() || '';
+    // 移除 .jsonl 扩展名和 claude- 前缀
+    const match = fileName.match(/claude-([^.]+)\.jsonl$/);
+    return match ? match[1] : fileName.replace(/\.jsonl$/, '');
+  }, [currentSessionFile]);
 
   return (
-    <div className="flex h-screen" style={{ fontFamily: 'sans-serif', backgroundColor: 'var(--color-bg-primary)' }}>
+    <div className="flex h-screen relative" style={{ fontFamily: 'sans-serif', backgroundColor: 'var(--color-bg-primary)' }}>
+      {/* 全局 Alert 弹窗 */}
+      {globalAlert.show && (
+        <div
+          className={cn(
+            "fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-md w-full mx-auto px-4",
+            "animate-in fade-in slide-in-from-top-4 duration-300"
+          )}
+        >
+          <div
+            className={cn(
+              "rounded-lg shadow-lg border px-4 py-3 flex items-center gap-3",
+              globalAlert.type === 'success'
+                ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800"
+                : globalAlert.type === 'error'
+                ? "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800"
+                : "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+            )}
+          >
+            {globalAlert.type === 'success' && <CheckCircle className="h-5 w-5 flex-shrink-0" />}
+            {globalAlert.type === 'error' && <AlertCircle className="h-5 w-5 flex-shrink-0" />}
+            <span className="flex-1 text-sm font-medium">{globalAlert.message}</span>
+          </div>
+        </div>
+      )}
+
       <ResizablePanelGroup
         orientation="horizontal"
         className="h-full"
@@ -188,7 +290,7 @@ function App() {
             <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {/* 项目卡片区 (10%) */}
               <div className="p-6" style={{ height: '15%', backgroundColor: 'var(--color-bg-primary)' }}>
-                <ProjectCard onConfirm={handleProjectChange} />
+                <ProjectCard onConfirm={handleProjectChange} onAlert={showGlobalAlert} />
               </div>
 
               {/* 分隔线 */}
@@ -216,13 +318,13 @@ function App() {
                       border: '1px solid var(--color-border-light)',
                       color: 'var(--color-text-primary)'
                     }}
-                    disabled={projectLoading || !currentSessionFile}
+                    disabled={projectLoading}
                   />
 
                   {/* 暖橙色/珊瑚橙色全宽按钮 */}
                   <button
                     onClick={handleAnalyze}
-                    disabled={analyzing || !goal.trim() || !currentSessionFile}
+                    disabled={analyzing || !goal.trim()}
                     className={cn(
                       "w-full py-4 text-white font-semibold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed",
                       "hover:shadow-lg active:scale-[0.99]"
@@ -232,7 +334,7 @@ function App() {
                       boxShadow: '0 0 20px rgba(245, 158, 11, 0.4)'
                     }}
                     onMouseEnter={(e) => {
-                      if (!analyzing && goal.trim() && currentSessionFile) {
+                      if (!analyzing && goal.trim()) {
                         e.currentTarget.style.boxShadow = '0 0 30px rgba(245, 158, 11, 0.6)';
                       }
                     }}
@@ -243,7 +345,7 @@ function App() {
                     {analyzing ? (
                       <span className="flex items-center justify-center gap-2">
                         <RefreshCw className="h-4 w-4 animate-spin" />
-                        {t('status.analyzing')}
+                        {t('status.analyzing', { ns: 'common' })}
                       </span>
                     ) : t('buttons.analyzeButton')}
                   </button>
@@ -267,15 +369,64 @@ function App() {
                 }}>
                   <div className="h-full overflow-y-auto p-4">
                     {analysisResult ? (
-                      <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed" style={{
-                        color: 'var(--color-text-primary)',
-                        fontFamily: 'Consolas, Monaco, "Courier New", monospace'
-                      }}>
-                        {analysisResult}
-                      </pre>
+                      <div className="space-y-4">
+                        {/* Token 统计 */}
+                        {analysisResult.tokenStats && (
+                          <div className="flex items-center gap-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                            <span>Token: {analysisResult.tokenStats.compressedTokens} / {analysisResult.tokenStats.originalTokens}</span>
+                            {analysisResult.tokenStats.savingsPercentage > 0 && (
+                              <span style={{ color: 'var(--color-accent-blue)' }}>
+                                {t('messages.tokenStats.saved')} {analysisResult.tokenStats.savingsPercentage.toFixed(1)}%
+                              </span>
+                            )}
+                            <span>{t('messages.tokenStats.confidence')}: {(analysisResult.confidence * 100).toFixed(0)}%</span>
+                          </div>
+                        )}
+
+                        {/* 引用的会话 */}
+                        {analysisResult.referencedSessions && analysisResult.referencedSessions.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                              {t('messages.referencedSessions', { count: analysisResult.referencedSessions.length })}
+                            </p>
+                            {analysisResult.referencedSessions.map((session, idx) => (
+                              <div key={idx} className="text-sm p-2 rounded" style={{
+                                backgroundColor: 'var(--color-bg-primary)',
+                                border: '1px solid var(--color-border-light)'
+                              }}>
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <p className="font-medium">{session.summary || t('messages.noSummary')}</p>
+                                    <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                                      {t('messages.similarity')}: {((session.similarityScore || 0) * 100).toFixed(0)}%
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* 增强的提示词 */}
+                        <div>
+                          <p className="text-sm font-medium mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                            {t('messages.enhancedPrompt')}
+                          </p>
+                          <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed p-3 rounded" style={{
+                            color: 'var(--color-text-primary)',
+                            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                            backgroundColor: 'var(--color-bg-primary)',
+                            border: '1px solid var(--color-border-light)'
+                          }}>
+                            {analysisResult.enhancedPrompt}
+                          </pre>
+                        </div>
+                      </div>
                     ) : (
                       <div className="flex items-center justify-center h-full">
-                        <p style={{ color: 'var(--color-text-secondary)' }}>{t('messages.analysisResultPlaceholder')}</p>
+                        <p style={{ color: 'var(--color-text-secondary)' }}>
+                          {analyzing ? t('messages.analyzing') : t('messages.analysisResultPlaceholder')}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -299,6 +450,7 @@ function App() {
         >
           <TimelineSidebar
             filePath={currentSessionFile || ''}
+            sessionId={sessionId}
             autoRefreshInterval={3000}
             className="h-full"
             collapsed={rightCollapsed}

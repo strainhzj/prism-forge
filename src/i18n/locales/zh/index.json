@@ -10,12 +10,25 @@
   },
   "buttons": {
     "analyzeAndGenerate": "分析并生成提示词",
-    "analyzeButton": "Analyze & Generate Prompt ➔"
+    "analyzeButton": "分析并生成提示词 →"
+  },
+  "status": {
+    "analyzing": "分析中..."
   },
   "messages": {
     "fillGoalAlert": "请填写目标内容",
     "analysisResultPlaceholder": "分析结果将显示在这里...",
-    "autoDetectFileError": "自动检测文件失败: {{error}}"
+    "autoDetectFileError": "自动检测文件失败: {{error}}",
+    "foundSessionFiles": "找到 {{count}} 个会话文件",
+    "tokenStats": {
+      "saved": "节省",
+      "confidence": "置信度"
+    },
+    "referencedSessions": "引用的会话 ({{count}}):",
+    "noSummary": "无摘要",
+    "similarity": "相似度",
+    "enhancedPrompt": "增强的提示词:",
+    "analyzing": "分析中..."
   },
   "timeline": {
     "title": "时间线日志",
@@ -23,15 +36,75 @@
     "collapse": "折叠侧边栏",
     "refresh": "刷新",
     "autoRefresh": "自动刷新",
+    "autoRefreshing": "自动刷新中",
     "stopAutoRefresh": "停止自动刷新",
     "startAutoRefresh": "开启自动刷新",
     "logDetail": "日志详情",
     "user": "用户",
     "assistant": "助手",
-    "recordCount": "条记录"
+    "recordCount": "条记录",
+    "noLogs": "暂无日志"
   },
   "project": {
     "switchProject": "切换项目",
-    "selectProject": "选择项目"
+    "selectProject": "选择项目",
+    "autoDetect": {
+      "tooltip": "跟踪最新会话",
+      "loading": "检测中...",
+      "success": "已切换到最新会话",
+      "error": "当前项目没有会话文件",
+      "shortcut": "快捷键: Ctrl/Cmd + D"
+    }
+  },
+  "filter": {
+    "title": "日志过滤设置",
+    "description": "配置日志过滤规则，隐藏不需要的系统消息",
+    "enabled": "启用过滤",
+    "rules": "过滤规则",
+    "addRule": "添加规则",
+    "editRule": "编辑规则",
+    "deleteRule": "删除规则",
+    "ruleName": "规则名称",
+    "matchType": "匹配类型",
+    "pattern": "匹配模式",
+    "description": "描述",
+    "actions": "操作",
+    "save": "保存",
+    "cancel": "取消",
+    "openConfigFile": "打开配置文件",
+    "reload": "重新加载",
+    "matchTypes": {
+      "contains": "包含",
+      "regex": "正则表达式",
+      "exact": "精确匹配"
+    },
+    "defaultRules": {
+      "clear_command": {
+        "name": "清除命令",
+        "description": "过滤 /clear 命令"
+      },
+      "local_command_caveat": {
+        "name": "本地命令提示",
+        "description": "过滤本地命令提示信息"
+      },
+      "empty_stdout": {
+        "name": "空输出",
+        "description": "过滤空的命令输出"
+      }
+    },
+    "validation": {
+      "duplicateName": "规则名称已存在",
+      "emptyPattern": "匹配模式不能为空",
+      "emptyName": "规则名称不能为空"
+    },
+    "success": {
+      "saved": "配置已保存",
+      "reloaded": "配置已重新加载"
+    },
+    "error": {
+      "loadFailed": "加载配置失败",
+      "saveFailed": "保存配置失败",
+      "reloadFailed": "重新加载配置失败"
+    }
   }
 }

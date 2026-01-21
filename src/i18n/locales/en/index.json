@@ -10,12 +10,25 @@
   },
   "buttons": {
     "analyzeAndGenerate": "Analyze & Generate Prompt",
-    "analyzeButton": "Analyze & Generate Prompt ➔"
+    "analyzeButton": "Analyze & Generate Prompt →"
+  },
+  "status": {
+    "analyzing": "Analyzing..."
   },
   "messages": {
     "fillGoalAlert": "Please fill in the goal content",
     "analysisResultPlaceholder": "Analysis results will be displayed here...",
-    "autoDetectFileError": "Auto-detect file failed: {{error}}"
+    "autoDetectFileError": "Auto-detect file failed: {{error}}",
+    "foundSessionFiles": "Found {{count}} session files",
+    "tokenStats": {
+      "saved": "Saved",
+      "confidence": "Confidence"
+    },
+    "referencedSessions": "Referenced Sessions ({{count}}):",
+    "noSummary": "No summary",
+    "similarity": "Similarity",
+    "enhancedPrompt": "Enhanced Prompt:",
+    "analyzing": "Analyzing..."
   },
   "timeline": {
     "title": "Timeline Log",
@@ -23,15 +36,75 @@
     "collapse": "Collapse Sidebar",
     "refresh": "Refresh",
     "autoRefresh": "Auto Refresh",
+    "autoRefreshing": "Auto Refreshing",
     "stopAutoRefresh": "Stop Auto Refresh",
     "startAutoRefresh": "Start Auto Refresh",
     "logDetail": "Log Details",
     "user": "User",
     "assistant": "Assistant",
-    "recordCount": "records"
+    "recordCount": "records",
+    "noLogs": "No logs yet"
   },
   "project": {
     "switchProject": "Switch Project",
-    "selectProject": "Select Project"
+    "selectProject": "Select Project",
+    "autoDetect": {
+      "tooltip": "Track Latest Session",
+      "loading": "Detecting...",
+      "success": "Switched to latest session",
+      "error": "No session files in current project",
+      "shortcut": "Shortcut: Ctrl/Cmd + D"
+    }
+  },
+  "filter": {
+    "title": "Log Filter Settings",
+    "description": "Configure log filter rules to hide unwanted system messages",
+    "enabled": "Enable Filtering",
+    "rules": "Filter Rules",
+    "addRule": "Add Rule",
+    "editRule": "Edit Rule",
+    "deleteRule": "Delete Rule",
+    "ruleName": "Rule Name",
+    "matchType": "Match Type",
+    "pattern": "Pattern",
+    "description": "Description",
+    "actions": "Actions",
+    "save": "Save",
+    "cancel": "Cancel",
+    "openConfigFile": "Open Config File",
+    "reload": "Reload",
+    "matchTypes": {
+      "contains": "Contains",
+      "regex": "Regular Expression",
+      "exact": "Exact Match"
+    },
+    "defaultRules": {
+      "clear_command": {
+        "name": "Clear Command",
+        "description": "Filter /clear command"
+      },
+      "local_command_caveat": {
+        "name": "Local Command Caveat",
+        "description": "Filter local command caveat messages"
+      },
+      "empty_stdout": {
+        "name": "Empty Output",
+        "description": "Filter empty command output"
+      }
+    },
+    "validation": {
+      "duplicateName": "Rule name already exists",
+      "emptyPattern": "Pattern cannot be empty",
+      "emptyName": "Rule name cannot be empty"
+    },
+    "success": {
+      "saved": "Configuration saved",
+      "reloaded": "Configuration reloaded"
+    },
+    "error": {
+      "loadFailed": "Failed to load configuration",
+      "saveFailed": "Failed to save configuration",
+      "reloadFailed": "Failed to reload configuration"
+    }
   }
 }

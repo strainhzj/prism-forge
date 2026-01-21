@@ -11,41 +11,38 @@ export interface TokenStats {
   /**
    * 原始 Token 数
    */
-  original_tokens: number;
+  originalTokens: number;
   /**
    * 压缩后 Token 数
    */
-  compressed_tokens: number;
+  compressedTokens: number;
   /**
    * 节省百分比 (0.0 - 100.0)
    */
-  savings_percentage: number;
+  savingsPercentage: number;
 }
 
 /**
  * 引用的会话信息
+ * 与 Rust 后端 optimizer::prompt_generator::ReferencedSession 对应
  */
 export interface ReferencedSession {
   /**
    * 会话 ID
    */
-  session_id: string;
+  sessionId: string;
   /**
-   * 项目路径
+   * 项目名称
    */
-  project_path: string;
+  projectName: string;
   /**
-   * 会话摘要
+   * 会话摘要（可能为空）
    */
   summary: string;
   /**
    * 相似度分数 (0.0 - 1.0)
    */
-  similarity: number;
-  /**
-   * 评分 (1-5)
-   */
-  rating?: number;
+  similarityScore: number;
 }
 
 /**
@@ -55,19 +52,19 @@ export interface EnhancedPrompt {
   /**
    * 原始目标
    */
-  original_goal: string;
+  originalGoal: string;
   /**
    * 引用的会话
    */
-  referenced_sessions: ReferencedSession[];
+  referencedSessions: ReferencedSession[];
   /**
    * 增强的提示词
    */
-  enhanced_prompt: string;
+  enhancedPrompt: string;
   /**
    * Token 统计
    */
-  token_stats: TokenStats;
+  tokenStats: TokenStats;
   /**
    * 置信度 (0.0 - 1.0)
    */
@@ -83,7 +80,11 @@ export interface EnhancedPromptRequest {
    */
   goal: string;
   /**
-   * 可选：手动指定会话 ID 列表
+   * 可选：会话文件路径列表（从项目目录获取）
+   */
+  sessionFilePaths?: string[];
+  /**
+   * 可选：手动指定会话 ID 列表（已弃用，保留兼容性）
    */
   sessionIds?: string[];
   /**

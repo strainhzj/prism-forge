@@ -6,6 +6,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { useSessionActions } from '@/stores/useSessionStore';
 
 /**
  * 会话变更事件类型
@@ -66,27 +67,56 @@ export function useSessionMonitor(options: SessionMonitorOptions = {}) {
 
   // Refs
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEventIdRef = useRef<string>('');
+  const onChangeRef = useRef<typeof onChange>(onChange);
+  const onRefreshRef = useRef<typeof onRefresh>(onRefresh);
+  const debounceMsRef = useRef(debounceMs);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
+
+  useEffect(() => {
+    debounceMsRef.current = debounceMs;
+  }, [debounceMs]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   /**
    * 触发刷新
    */
   const triggerRefresh = useCallback(async () => {
-    if (!onRefresh) return;
+    const refresh = onRefreshRef.current;
+    if (!refresh) return;
+    if (!isMountedRef.current) return;
 
     setIsRefreshing(true);
     try {
-      await onRefresh();
+      await refresh();
     } catch (error) {
       console.error('刷新失败:', error);
     } finally {
-      // 延迟重置状态，让用户看到刷新动画
-      setTimeout(() => {
+      if (refreshResetTimerRef.current) {
+        clearTimeout(refreshResetTimerRef.current);
+      }
+      refreshResetTimerRef.current = setTimeout(() => {
+        if (!isMountedRef.current) return;
         setIsRefreshing(false);
         setPendingChanges(0);
       }, 500);
     }
-  }, [onRefresh]);
+  }, []);
 
   /**
    * 处理会话变更事件
@@ -107,9 +137,7 @@ export function useSessionMonitor(options: SessionMonitorOptions = {}) {
       setPendingChanges((prev) => prev + 1);
 
       // 调用回调
-      if (onChange) {
-        onChange(event);
-      }
+      onChangeRef.current?.(event);
 
       // 防抖刷新
       if (debounceTimerRef.current) {
@@ -118,9 +146,9 @@ export function useSessionMonitor(options: SessionMonitorOptions = {}) {
 
       debounceTimerRef.current = setTimeout(() => {
         triggerRefresh();
-      }, debounceMs);
+      }, debounceMsRef.current);
     },
-    [onChange, debounceMs, triggerRefresh]
+    [triggerRefresh]
   );
 
   /**
@@ -155,6 +183,9 @@ export function useSessionMonitor(options: SessionMonitorOptions = {}) {
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
       }
+      if (refreshResetTimerRef.current) {
+        clearTimeout(refreshResetTimerRef.current);
+      }
     };
   }, [enabled, handleSessionChange]);
 
@@ -176,19 +207,16 @@ export function useSessionMonitor(options: SessionMonitorOptions = {}) {
  * 自动与 useSessionStore 集成
  */
 export function useAutoRefresh() {
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastChange, setLastChange] = useState<SessionChangeEvent | null>(null);
+  const { setActiveSessions } = useSessionActions();
 
-  const { pendingChanges } = useSessionMonitor({
+  const { pendingChanges, isRefreshing, triggerRefresh } = useSessionMonitor({
     debounceMs: 2000,
     onChange: (event) => {
       setLastChange(event);
     },
     onRefresh: async () => {
-      setIsRefreshing(true);
-      // 触发 store 的 setActiveSessions
-      // 这里需要导入 useSessionActions
-      setIsRefreshing(false);
+      await setActiveSessions();
     },
   });
 
@@ -196,5 +224,6 @@ export function useAutoRefresh() {
     isRefreshing,
     lastChange,
     pendingChanges,
+    triggerRefresh,
   };
 }

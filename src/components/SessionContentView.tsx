@@ -2,37 +2,26 @@
  * SessionContentView 组件
  *
  * 按照首页 Session Log 的形式显示会话内容
- * 支持懒加载和自动滚动
+ * 集成多级日志读取功能
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { invoke } from '@tauri-apps/api/core';
-import { ChevronLeft, RefreshCw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { save } from '@tauri-apps/plugin-dialog';
+import { ChevronLeft, RefreshCw, Download, ArrowUpDown, Code, RefreshCwOff, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-
-// ==================== 调试模式 ====================
-const DEBUG = import.meta.env.DEV;
-
-function debugLog(action: string, ...args: unknown[]) {
-  if (DEBUG) {
-    console.log(`[SessionContentView] ${action}`, ...args);
-  }
-}
+import { Checkbox } from '@/components/ui/checkbox';
+import { MultiLevelViewDropdown } from '@/components/MultiLevelViewSelector';
+import { TimelineMessageList } from '@/components/session/TimelineMessageList';
+import { useViewLevelManager, useSessionContent, useExportSessionByLevel } from '@/hooks/useViewLevel';
+import { useSessionMonitor } from '@/hooks/useSessionMonitor';
+import { useProjectActions, useProjects, useProjectStore } from '@/stores/useProjectStore';
+import type { MessageNode } from '@/types/message';
 
 // ==================== 类型定义 ====================
-
-/**
- * 解析的事件（与首页 ParsedEvent 一致）
- */
-export interface ParsedEvent {
-  time: string;
-  role: string;
-  content: string;
-  event_type: string;
-}
 
 /**
  * 会话文件信息
@@ -42,6 +31,7 @@ export interface SessionFileInfo {
   file_path: string;
   file_size: number;
   modified_time: string;
+  projectPath: string;
 }
 
 export interface SessionContentViewProps {
@@ -79,42 +69,223 @@ export function SessionContentView({
   className,
 }: SessionContentViewProps) {
   const { t } = useTranslation('sessions');
-  // 状态管理
-  const [events, setEvents] = useState<ParsedEvent[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const projects = useProjects();
+  const fetchProjects = useProjectStore(state => state.fetchProjects);
+  const { setCurrentProject, setCurrentSessionFile } = useProjectActions();
 
-  // 加载会话内容
-  const loadContent = useCallback(async () => {
-    debugLog('loadContent', '开始加载会话内容', sessionInfo.file_path);
-    setLoading(true);
-    setError(null);
+  // 组件初始化时确保项目列表已加载
+  useEffect(() => {
+    if (!projects || projects.length === 0) {
+      fetchProjects();
+    }
+  }, [projects, fetchProjects]);
 
+  // ===== 排序状态管理 =====
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc'); // 默认倒序
+
+  // ===== 内容显示模式管理 =====
+  const [contentDisplayMode, setContentDisplayMode] = useState<'raw' | 'extracted'>('extracted'); // 默认显示提取内容
+
+  // ===== 导出下拉框状态管理 =====
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
+  const [showForceReParseConfirm, setShowForceReParseConfirm] = useState(false);
+  const exportDropdownRef = useRef<HTMLDivElement>(null);
+
+  // ===== 跟踪会话确认对话框状态管理 =====
+  const [showTrackConfirm, setShowTrackConfirm] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
+
+  // 从 localStorage 读取"下次不再提醒"的设置
+  useEffect(() => {
+    const saved = localStorage.getItem('track-session-dont-show-again');
+    if (saved === 'true') {
+      setDontShowAgain(true);
+    }
+  }, []);
+
+  // 点击外部关闭下拉框
+  const handleClickOutside = useCallback((event: MouseEvent) => {
+    if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+      setIsExportDropdownOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isExportDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isExportDropdownOpen, handleClickOutside]);
+
+  // ===== 多级日志读取功能 =====
+  // 使用视图等级管理 hook
+  const {
+    currentViewLevel,
+    changeViewLevel,
+    isSaving: viewLevelSaving
+  } = useViewLevelManager(sessionInfo.session_id);
+
+  // 加载会话内容（根据视图等级过滤）
+  const {
+    messages,
+    isLoading: contentLoading,
+    error: contentError,
+    refresh: refreshContent,
+    forceRefresh,
+  } = useSessionContent(sessionInfo.session_id, currentViewLevel, sessionInfo.file_path, false);
+
+  const handleAutoRefresh = useCallback(async () => {
     try {
-      // 复用现有的 parse_session_file 命令
-      const result = await invoke<ParsedEvent[]>('parse_session_file', {
+      await forceRefresh();
+    } catch (error) {
+      // 自动刷新失败，静默处理
+    }
+  }, [forceRefresh]);
+
+  useSessionMonitor({
+    debounceMs: 2000,
+    onRefresh: handleAutoRefresh,
+  });
+
+  // ===== 排序后的消息列表 =====
+  const sortedMessages = useMemo(() => {
+    if (!messages || messages.length === 0) return messages;
+
+    const sorted = [...messages].sort((a, b) => {
+      const timeA = new Date(a.timestamp || 0).getTime();
+      const timeB = new Date(b.timestamp || 0).getTime();
+      return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+    });
+
+    return sorted;
+  }, [messages, sortOrder]);
+
+  // 导出功能
+  const exportMutation = useExportSessionByLevel();
+
+  const handleExport = async (format: 'markdown' | 'json') => {
+    try {
+      const content = await exportMutation.mutateAsync({
+        sessionId: sessionInfo.session_id,
+        viewLevel: currentViewLevel,
+        format,
         filePath: sessionInfo.file_path,
       });
 
-      debugLog('loadContent', '加载成功', result.length, '个事件');
-      // 倒序显示（最新的在最上面）
-      setEvents(result.slice().reverse());
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      debugLog('loadContent', '加载失败', errorMsg);
-      setError(errorMsg);
-    } finally {
-      setLoading(false);
-    }
-  }, [sessionInfo.file_path]);
+      // 生成默认文件名
+      const defaultFileName = `${sessionInfo.session_id.slice(0, 8)}-${currentViewLevel}.${format === 'markdown' ? 'md' : 'json'}`;
 
-  // 初始加载
-  useEffect(() => {
-    loadContent();
-  }, [loadContent]);
+      // 使用 Tauri 原生文件保存对话框
+      const filePath = await save({
+        defaultPath: defaultFileName,
+        filters: [
+          {
+            name: format === 'markdown' ? 'Markdown Files' : 'JSON Files',
+            extensions: [format === 'markdown' ? 'md' : 'json'],
+          },
+          {
+            name: 'All Files',
+            extensions: ['*'],
+          },
+        ],
+      });
+
+      // 用户取消选择
+      if (!filePath) {
+        return;
+      }
+
+      // 写入文件（使用 Tauri 的 fs API）
+      const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+      await writeTextFile(filePath, content);
+
+      // 显示成功提示
+      const formatLabel = t(`viewLevel.export.formats.${format}`);
+      alert(`${t('viewLevel.export.success')}\n\n${formatLabel}: ${filePath}`);
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      alert(`${t('viewLevel.export.failed')}: ${error}`);
+    }
+  };
+
+  // 强制重新解析处理函数
+  const handleForceReParse = async () => {
+    setShowForceReParseConfirm(false);
+    try {
+      await forceRefresh();
+    } catch (error) {
+      // 强制重新解析失败，静默处理
+    }
+  };
+
+  // 跟踪会话处理函数
+  const handleTrackSession = useCallback(async () => {
+    // 如果用户勾选了"下次不再提醒"，保存设置
+    if (dontShowAgain) {
+      localStorage.setItem('track-session-dont-show-again', 'true');
+    }
+
+    // 关闭确认对话框
+    setShowTrackConfirm(false);
+
+    // 仅在开发环境输出调试信息
+    if (import.meta.env.DEV) {
+      console.log('[handleTrackSession] sessionInfo.projectPath:', sessionInfo.projectPath);
+      console.log('[handleTrackSession] projects:', projects);
+    }
+
+    // 检查项目列表是否存在
+    if (!projects || projects.length === 0) {
+      alert(t('detailView.trackSession.projectNotFound'));
+      return;
+    }
+
+    // 根据 sessionInfo.projectPath 匹配项目
+    const matchedProject = projects.find((p) => p.path === sessionInfo.projectPath);
+
+    if (!matchedProject) {
+      // 仅在开发环境输出详细错误信息
+      if (import.meta.env.DEV) {
+        console.error('[handleTrackSession] 未找到匹配的项目');
+        console.error('[handleTrackSession] 查找的路径:', sessionInfo.projectPath);
+        console.error('[handleTrackSession] 可用项目路径:', projects.map(p => p.path));
+      }
+      alert(t('detailView.trackSession.projectNotFound'));
+      return;
+    }
+
+    // 仅在开发环境输出成功日志
+    if (import.meta.env.DEV) {
+      console.log('[handleTrackSession] 匹配成功:', matchedProject);
+    }
+
+    // 设置当前项目和会话文件
+    setCurrentProject(matchedProject);
+    setCurrentSessionFile(sessionInfo.file_path);
+
+    // 跳转到首页
+    navigate('/');
+  }, [dontShowAgain, projects, setCurrentProject, setCurrentSessionFile, sessionInfo.file_path, sessionInfo.projectPath, navigate, t]);
+
+  // 点击跟踪会话按钮
+  const handleTrackSessionClick = useCallback(() => {
+    if (dontShowAgain) {
+      // 如果用户勾选了"下次不再提醒"，直接执行跟踪
+      handleTrackSession();
+    } else {
+      // 否则显示确认对话框
+      setShowTrackConfirm(true);
+    }
+  }, [dontShowAgain, handleTrackSession]);
 
   return (
-    <div className={cn('flex flex-col h-full', className)} style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+    <>
+      <div className={cn('flex flex-col h-full', className)} style={{ backgroundColor: 'var(--color-bg-primary)' }}>
       {/* 头部 */}
       <div className="flex items-center gap-3 px-6 py-4 border-b" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
         <Button
@@ -133,21 +304,125 @@ export function SessionContentView({
             {sessionInfo.session_id.slice(0, 8)}...
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={loadContent}
-          disabled={loading}
-          className="shrink-0 hover:bg-[var(--color-app-secondary)]"
-          title={t('detailView.refresh')}
-        >
-          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} style={{ color: 'var(--color-text-primary)' }} />
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* 跟踪会话按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleTrackSessionClick}
+            className="shrink-0 hover:bg-[var(--color-app-secondary)]"
+            title={t('detailView.trackSession.tooltip')}
+          >
+            <Eye className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
+          </Button>
+
+          {/* 刷新按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              refreshContent();
+            }}
+            disabled={contentLoading}
+            className="shrink-0 hover:bg-[var(--color-app-secondary)]"
+            title={t('detailView.refresh')}
+          >
+            <RefreshCw className={cn('h-4 w-4', contentLoading && 'animate-spin')} style={{ color: 'var(--color-text-primary)' }} />
+          </Button>
+
+          {/* 强制重新解析按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowForceReParseConfirm(true)}
+            className="shrink-0 hover:bg-[var(--color-app-secondary)]"
+            title={t('detailView.forceReParse.tooltip')}
+          >
+            <RefreshCwOff className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
+          </Button>
+
+          {/* 内容显示模式切换按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setContentDisplayMode(prev => prev === 'raw' ? 'extracted' : 'raw');
+            }}
+            disabled={contentLoading}
+            className={cn('shrink-0 hover:bg-[var(--color-app-secondary)]', contentDisplayMode === 'raw' && 'bg-[var(--color-app-secondary)]')}
+            title={contentDisplayMode === 'extracted' ? t('detailView.showRaw') : t('detailView.showExtracted')}
+          >
+            <Code className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
+          </Button>
+
+          {/* 排序切换按钮 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc');
+            }}
+            disabled={contentLoading}
+            className="shrink-0 hover:bg-[var(--color-app-secondary)]"
+            title={t(`detailView.sortOrder.${sortOrder}`)}
+          >
+            <ArrowUpDown className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
+          </Button>
+
+          {/* 导出按钮（下拉菜单） */}
+          <div className="relative" ref={exportDropdownRef}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsExportDropdownOpen(prev => !prev)}
+              className="shrink-0 hover:bg-[var(--color-app-secondary)]"
+              title={t('viewLevel.export.title')}
+            >
+              <Download className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
+            </Button>
+            {/* 下拉菜单 */}
+            {isExportDropdownOpen && (
+              <div className="absolute right-0 top-full bg-card border rounded-md shadow-lg z-50" style={{ minWidth: '120px', backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
+                <button
+                  onClick={() => {
+                    handleExport('markdown');
+                    setIsExportDropdownOpen(false);
+                  }}
+                  disabled={exportMutation.isPending}
+                  className="block w-full text-left px-4 py-2 text-sm hover:bg-accent"
+                  style={{ color: 'var(--color-text-primary)' }}
+                >
+                  {t('viewLevel.export.formats.markdown')}
+                </button>
+                <button
+                  onClick={() => {
+                    handleExport('json');
+                    setIsExportDropdownOpen(false);
+                  }}
+                  disabled={exportMutation.isPending}
+                  className="block w-full text-left px-4 py-2 text-sm hover:bg-accent"
+                  style={{ color: 'var(--color-text-primary)' }}
+                >
+                  {t('viewLevel.export.formats.json')}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 视图等级选择器栏 */}
+      <div className="px-6 py-3 border-b" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
+        <MultiLevelViewDropdown
+          value={currentViewLevel}
+          onChange={changeViewLevel}
+          disabled={viewLevelSaving}
+        />
       </div>
 
       {/* 内容区域 */}
       <div className="flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--color-app-result-bg)' }}>
-        {loading ? (
+        {contentLoading ? (
           // 加载骨架屏
           <div className="p-4 space-y-4">
             {[...Array(3)].map((_, i) => (
@@ -160,82 +435,145 @@ export function SessionContentView({
               </div>
             ))}
           </div>
-        ) : error ? (
+        ) : contentError ? (
           // 错误状态
           <div className="flex flex-col items-center justify-center h-full text-center p-4">
             <p className="font-medium" style={{ color: 'var(--color-app-error-accent)' }}>{t('detailView.loadFailed')}</p>
-            <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>{error}</p>
-            <Button variant="outline" size="sm" onClick={loadContent} className="mt-4">
+            <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>{String(contentError)}</p>
+            <Button variant="outline" size="sm" onClick={() => { refreshContent(); }} className="mt-4">
               {t('buttons.retry')}
             </Button>
           </div>
-        ) : events.length === 0 ? (
-          // 空状态
-          <div className="flex flex-col items-center justify-center h-full text-center p-4">
-            <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{t('detailView.noContent')}</p>
-            <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>
-              {t('detailView.noContentHint')}
-            </p>
-          </div>
         ) : (
-          // 事件列表（倒序显示）
-          <div className="p-4 space-y-3">
-            {events.map((event, index) => {
-              const isUser = event.role === 'user' || event.event_type === 'user_message';
-              return (
-                <div
-                  key={index}
-                  className={cn(
-                    'border rounded-lg p-4 transition-all'
-                  )}
-                  style={{
-                    backgroundColor: isUser ? 'rgba(245, 158, 11, 0.1)' : 'var(--color-bg-card)',
-                    borderColor: isUser ? 'rgba(245, 158, 11, 0.3)' : 'rgba(37, 99, 235, 0.2)',
-                    boxShadow: isUser ? '0 0 20px rgba(245, 158, 11, 0.2)' : 'none'
-                  }}
-                >
-                  {/* 元数据 */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <span
-                      className={cn(
-                        'text-xs font-semibold px-2 py-0.5 rounded text-white'
-                      )}
-                      style={{
-                        backgroundColor: isUser ? 'var(--color-accent-warm)' : 'var(--color-accent-blue)',
-                        boxShadow: isUser ? '0 0 10px rgba(245, 158, 11, 0.4)' : '0 0 10px rgba(37, 99, 235, 0.4)'
-                      }}
-                    >
-                      {event.role.toUpperCase()}
-                    </span>
-                    <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                      {event.time.split('T')[1]?.substring(0, 8) || event.time}
-                    </span>
-                    {event.event_type && (
-                      <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                        · {event.event_type}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* 内容 */}
-                  <div className="text-sm whitespace-pre-wrap break-words" style={{ color: 'var(--color-text-primary)' }}>
-                    {event.content.length > 500
-                      ? event.content.substring(0, 500) + '...'
-                      : event.content}
-                  </div>
-                </div>
-              );
-            })}
+          // 消息列表视图 - 使用 TimelineMessageList 组件
+          <div className="p-4">
+            {sortedMessages && sortedMessages.length > 0 ? (
+              <TimelineMessageList
+                contentDisplayMode={contentDisplayMode}
+                messages={sortedMessages.map((msg): MessageNode => ({
+                  id: msg.uuid,
+                  parent_id: msg.parentUuid || null,
+                  depth: 0,
+                  role: msg.msgType || 'unknown',
+                  type: msg.msgType || 'unknown',
+                  content: msg.summary || '无内容',
+                  timestamp: msg.timestamp,
+                  children: [],
+                  thread_id: null,
+                }))}
+              />
+            ) : (
+              // 空状态
+              <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{t('detailView.noContent')}</p>
+                <p className="text-sm mt-2" style={{ color: 'var(--color-text-secondary)' }}>
+                  {t('detailView.noContentHint')}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>
 
       {/* 底部统计信息 */}
-      {!loading && !error && events.length > 0 && (
+      {!contentLoading && !contentError && (
         <div className="px-6 py-3 border-t text-xs" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)', color: 'var(--color-text-secondary)' }}>
-          {t('detailView.messageCount', { count: events.length })}
+          {t('detailView.messageCount', { count: sortedMessages?.length || 0 })}
         </div>
       )}
     </div>
+
+    {/* 强制重新解析确认对话框 */}
+    {showForceReParseConfirm && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-card rounded-lg shadow-lg p-6 max-w-md" style={{ backgroundColor: 'var(--color-bg-card)' }}>
+          <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+            {t('detailView.forceReParse.confirmTitle')}
+          </h3>
+          <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
+            {t('detailView.forceReParse.confirmMessage')}
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowForceReParseConfirm(false)}
+            >
+              {t('detailView.forceReParse.cancel')}
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleForceReParse}
+            >
+              {t('detailView.forceReParse.confirm')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* 跟踪会话确认对话框 */}
+    {showTrackConfirm && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        {/* 背景遮罩 */}
+        <div
+          className="absolute inset-0 bg-black/80"
+          onClick={() => setShowTrackConfirm(false)}
+        />
+
+        {/* 对话框内容 */}
+        <div
+          className="relative z-50 grid w-full max-w-lg gap-4 border p-6 shadow-lg sm:rounded-lg"
+          style={{
+            backgroundColor: 'var(--color-bg-card)',
+            borderColor: 'var(--color-border-light)',
+            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)'
+          }}
+        >
+          {/* 标题 */}
+          <h3 className="text-lg font-semibold leading-none tracking-tight" style={{ color: 'var(--color-text-primary)' }}>
+            {t('detailView.trackSession.confirmTitle')}
+          </h3>
+
+          {/* 描述 */}
+          <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+            {t('detailView.trackSession.confirmMessage')}
+          </p>
+
+          {/* 复选框 */}
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+            <Checkbox
+              id="dont-show-again"
+              checked={dontShowAgain}
+              onCheckedChange={(checked) => setDontShowAgain(checked as boolean)}
+            />
+            <label
+              htmlFor="dont-show-again"
+              className="text-sm cursor-pointer select-none user-select-none flex-1"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              {t('detailView.trackSession.dontShowAgain')}
+            </label>
+          </div>
+
+          {/* 按钮区域 */}
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowTrackConfirm(false)}
+            >
+              {t('detailView.trackSession.cancel')}
+            </Button>
+            <Button
+              onClick={handleTrackSession}
+              style={{ backgroundColor: 'var(--color-accent-warm)' }}
+            >
+              {t('detailView.trackSession.confirm')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

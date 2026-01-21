@@ -9,6 +9,18 @@ use std::sync::{Arc, Mutex};
 
 use crate::database::models::{ApiProvider, ApiProviderType};
 
+// 自定义错误类型，用于包装 String 错误
+#[derive(Debug)]
+struct ViewLevelParseError(String);
+
+impl std::fmt::Display for ViewLevelParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "视图等级解析错误: {}", self.0)
+    }
+}
+
+impl std::error::Error for ViewLevelParseError {}
+
 /// API Provider 数据仓库
 pub struct ApiProviderRepository {
     conn: Arc<Mutex<Connection>>,
@@ -632,35 +644,17 @@ impl SessionRepository {
         let now = Utc::now().to_rfc3339();
 
         self.with_conn_inner(|conn| {
-            // 尝试更新
-            let updated = conn.execute(
-                "UPDATE sessions SET
-                    project_path = ?1,
-                    project_name = ?2,
-                    file_path = ?3,
-                    is_active = ?4,
-                    updated_at = ?5
-                 WHERE session_id = ?6",
-                params![
-                    project_path,
-                    project_name,
-                    file_path,
-                    if is_active { 1 } else { 0 },
-                    now,
-                    session_id,
-                ],
-            )?;
-
-            if updated > 0 {
-                return Ok(updated);
-            }
-
-            // 不存在则插入
-            let inserted = conn.execute(
+            conn.execute(
                 "INSERT INTO sessions (
                     session_id, project_path, project_name, file_path,
                     is_active, created_at, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    project_path = excluded.project_path,
+                    project_name = excluded.project_name,
+                    file_path = excluded.file_path,
+                    is_active = excluded.is_active,
+                    updated_at = excluded.updated_at",
                 params![
                     session_id,
                     project_path,
@@ -670,9 +664,8 @@ impl SessionRepository {
                     now,
                     now,
                 ],
-            )?;
-
-            Ok(inserted)
+            )
+            .map_err(Into::into)
         })
     }
 
@@ -1716,7 +1709,7 @@ impl SettingsRepository {
 
         self.with_conn_inner(|conn| {
             conn.execute(
-                "UPDATE settings SET 
+                "UPDATE settings SET
                     active_threshold = ?1,
                     vector_search_enabled = ?2,
                     embedding_provider = ?3,
@@ -1734,5 +1727,279 @@ impl SettingsRepository {
                 ],
             ).map_err(|e| anyhow::anyhow!("更新设置失败: {}", e))
         })
+    }
+}
+
+// ============================================================================
+// 视图等级偏好数据仓库 (Multi-Level Log Reading)
+// ============================================================================
+
+/// 视图等级偏好数据仓库
+///
+/// 提供 view_level_preferences 表的 CRUD 操作
+pub struct ViewLevelPreferenceRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+unsafe impl Send for ViewLevelPreferenceRepository {}
+unsafe impl Sync for ViewLevelPreferenceRepository {}
+
+impl ViewLevelPreferenceRepository {
+    /// 使用共享连接创建仓库实例
+    pub fn with_conn(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
+    }
+
+    /// 从默认数据库路径创建仓库
+    pub fn from_default_db() -> Result<Self> {
+        let conn = crate::database::init::get_connection_shared()?;
+        Ok(Self::with_conn(conn))
+    }
+
+    /// 创建新的仓库实例（便捷方法）
+    pub fn new() -> Self {
+        Self::from_default_db().unwrap_or_else(|_| {
+            Self {
+                conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+            }
+        })
+    }
+
+    /// 辅助方法：获取连接锁
+    fn with_conn_inner<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&rusqlite::Connection) -> Result<R>,
+    {
+        let conn = self.conn.lock().map_err(|e| {
+            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
+        })?;
+        f(&conn)
+    }
+
+    /// 保存视图等级偏好
+    ///
+    /// 如果该会话已有偏好记录，则更新；否则创建新记录。
+    /// 如果会话不存在于 sessions 表中，会自动创建一个占位会话记录。
+    ///
+    /// # 参数
+    /// - `session_id`: 会话唯一标识
+    /// - `view_level`: 视图等级
+    ///
+    /// # 返回
+    /// 返回 Ok(()) 表示保存成功
+    pub fn save_preference(&mut self, session_id: &str, view_level: crate::parser::view_level::ViewLevel) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let view_level_str = view_level.to_string();
+
+        self.with_conn_inner(|conn| {
+            // 检查会话是否存在
+            let session_exists: bool = conn.query_row(
+                "SELECT COUNT(*) > 0 FROM sessions WHERE session_id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            ).unwrap_or(false);
+
+            // 如果会话不存在，创建一个占位会话记录
+            if !session_exists {
+                conn.execute(
+                    "INSERT INTO sessions (session_id, project_path, project_name, file_path, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![
+                        session_id,
+                        "",  // 空的 project_path（占位）
+                        "",  // 空的 project_name（占位）
+                        "",  // 空的 file_path（占位）
+                        now,
+                        now
+                    ],
+                )?;
+            }
+
+            // 保存或更新视图等级偏好
+            conn.execute(
+                "INSERT INTO view_level_preferences (session_id, view_level, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(session_id) DO UPDATE SET
+                    view_level = excluded.view_level,
+                    updated_at = excluded.updated_at",
+                params![session_id, view_level_str, now, now],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// 获取会话的视图等级偏好
+    ///
+    /// # 参数
+    /// - `session_id`: 会话唯一标识
+    ///
+    /// # 返回
+    /// - `Some(view_level)`: 如果找到偏好记录
+    /// - `None`: 如果没有找到偏好记录
+    pub fn get_preference(&self, session_id: &str) -> Result<Option<crate::parser::view_level::ViewLevel>> {
+        self.with_conn_inner(|conn| {
+            let preference = conn.query_row(
+                "SELECT view_level FROM view_level_preferences WHERE session_id = ?1",
+                params![session_id],
+                |row| {
+                    let view_level_str: String = row.get(0)?;
+                    Ok(view_level_str)
+                },
+            );
+
+            match preference {
+                Ok(view_level_str) => {
+                    let view_level = crate::parser::view_level::ViewLevel::from_str(&view_level_str)
+                        .map_err(|e| anyhow::anyhow!("无效的视图等级: {}", e))?;
+                    Ok(Some(view_level))
+                }
+                Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+                Err(e) => Err(e.into()),
+            }
+        })
+    }
+
+    /// 获取会话的视图等级偏好（带默认值）
+    ///
+    /// # 参数
+    /// - `session_id`: 会话唯一标识
+    ///
+    /// # 返回
+    /// 如果没有找到偏好记录，返回默认值 Conversation
+    pub fn get_preference_or_default(&self, session_id: &str) -> Result<crate::parser::view_level::ViewLevel> {
+        match self.get_preference(session_id)? {
+            Some(view_level) => Ok(view_level),
+            None => Ok(crate::parser::view_level::ViewLevel::default()),
+        }
+    }
+
+    /// 删除会话的视图等级偏好
+    ///
+    /// # 参数
+    /// - `session_id`: 会话唯一标识
+    ///
+    /// # 返回
+    /// 返回删除的行数
+    pub fn delete_preference(&self, session_id: &str) -> Result<usize> {
+        self.with_conn_inner(|conn| {
+            let rows = conn.execute(
+                "DELETE FROM view_level_preferences WHERE session_id = ?1",
+                params![session_id],
+            )?;
+            Ok(rows)
+        })
+    }
+
+    /// 获取所有视图等级偏好
+    ///
+    /// # 返回
+    /// 返回所有偏好记录的列表
+    pub fn get_all_preferences(&self) -> Result<Vec<(String, crate::parser::view_level::ViewLevel)>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT session_id, view_level FROM view_level_preferences ORDER BY updated_at DESC"
+            )?;
+
+            let preferences = stmt.query_map([], |row| {
+                let session_id: String = row.get(0)?;
+                let view_level_str: String = row.get(1)?;
+
+                // 使用 ? 操作符直接返回 rusqlite::Error
+                let view_level = match crate::parser::view_level::ViewLevel::from_str(&view_level_str) {
+                    Ok(level) => level,
+                    Err(e) => {
+                        return Err(rusqlite::Error::ToSqlConversionFailure(
+                            Box::new(ViewLevelParseError(e)) as Box<dyn std::error::Error + Send + Sync>
+                        ));
+                    }
+                };
+
+                Ok((session_id, view_level))
+            })?;
+
+            preferences.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        })
+    }
+}
+
+#[cfg(test)]
+mod view_level_preference_tests {
+    use super::*;
+
+    #[test]
+    fn test_view_level_preference_crud() {
+        // 使用内存数据库进行测试
+        let conn = Arc::new(Mutex::new(Connection::open_in_memory().unwrap()));
+        {
+            let mut conn_guard = conn.lock().unwrap();
+            conn_guard.execute("PRAGMA foreign_keys = ON;", []).unwrap();
+
+            // 创建 sessions 表（外键依赖）
+            conn_guard.execute(
+                "CREATE TABLE IF NOT EXISTS sessions (
+                    session_id TEXT PRIMARY KEY,
+                    project_path TEXT NOT NULL,
+                    project_name TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    file_type TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );",
+                [],
+            ).unwrap();
+
+            // 执行迁移
+            crate::database::migrations::migrate_v13_impl(&mut conn_guard).unwrap();
+
+            // 插入测试会话
+            conn_guard.execute(
+                "INSERT INTO sessions (session_id, project_path, project_name, file_path, file_type, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    "test-session-123",
+                    "/test/path",
+                    "Test Project",
+                    "/test/file.jsonl",
+                    "jsonl",
+                    "2025-01-15T00:00:00Z",
+                    "2025-01-15T00:00:00Z"
+                ],
+            ).unwrap();
+        }
+
+        let mut repo = ViewLevelPreferenceRepository::with_conn(conn);
+        let session_id = "test-session-123";
+        let view_level = crate::parser::view_level::ViewLevel::Conversation;
+
+        // 测试保存
+        repo.save_preference(session_id, view_level).unwrap();
+
+        // 测试获取
+        let retrieved = repo.get_preference(session_id).unwrap();
+        assert_eq!(retrieved, Some(view_level));
+
+        // 测试获取或默认
+        let retrieved_or_default = repo.get_preference_or_default(session_id).unwrap();
+        assert_eq!(retrieved_or_default, view_level);
+
+        // 测试获取不存在的会话
+        let non_existent = repo.get_preference("non-existent").unwrap();
+        assert_eq!(non_existent, None);
+
+        let non_existent_default = repo.get_preference_or_default("non-existent").unwrap();
+        assert_eq!(non_existent_default, crate::parser::view_level::ViewLevel::Conversation);
+
+        // 测试更新
+        let new_view_level = crate::parser::view_level::ViewLevel::UserOnly;
+        repo.save_preference(session_id, new_view_level).unwrap();
+        let updated = repo.get_preference(session_id).unwrap();
+        assert_eq!(updated, Some(new_view_level));
+
+        // 测试删除
+        let deleted_rows = repo.delete_preference(session_id).unwrap();
+        assert_eq!(deleted_rows, 1);
+
+        let after_delete = repo.get_preference(session_id).unwrap();
+        assert_eq!(after_delete, None);
     }
 }

@@ -448,19 +448,23 @@ pub struct Message {
     pub id: Option<i64>,
 
     /// 所属会话 ID
-    #[serde(rename = "session_id")]
     pub session_id: String,
 
     /// 消息唯一标识 (从 JSONL 提取)
     pub uuid: String,
 
     /// 父消息 UUID (用于构建消息树)
-    #[serde(rename = "parent_uuid")]
     pub parent_uuid: Option<String>,
 
-    /// 消息类型
-    #[serde(rename = "type")]
+    /// 消息类型 (user/assistant/system)
+    /// 序列化为 msgType (遵循 camelCase 规则)
     pub msg_type: String,
+
+    /// 内容类型 (text/tool_use/tool_result/thinking)
+    /// 从 message.content[0].type 提取
+    /// 序列化为 contentType (遵循 camelCase 规则)
+    #[serde(rename = "contentType")]
+    pub content_type: Option<String>,
 
     /// 消息时间戳 (RFC3339)
     pub timestamp: String,
@@ -475,11 +479,9 @@ pub struct Message {
     pub summary: Option<String>,
 
     /// 父消息在数组中的索引
-    #[serde(rename = "parent_idx")]
     pub parent_idx: Option<i32>,
 
     /// 记录创建时间 (RFC3339)
-    #[serde(rename = "created_at")]
     pub created_at: String,
 }
 
@@ -827,6 +829,96 @@ mod tests_wave1 {
         let json = serde_json::to_string(&stats).unwrap();
         assert!(json.contains("\"count\":1000"));
         assert!(json.contains("\"estimatedCost\":0.002"));
+    }
+
+    // ==================== Message 序列化测试 ====================
+
+    #[test]
+    fn test_message_serialization_msg_type_field() {
+        // 测试 Message 结构体的 msg_type 字段序列化为 msgType
+        let msg = Message {
+            id: Some(1),
+            session_id: "test-session".to_string(),
+            uuid: "uuid-123".to_string(),
+            parent_uuid: None,
+            msg_type: "user".to_string(),
+            content_type: None,
+            timestamp: "2025-01-16T12:34:56Z".to_string(),
+            offset: 0,
+            length: 100,
+            summary: Some("Test".to_string()),
+            parent_idx: None,
+            created_at: "2025-01-16T12:34:56Z".to_string(),
+        };
+
+        // 序列化为 JSON
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        // 验证 msgType 字段存在且值正确
+        assert!(parsed.get("msgType").is_some(), "msgType 字段应该存在");
+        assert_eq!(parsed["msgType"], "user", "msgType 的值应该是 'user'");
+
+        // 验证旧的 type 字段不存在
+        assert!(parsed.get("type").is_none(), "type 字段不应该存在（已改为 msgType）");
+
+        // 验证 msg_type 字段不存在（snake_case）
+        assert!(parsed.get("msg_type").is_none(), "msg_type 字段不应该存在（应该是 msgType）");
+
+        log::info!("✅ Message 序列化测试通过");
+        log::info!("   序列化后的 JSON: {}", json);
+    }
+
+    #[test]
+    fn test_message_deserialization_from_msgtype() {
+        // 测试从 msgType 反序列化
+        let json = r#"{
+            "msgType": "assistant",
+            "uuid": "uuid-456",
+            "sessionId": "test-session",
+            "timestamp": "2025-01-16T12:34:56Z",
+            "offset": 0,
+            "length": 100,
+            "createdAt": "2025-01-16T12:34:56Z"
+        }"#;
+
+        let msg: Message = serde_json::from_str(json).unwrap();
+        assert_eq!(msg.msg_type, "assistant");
+        assert_eq!(msg.uuid, "uuid-456");
+
+        log::info!("✅ Message 反序列化测试通过");
+    }
+
+    #[test]
+    fn test_message_all_fields_camelcase() {
+        // 测试所有字段都遵循 camelCase
+        let msg = Message {
+            id: None,
+            session_id: "session-123".to_string(),
+            uuid: "uuid-789".to_string(),
+            parent_uuid: Some("parent-uuid".to_string()),
+            msg_type: "system".to_string(),
+            content_type: None,
+            timestamp: "2025-01-16T12:34:56Z".to_string(),
+            offset: 1024,
+            length: 2048,
+            summary: Some("Test message".to_string()),
+            parent_idx: Some(0),
+            created_at: "2025-01-16T12:34:56Z".to_string(),
+        };
+
+        let json = serde_json::to_string_pretty(&msg).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+
+        // 验证所有字段的 camelCase 命名
+        assert!(parsed.get("sessionId").is_some());
+        assert!(parsed.get("parentUuid").is_some());
+        assert!(parsed.get("msgType").is_some());
+        assert!(parsed.get("parentIdx").is_some());
+        assert!(parsed.get("createdAt").is_some());
+
+        log::info!("✅ Message 所有字段 camelCase 测试通过");
+        log::info!("   完整 JSON:\n{}", json);
     }
 }
 

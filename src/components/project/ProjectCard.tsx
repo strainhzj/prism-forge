@@ -5,10 +5,10 @@
  * 支持深浅色模式自适应
  */
 
-import { useState, useCallback } from 'react';
-import { FolderOpen, FolderPlus, ChevronRight } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { FolderOpen, FolderPlus, ChevronRight, Radar } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useCurrentProject } from '@/stores/useProjectStore';
+import { useCurrentProject, useProjectActions } from '@/stores/useProjectStore';
 import { ProjectSwitcherDialog } from './ProjectSwitcherDialog';
 import { cn } from '@/lib/utils';
 
@@ -23,11 +23,17 @@ function debugLog(action: string, ...args: unknown[]) {
 
 // ==================== 类型定义 ====================
 
+type AlertType = 'success' | 'error' | 'info';
+
 export interface ProjectCardProps {
   /**
    * 确认选择回调
    */
   onConfirm?: (project: any, sessionFile: string | null) => void;
+  /**
+   * 显示全局 Alert
+   */
+  onAlert?: (type: AlertType, message: string) => void;
   /**
    * 自定义类名
    */
@@ -42,10 +48,12 @@ export interface ProjectCardProps {
  * @example
  * <ProjectCard onConfirm={handleProjectChange} />
  */
-export function ProjectCard({ onConfirm, className }: ProjectCardProps) {
+export function ProjectCard({ onConfirm, onAlert, className }: ProjectCardProps) {
   const { t } = useTranslation('index');
   const currentProject = useCurrentProject();
+  const { getLatestSessionFile, setCurrentSessionFile } = useProjectActions();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [autoDetectLoading, setAutoDetectLoading] = useState(false);
 
   // 打开弹窗
   const handleOpenDialog = useCallback(() => {
@@ -58,6 +66,49 @@ export function ProjectCard({ onConfirm, className }: ProjectCardProps) {
     debugLog('confirm', project.name, sessionFile);
     onConfirm?.(project, sessionFile);
   }, [onConfirm]);
+
+  // Auto Detect 功能
+  const handleAutoDetect = useCallback(async () => {
+    if (!currentProject) {
+      debugLog('autoDetect', 'no current project');
+      return;
+    }
+
+    debugLog('autoDetect', 'start', currentProject.path);
+    setAutoDetectLoading(true);
+
+    try {
+      const latestPath = await getLatestSessionFile(currentProject.path);
+
+      if (latestPath) {
+        setCurrentSessionFile(latestPath);
+        onAlert?.('success', t('project.autoDetect.success'));
+        debugLog('autoDetect', 'success', latestPath);
+      } else {
+        onAlert?.('error', t('project.autoDetect.error'));
+        debugLog('autoDetect', 'no files found');
+      }
+    } catch (error) {
+      const errorMsg = `${t('project.autoDetect.error')}: ${error}`;
+      onAlert?.('error', errorMsg);
+      debugLog('autoDetect', 'error', error);
+    } finally {
+      setAutoDetectLoading(false);
+    }
+  }, [currentProject, getLatestSessionFile, setCurrentSessionFile, t, onAlert]);
+
+  // 快捷键支持 Ctrl/Cmd + D
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault();
+        handleAutoDetect();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleAutoDetect]);
 
   // ==================== 已选择项目状态 ====================
   if (currentProject) {
@@ -72,6 +123,7 @@ export function ProjectCard({ onConfirm, className }: ProjectCardProps) {
           borderColor: 'var(--color-project-card-border)',
         }}
       >
+        {/* 顶部：项目信息和按钮组 */}
         <div className="flex items-center justify-between gap-4">
           {/* 左侧：项目信息 */}
           <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -95,24 +147,58 @@ export function ProjectCard({ onConfirm, className }: ProjectCardProps) {
             </div>
           </div>
 
-          {/* 右侧：切换按钮 */}
-          <button
-            onClick={handleOpenDialog}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors shrink-0"
-            style={{
-              backgroundColor: 'var(--color-app-secondary)',
-              color: 'var(--color-text-primary)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--color-app-button-default)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--color-app-secondary)';
-            }}
-          >
-            {t('project.switchProject')}
-            <ChevronRight className="h-4 w-4" />
-          </button>
+          {/* 右侧：按钮组 */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Auto Detect 按钮 */}
+            <button
+              onClick={handleAutoDetect}
+              disabled={autoDetectLoading}
+              className={cn(
+                "flex items-center justify-center w-8 h-8 rounded-md transition-all shrink-0",
+                "hover:scale-110 active:scale-95",
+                autoDetectLoading && "opacity-50 cursor-not-allowed"
+              )}
+              style={{
+                backgroundColor: 'var(--color-app-secondary)',
+              }}
+              onMouseEnter={(e) => {
+                if (!autoDetectLoading) {
+                  e.currentTarget.style.backgroundColor = 'var(--color-app-button-default)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--color-app-secondary)';
+              }}
+              title={t('project.autoDetect.tooltip')}
+            >
+              <Radar
+                className={cn(
+                  "h-4 w-4",
+                  autoDetectLoading && "animate-spin"
+                )}
+                style={{ color: 'var(--color-text-primary)' }}
+              />
+            </button>
+
+            {/* 切换项目按钮 */}
+            <button
+              onClick={handleOpenDialog}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors shrink-0"
+              style={{
+                backgroundColor: 'var(--color-app-secondary)',
+                color: 'var(--color-text-primary)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--color-app-button-default)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'var(--color-app-secondary)';
+              }}
+            >
+              {t('project.switchProject')}
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {/* 弹窗 */}

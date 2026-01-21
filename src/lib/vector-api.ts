@@ -5,6 +5,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { getErrorMessage } from '@/lib/utils';
 
 // ==================== 类型定义 ====================
 
@@ -75,13 +76,19 @@ export interface VectorSettings {
 export async function semanticSearch(
   request: SemanticSearchRequest
 ): Promise<SemanticSearchResult[]> {
-  return await invoke<SemanticSearchResult[]>('semantic_search', {
-    request: {
-      query: request.query,
-      topK: request.topK,
-      minSimilarity: request.minSimilarity,
-    },
-  });
+  try {
+    return await invoke<SemanticSearchResult[]>('semantic_search', {
+      request: {
+        query: request.query,
+        topK: request.topK,
+        minSimilarity: request.minSimilarity,
+      },
+    });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('语义搜索失败:', message);
+    throw new Error(`语义搜索失败: ${message}`);
+  }
 }
 
 /**
@@ -97,11 +104,17 @@ export async function findSimilarSessions(
   topK?: number,
   minSimilarity?: number
 ): Promise<SemanticSearchResult[]> {
-  return await invoke<SemanticSearchResult[]>('find_similar_sessions', {
-    sessionId,
-    topK,
-    minSimilarity,
-  });
+  try {
+    return await invoke<SemanticSearchResult[]>('find_similar_sessions', {
+      sessionId,
+      topK,
+      minSimilarity,
+    });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('查找相似会话失败:', message);
+    throw new Error(`查找相似会话失败: ${message}`);
+  }
 }
 
 /**
@@ -110,7 +123,13 @@ export async function findSimilarSessions(
  * @returns 向量设置
  */
 export async function getVectorSettings(): Promise<VectorSettings> {
-  return await invoke<VectorSettings>('get_vector_settings');
+  try {
+    return await invoke<VectorSettings>('get_vector_settings');
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('获取向量设置失败:', message);
+    throw new Error(`获取向量设置失败: ${message}`);
+  }
 }
 
 /**
@@ -121,7 +140,13 @@ export async function getVectorSettings(): Promise<VectorSettings> {
 export async function updateVectorSettings(
   settings: VectorSettings
 ): Promise<void> {
-  return await invoke('update_vector_settings', { settings });
+  try {
+    await invoke('update_vector_settings', { settings });
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('更新向量设置失败:', message);
+    throw new Error(`更新向量设置失败: ${message}`);
+  }
 }
 
 /**
@@ -130,5 +155,11 @@ export async function updateVectorSettings(
  * @returns 成功向量化的会话数量
  */
 export async function syncEmbeddingsNow(): Promise<number> {
-  return await invoke<number>('sync_embeddings_now');
+  try {
+    return await invoke<number>('sync_embeddings_now');
+  } catch (error) {
+    const message = getErrorMessage(error);
+    console.error('同步向量失败:', message);
+    throw new Error(`同步向量失败: ${message}`);
+  }
 }

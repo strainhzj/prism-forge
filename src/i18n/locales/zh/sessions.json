@@ -57,10 +57,89 @@
   "detailView": {
     "title": "会话详情",
     "refresh": "刷新",
+    "showRaw": "显示原始JSON",
+    "showExtracted": "显示提取内容",
+    "clearCache": "清除缓存并重新加载",
     "loadFailed": "加载失败",
     "retry": "重试",
     "noContent": "暂无内容",
     "noContentHint": "该会话文件为空或格式不正确",
-    "messageCount": "共 {{count}} 条消息"
+    "messageCount": "共 {{count}} 条消息",
+    "sort": "排序",
+    "sortOrder": {
+      "desc": "时间倒序",
+      "asc": "时间正序"
+    },
+    "collapse": "收起",
+    "expand": "展开",
+    "user": "用户",
+    "assistant": "助手",
+    "loading": "加载中...",
+    "noMessages": "暂无消息",
+    "noMessagesHint": "该会话文件为空或格式不正确",
+    "autoRefresh": {
+      "enable": "开启自动刷新",
+      "disable": "关闭自动刷新",
+      "enabled": "自动刷新：开启 (每5秒)",
+      "disabled": "自动刷新：关闭"
+    },
+    "forceReParse": {
+      "tooltip": "强制重新解析",
+      "confirmTitle": "强制重新解析",
+      "confirmMessage": "这将清除缓存并重新解析整个 JSONL 文件，是否继续？",
+      "confirm": "确认",
+      "cancel": "取消"
+    },
+    "trackSession": {
+      "tooltip": "跟踪此会话",
+      "confirmTitle": "跟踪此会话",
+      "confirmMessage": "跳转到首页并开始跟踪此会话，是否继续？",
+      "confirm": "确认",
+      "cancel": "取消",
+      "dontShowAgain": "下次不再提醒",
+      "projectNotFound": "未找到对应的项目，请确保该项目仍在监控列表中"
+    }
+  },
+  "viewLevel": {
+    "title": "视图等级",
+    "description": "选择会话消息的显示级别",
+    "current": "当前",
+    "levels": {
+      "full": {
+        "label": "完整模式",
+        "description": "显示所有消息类型，包括工具调用、错误等"
+      },
+      "conversation": {
+        "label": "会话模式",
+        "description": "仅显示用户、助手和思考消息"
+      },
+      "qa_pairs": {
+        "label": "问答模式",
+        "description": "提取用户问题和最终答案，忽略中间思考过程"
+      },
+      "assistant_only": {
+        "label": "仅助手",
+        "description": "仅显示助手的回复"
+      },
+      "user_only": {
+        "label": "仅用户",
+        "description": "仅显示用户的输入"
+      }
+    },
+    "export": {
+      "title": "导出会话",
+      "formatLabel": "导出格式",
+      "formats": {
+        "markdown": "Markdown",
+        "json": "JSON"
+      },
+      "buttons": {
+        "export": "导出",
+        "copy": "复制",
+        "download": "下载"
+      },
+      "success": "导出成功",
+      "failed": "导出失败"
+    }
   }
 }

@@ -95,9 +95,17 @@ export interface MessageNode {
    */
   type?: string;
   /**
-   * 消息内容
+   * 消息内容（截断后的显示内容）
    */
   content?: string;
+  /**
+   * 完整内容（用于详情查看）
+   */
+  fullContent?: string;
+  /**
+   * 消息类型（缓存的 type 字段）
+   */
+  msgType?: string;
   /**
    * 时间戳
    */

@@ -2,12 +2,12 @@
  * TimelineSidebar 组件
  *
  * 右侧时间线日志侧边栏，从 App.tsx 提取
+ * 集成多级日志读取功能
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, ChevronLeft, RefreshCw } from 'lucide-react';
+import { ChevronRight, ChevronLeft, RefreshCw, Filter, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
@@ -15,6 +15,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useViewLevelManager, useSessionContent } from '@/hooks/useViewLevel';
+import { useViewLevelInfo, useViewLevelOptions } from '@/hooks/useViewLevelInfo';
 
 // ==================== 调试模式 ====================
 const DEBUG = import.meta.env.DEV;
@@ -50,6 +52,10 @@ export interface TimelineSidebarProps {
    */
   filePath: string;
   /**
+   * 会话 ID
+   */
+  sessionId: string;
+  /**
    * 自动刷新间隔（毫秒），0 表示不自动刷新
    */
   autoRefreshInterval?: number;
@@ -72,6 +78,79 @@ const DEFAULT_AUTO_REFRESH_INTERVAL = 3000;
 
 // Tooltip 内容最大长度
 const TOOLTIP_MAX_LENGTH = 500;
+
+// 下拉框固定宽度
+const DROPDOWN_WIDTH = 140;
+
+/**
+ * 从内容中提取文本（extracted 模式）
+ * 参考 TimelineMessageList 的 extractTextFromContent 函数
+ *
+ * @param content - 原始内容（JSON 字符串）
+ * @param isUser - 是否是用户消息
+ * @returns 提取后的文本内容
+ */
+function extractTextFromContent(content: string, isUser: boolean): string {
+  if (!content) return '';
+
+  try {
+    const parsed = JSON.parse(content);
+
+    // extracted 模式：从 JSON 中提取内容
+    if (typeof parsed === 'object' && parsed !== null) {
+      // 用户消息或助手消息：提取 content 字段
+      if ('content' in parsed) {
+        const msgContent = parsed.content;
+
+        // 如果 content 是数组，提取所有 text 字段
+        if (Array.isArray(msgContent)) {
+          const texts = msgContent
+            .map((item: unknown) => {
+              if (typeof item === 'object' && item !== null && 'text' in item) {
+                return String((item as { text: unknown }).text);
+              }
+              return null;
+            })
+            .filter((text): text is string => text !== null);
+          return texts.join('\n\n');
+        }
+
+        // 如果 content 是字符串，直接返回
+        if (typeof msgContent === 'string') {
+          return msgContent;
+        }
+
+        // 如果 content 是其他类型，尝试转字符串
+        return String(msgContent);
+      }
+
+      // 兼容：如果有顶级 text 字段，返回 text（主要针对助手消息）
+      if (!isUser && 'text' in parsed) {
+        return String(parsed.text);
+      }
+    }
+
+    // 如果找不到对应字段，返回格式化的原始内容
+    return content;
+  } catch {
+    // 解析失败，返回原始内容
+    return content;
+  }
+}
+
+/**
+ * 格式化文本内容
+ * 将 `\n` 转换为真正的换行符
+ *
+ * @param text - 文本内容
+ * @returns 格式化后的文本
+ */
+function formatTextContent(text: string): string {
+  if (!text) return '';
+
+  // 将 \n 转换为真正的换行符
+  return text.replace(/\\n/g, '\n');
+}
 
 /**
  * 日志详情对话框组件
@@ -186,50 +265,64 @@ function formatJsonContent(content: string): string {
  * TimelineSidebar 组件
  *
  * @example
- * <TimelineSidebar filePath="/path/to/session.jsonl" />
+ * <TimelineSidebar filePath="/path/to/session.jsonl" sessionId="xxx" />
  */
 export function TimelineSidebar({
   filePath,
+  sessionId,
   autoRefreshInterval = DEFAULT_AUTO_REFRESH_INTERVAL,
   className,
   collapsed = false,
   onToggleCollapse,
 }: TimelineSidebarProps) {
   const { t } = useTranslation('index');
-  const [parsedEvents, setParsedEvents] = useState<ParsedEvent[]>([]);
-  const [parseError, setParseError] = useState('');
+  const { t: tSessions } = useTranslation('sessions');
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState<TimelineLog | null>(null);
+  const [viewLevelDropdownOpen, setViewLevelDropdownOpen] = useState(false);
+  const [dropdownAlign, setDropdownAlign] = useState<'left' | 'right'>('left');
+  const viewLevelDropdownRef = useRef<HTMLDivElement>(null);
 
-  // 加载解析的事件
-  const loadParsedEvents = useCallback(async (path: string) => {
-    if (!path) return;
-    try {
-      setParseError('');
-      const events = await invoke<ParsedEvent[]>('parse_session_file', { filePath: path });
-      setParsedEvents(events);
-      debugLog('loadParsedEvents', `获取到 ${events.length} 个事件`);
-    } catch (e) {
-      const errorMsg = `解析会话文件失败: ${e}`;
-      debugLog('loadParsedEvents', errorMsg);
-      setParseError(errorMsg);
-      setParsedEvents([]);
+  // 获取国际化的视图等级选项
+  const viewLevelOptions = useViewLevelOptions();
+
+  // ===== 多级日志读取功能 =====
+  // 使用视图等级管理 hook，默认使用问答对模式
+  const {
+    currentViewLevel,
+    changeViewLevel,
+    isSaving: viewLevelSaving
+  } = useViewLevelManager(sessionId);
+
+  // 加载会话内容（根据视图等级过滤）
+  // 注意：禁用 useSessionContent 的自动刷新，使用组件自己的自动刷新逻辑
+  const {
+    messages,
+    isLoading: contentLoading,
+    error: contentError,
+    refresh: refreshContent,
+  } = useSessionContent(sessionId, currentViewLevel, filePath, false);
+
+  // 自动刷新处理函数
+  const handleAutoRefresh = useCallback(async () => {
+    if (autoRefresh) {
+      debugLog('auto-refresh', '自动刷新中...');
+      await refreshContent();
     }
-  }, []);
+  }, [autoRefresh, refreshContent]);
 
   // 初始加载
   useEffect(() => {
-    void loadParsedEvents(filePath);
-  }, [filePath, loadParsedEvents]);
+    void refreshContent();
+  }, [filePath, refreshContent]);
 
   // 自动刷新定时器
   useEffect(() => {
     if (autoRefresh && filePath && autoRefreshInterval > 0) {
       debugLog('auto-refresh', '启动自动刷新，间隔:', autoRefreshInterval);
       const intervalId = setInterval(() => {
-        debugLog('auto-refresh', '自动刷新中...');
-        void loadParsedEvents(filePath);
+        void handleAutoRefresh();
       }, autoRefreshInterval);
 
       return () => {
@@ -237,30 +330,90 @@ export function TimelineSidebar({
         clearInterval(intervalId);
       };
     }
-  }, [autoRefresh, filePath, autoRefreshInterval, loadParsedEvents]);
+  }, [autoRefresh, filePath, autoRefreshInterval, handleAutoRefresh]);
 
-  // 转换为时间线日志格式
-  const timelineLogs: TimelineLog[] = parsedEvents.slice().reverse().map((ev, i) => {
-    // 使用后端返回的完整内容
-    const fullContent = ev.fullContent || ev.content;
-    const displayContent = ev.content;  // 后端已经处理过截断
-    // Tooltip 内容从完整内容中截取，避免显示时间过长
-    const tooltipContent = fullContent.length > TOOLTIP_MAX_LENGTH
-      ? fullContent.substring(0, TOOLTIP_MAX_LENGTH) + '...'
-      : fullContent;
-    return {
-      id: `log-${i}`,
-      timestamp: ev.time,
-      type: ev.role.toLowerCase() === 'user' ? 'user' : 'assistant',
-      content: displayContent,
-      fullContent,  // 完整内容用于弹窗
-      tooltipContent,  // 截断内容用于 tooltip
+  // 将消息转换为时间线日志格式
+  const timelineLogs: TimelineLog[] = useMemo(() => {
+    if (!messages || messages.length === 0) return [];
+
+    return messages.map((msg, i) => {
+      const rawContent = msg.summary || '';
+      const msgTypeLower = msg.msgType?.toLowerCase() || '';
+      const isUser = msgTypeLower === 'user';
+
+      // 提取 text 字段内容
+      const extractedText = extractTextFromContent(rawContent, isUser);
+      // 格式化文本（将 \n 转换为真正的换行符）
+      const formattedText = formatTextContent(extractedText);
+
+      const displayContent = formattedText.length > 200
+        ? formattedText.substring(0, 200) + '...'
+        : formattedText;
+      const tooltipContent = formattedText.length > TOOLTIP_MAX_LENGTH
+        ? formattedText.substring(0, TOOLTIP_MAX_LENGTH) + '...'
+        : formattedText;
+
+      // 根据消息类型判断日志类型
+      let logType: 'user' | 'assistant' | 'system' = 'system';
+      if (msgTypeLower === 'user') {
+        logType = 'user';
+      } else if (msgTypeLower === 'assistant') {
+        logType = 'assistant';
+      }
+
+      return {
+        id: `log-${i}`,
+        timestamp: msg.timestamp || new Date().toISOString(),
+        type: logType,
+        content: displayContent,
+        fullContent: formattedText, // 使用提取和格式化后的内容
+        tooltipContent,
+      };
+    });
+  }, [messages]);
+
+  // 计算下拉框对齐方式
+  useEffect(() => {
+    if (viewLevelDropdownOpen && viewLevelDropdownRef.current) {
+      const rect = viewLevelDropdownRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const spaceOnRight = viewportWidth - rect.right;
+
+      // 如果右侧空间不足，则向左对齐
+      if (spaceOnRight < DROPDOWN_WIDTH) {
+        setDropdownAlign('right');
+      } else {
+        setDropdownAlign('left');
+      }
+    }
+  }, [viewLevelDropdownOpen]);
+
+  // 点击外部关闭下拉框
+  const handleClickOutside = useCallback((event: MouseEvent) => {
+    if (viewLevelDropdownRef.current && !viewLevelDropdownRef.current.contains(event.target as Node)) {
+      setViewLevelDropdownOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (viewLevelDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    } else {
+      document.removeEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
     };
-  });
+  }, [viewLevelDropdownOpen, handleClickOutside]);
 
-  const toggleAutoRefresh = () => {
+  // 获取当前视图等级的显示名称（使用国际化）
+  const currentViewLevelInfo = useViewLevelInfo(currentViewLevel);
+  const currentViewLevelLabel = currentViewLevelInfo.displayName;
+
+  // 切换自动刷新开关
+  const toggleAutoRefresh = useCallback(() => {
     setAutoRefresh((prev) => !prev);
-  };
+  }, []);
 
   if (collapsed) {
     // 折叠状态 - 显示展开按钮
@@ -297,56 +450,18 @@ export function TimelineSidebar({
       >
       {/* 头部 */}
       <div
-        className="flex items-center justify-between px-4 py-3 border-b"
+        className="flex flex-col gap-3 px-4 py-3 border-b"
         style={{ borderColor: 'var(--color-border-light)' }}
       >
-        <div>
-          <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-            {t('timeline.title')}
-          </h2>
-          <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-            {timelineLogs.length} {t('timeline.recordCount')}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* 刷新控制 */}
-          <div className="flex gap-1">
-            <button
-              onClick={() => void loadParsedEvents(filePath)}
-              className="p-1.5 rounded transition-colors hover:bg-[var(--color-app-secondary)]"
-              title={t('timeline.refresh')}
-              disabled={autoRefresh}
-            >
-              <RefreshCw
-                className={cn('h-3.5 w-3.5', autoRefresh && 'opacity-50')}
-                style={{ color: 'var(--color-text-secondary)' }}
-              />
-            </button>
-            <button
-              onClick={toggleAutoRefresh}
-              className={cn(
-                'p-1.5 rounded transition-colors',
-                autoRefresh ? 'text-white' : ''
-              )}
-              style={
-                autoRefresh
-                  ? { backgroundColor: 'var(--color-accent-warm)' }
-                  : { color: 'var(--color-text-secondary)' }
-              }
-              onMouseEnter={(e) => {
-                if (!autoRefresh) {
-                  e.currentTarget.style.backgroundColor = 'var(--color-app-secondary)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!autoRefresh) {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                }
-              }}
-              title={autoRefresh ? t('timeline.stopAutoRefresh') : t('timeline.startAutoRefresh')}
-            >
-              {autoRefresh ? '⏸' : '▶'}
-            </button>
+        {/* 第一行：标题和记录数 */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+              {t('timeline.title')}
+            </h2>
+            <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+              {timelineLogs.length} {t('timeline.recordCount')}
+            </p>
           </div>
           <button
             onClick={() => onToggleCollapse?.()}
@@ -356,11 +471,95 @@ export function TimelineSidebar({
             <ChevronRight className="h-4 w-4" style={{ color: 'var(--color-text-secondary)' }} />
           </button>
         </div>
+
+        {/* 第二行：视图等级 + 刷新按钮 */}
+        <div className="flex items-center justify-end gap-1">
+          {/* 视图等级按钮 */}
+          <div className="relative" ref={viewLevelDropdownRef}>
+            <button
+              onClick={() => setViewLevelDropdownOpen(prev => !prev)}
+              disabled={viewLevelSaving || contentLoading}
+              className="p-1.5 rounded transition-colors hover:bg-[var(--color-app-secondary)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+              title={`${tSessions('viewLevel.title')}: ${currentViewLevelLabel}`}
+            >
+              <Filter className="h-3.5 w-3.5" style={{ color: 'var(--color-text-secondary)' }} />
+            </button>
+
+            {/* 下拉菜单 */}
+            {viewLevelDropdownOpen && (
+              <div
+                className={cn(
+                  "absolute top-full mt-1 z-50 rounded-lg shadow-lg py-1",
+                  dropdownAlign === 'left' ? 'left-0' : 'right-0'
+                )}
+                style={{
+                  width: DROPDOWN_WIDTH,
+                  backgroundColor: 'var(--color-bg-card)',
+                  border: '1px solid var(--color-border-light)',
+                }}
+              >
+                {viewLevelOptions.map((levelInfo) => {
+                  const isSelected = levelInfo.value === currentViewLevel;
+                  return (
+                    <button
+                      key={levelInfo.value}
+                      onClick={() => {
+                        changeViewLevel(levelInfo.value);
+                        setViewLevelDropdownOpen(false);
+                      }}
+                      disabled={viewLevelSaving || contentLoading}
+                      className={cn(
+                        'w-full text-left px-3 py-2 text-xs transition-colors flex items-center gap-2',
+                        'hover:bg-[var(--color-app-secondary)]',
+                        'disabled:opacity-50 disabled:cursor-not-allowed'
+                      )}
+                      style={{
+                        color: isSelected ? 'var(--color-accent-warm)' : 'var(--color-text-primary)',
+                      }}
+                    >
+                      <span className="text-base">{levelInfo.icon}</span>
+                      <span className="flex-1">{levelInfo.displayName}</span>
+                      {isSelected && <Check className="h-3 w-3" style={{ color: 'var(--color-accent-warm)' }} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 刷新按钮（自动刷新开关） */}
+          <button
+            onClick={toggleAutoRefresh}
+            disabled={contentLoading}
+            className={cn(
+              'p-1.5 rounded transition-colors',
+              autoRefresh ? 'text-white' : ''
+            )}
+            style={
+              autoRefresh
+                ? { backgroundColor: 'var(--color-accent-warm)' }
+                : { color: 'var(--color-text-secondary)' }
+            }
+            onMouseEnter={(e) => {
+              if (!autoRefresh) {
+                e.currentTarget.style.backgroundColor = 'var(--color-app-secondary)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!autoRefresh) {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }
+            }}
+            title={autoRefresh ? t('timeline.stopAutoRefresh') : t('timeline.startAutoRefresh')}
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', autoRefresh && 'animate-spin')} />
+          </button>
+        </div>
       </div>
 
       {/* 时间线日志列表 */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {parseError && (
+        {contentError && (
           <div
             className="p-2 rounded text-xs"
             style={{
@@ -369,11 +568,19 @@ export function TimelineSidebar({
               color: 'var(--color-app-error-text)',
             }}
           >
-            {parseError}
+            {String(contentError)}
           </div>
         )}
 
-        {timelineLogs.length === 0 && !parseError && (
+        {contentLoading && timelineLogs.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+              {tSessions('detailView.loading')}
+            </p>
+          </div>
+        )}
+
+        {!contentLoading && timelineLogs.length === 0 && (
           <div className="text-center py-8">
             <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               {t('timeline.noLogs')}
@@ -449,13 +656,15 @@ export function TimelineSidebar({
 
       {/* 底部信息 */}
       <div
-        className="px-3 py-2 border-t text-xs text-center"
+        className="px-3 py-2 border-t text-xs text-center flex items-center justify-center gap-2"
         style={{
           borderColor: 'var(--color-border-light)',
           color: 'var(--color-text-secondary)',
         }}
       >
-        {autoRefresh && t('timeline.autoRefreshing')}
+        {/* 显示当前视图等级 */}
+        <span>{currentViewLevelLabel}</span>
+        {autoRefresh && <span>· {t('timeline.autoRefreshing')}</span>}
       </div>
     </aside>
 

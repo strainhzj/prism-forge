@@ -57,10 +57,89 @@
   "detailView": {
     "title": "Session Details",
     "refresh": "Refresh",
+    "showRaw": "Show Raw JSON",
+    "showExtracted": "Show Extracted Content",
+    "clearCache": "Clear cache and reload",
     "loadFailed": "Load failed",
     "retry": "Retry",
     "noContent": "No content",
     "noContentHint": "The session file is empty or has incorrect format",
-    "messageCount": "Total {{count}} messages"
+    "messageCount": "Total {{count}} messages",
+    "sort": "Sort",
+    "sortOrder": {
+      "desc": "Newest First",
+      "asc": "Oldest First"
+    },
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "user": "User",
+    "assistant": "Assistant",
+    "loading": "Loading...",
+    "noMessages": "No messages yet",
+    "noMessagesHint": "This session file is empty or has incorrect format",
+    "autoRefresh": {
+      "enable": "Enable Auto Refresh",
+      "disable": "Disable Auto Refresh",
+      "enabled": "Auto Refresh: On (every 5s)",
+      "disabled": "Auto Refresh: Off"
+    },
+    "forceReParse": {
+      "tooltip": "Force Re-parse",
+      "confirmTitle": "Force Re-parse",
+      "confirmMessage": "This will clear the cache and re-parse the entire JSONL file. Continue?",
+      "confirm": "Confirm",
+      "cancel": "Cancel"
+    },
+    "trackSession": {
+      "tooltip": "Track this session",
+      "confirmTitle": "Track this session",
+      "confirmMessage": "Navigate to homepage and start tracking this session. Continue?",
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "dontShowAgain": "Don't show again",
+      "projectNotFound": "Cannot find the corresponding project. Please make sure it is still in the monitoring list"
+    }
+  },
+  "viewLevel": {
+    "title": "View Level",
+    "description": "Select the display level for session messages",
+    "current": "Current",
+    "levels": {
+      "full": {
+        "label": "Full Mode",
+        "description": "Show all message types, including tool calls and errors"
+      },
+      "conversation": {
+        "label": "Conversation",
+        "description": "Show only user, assistant, and thinking messages"
+      },
+      "qa_pairs": {
+        "label": "Q&A Mode",
+        "description": "Extract user questions and final answers, skip intermediate steps"
+      },
+      "assistant_only": {
+        "label": "Assistant Only",
+        "description": "Show only assistant responses"
+      },
+      "user_only": {
+        "label": "User Only",
+        "description": "Show only user inputs"
+      }
+    },
+    "export": {
+      "title": "Export Session",
+      "formatLabel": "Export Format",
+      "formats": {
+        "markdown": "Markdown",
+        "json": "JSON"
+      },
+      "buttons": {
+        "export": "Export",
+        "copy": "Copy",
+        "download": "Download"
+      },
+      "success": "Export successful",
+      "failed": "Export failed"
+    }
   }
 }

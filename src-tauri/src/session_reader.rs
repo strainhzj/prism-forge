@@ -11,6 +11,22 @@ use tokio::sync::RwLock;
 use thiserror::Error;
 use regex::Regex;
 
+// ==================== 辅助函数 ====================
+
+/// 安全地将字符串截断到指定字符数
+///
+/// 确保截断位置不会落在 UTF-8 多字节字符的中间
+///
+/// # 参数
+/// * `s` - 要截断的字符串
+/// * `max_chars` - 最大字符数
+///
+/// # 返回
+/// 截断后的字符串（不会超过字符边界）
+fn truncate_str_to_chars(s: &str, max_chars: usize) -> String {
+    s.chars().take(max_chars).collect()
+}
+
 // ==================== 数据结构定义 ====================
 
 /// 名称来源枚举
@@ -217,7 +233,7 @@ impl SessionDisplayName {
         eprintln!("[SessionDisplayName] 无法获取显示名称，使用会话 ID 作为 fallback");
 
         Ok(Self {
-            name: format!("会话 {}", &session_id[..8.min(session_id.len())]),
+            name: format!("会话 {}", truncate_str_to_chars(&session_id, 8)),
             source: NameSource::Fallback,
             session_id,
         })
@@ -398,9 +414,10 @@ impl SessionDisplayName {
             .trim()
             .to_string();
 
-        // 限制长度
-        if simplified.len() > 50 {
-            format!("{}...", &simplified[..47.min(simplified.len())])
+        // 限制长度（安全地按字符截断）
+        if simplified.chars().count() > 50 {
+            let truncated = truncate_str_to_chars(&simplified, 47);
+            format!("{}...", truncated)
         } else {
             simplified
         }

@@ -6,7 +6,7 @@
 //! **Feature: fix-command-registration**
 //! **Validates: Requirements 1.2, 2.2, 2.4**
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::SystemTime;
 use crate::command_registry::{
     CommandRegistry, CommandInfo,
@@ -56,23 +56,40 @@ impl StartupValidationResult {
 /// Manages the initialization of modules and registration of commands
 /// during application startup.
 pub struct StartupManager {
-    command_registry: Arc<Mutex<CommandRegistry>>,
+    command_registry: Arc<RwLock<CommandRegistry>>,
     module_initializer: Arc<Mutex<ModuleInitializer>>,
     error_handler: Arc<EnhancedErrorHandler>,
 }
 
 impl StartupManager {
+    fn format_command_error(error: &crate::command_registry::errors::CommandError) -> String {
+        if let Some(context) = &error.context {
+            format!("[{:?}] {} ({})", error.error_type, error.message, context)
+        } else {
+            format!("[{:?}] {}", error.error_type, error.message)
+        }
+    }
+
+    fn format_module_error(error: &ModuleError) -> String {
+        format!(
+            "[{:?}] {}: {}",
+            error.error_type,
+            error.module_name,
+            error.message
+        )
+    }
+
     /// Create a new startup manager
     pub fn new() -> Self {
         Self {
-            command_registry: Arc::new(Mutex::new(CommandRegistry::new())),
+            command_registry: Arc::new(RwLock::new(CommandRegistry::new())),
             module_initializer: Arc::new(Mutex::new(ModuleInitializer::new())),
             error_handler: Arc::new(EnhancedErrorHandler::new()),
         }
     }
 
     /// Get the command registry
-    pub fn get_registry(&self) -> Arc<Mutex<CommandRegistry>> {
+    pub fn get_registry(&self) -> Arc<RwLock<CommandRegistry>> {
         self.command_registry.clone()
     }
 
@@ -105,7 +122,7 @@ impl StartupManager {
 
     /// Register all application commands
     pub fn register_commands(&self) -> Result<(), Vec<crate::command_registry::errors::CommandError>> {
-        let mut registry = self.command_registry.lock()
+        let mut registry = self.command_registry.write()
             .map_err(|e| vec![crate::command_registry::errors::CommandError::new(
                 format!("Failed to acquire lock: {}", e),
                 crate::command_registry::errors::ErrorType::RegistrationFailed,
@@ -134,7 +151,7 @@ impl StartupManager {
 
     /// Verify all registered commands
     pub fn verify_commands(&self) -> Vec<crate::command_registry::errors::CommandError> {
-        let registry = match self.command_registry.lock() {
+        let registry = match self.command_registry.read() {
             Ok(r) => r,
             Err(_) => return vec![crate::command_registry::errors::CommandError::new(
                 "Failed to acquire lock".to_string(),
@@ -152,7 +169,7 @@ impl StartupManager {
         eprintln!("[INFO] Starting module initialization...");
         if let Err(errors) = self.initialize_modules() {
             for error in errors {
-                result.add_error(format!("Module initialization failed: {}", error.message));
+                result.add_error(Self::format_module_error(&error));
             }
         }
 
@@ -160,7 +177,7 @@ impl StartupManager {
         eprintln!("[INFO] Registering commands...");
         if let Err(errors) = self.register_commands() {
             for error in errors {
-                result.add_error(format!("Command registration failed: {}", error.message));
+                result.add_error(Self::format_command_error(&error));
             }
         }
 
@@ -171,14 +188,14 @@ impl StartupManager {
             // Treat verification errors as warnings if they're about missing dependencies
             // that might be optional
             if error.message.contains("not yet available") {
-                result.add_warning(format!("Command verification warning: {}", error.message));
+                result.add_warning(Self::format_command_error(&error));
             } else {
-                result.add_error(format!("Command verification failed: {}", error.message));
+                result.add_error(Self::format_command_error(&error));
             }
         }
 
         // Step 4: Collect results
-        if let Ok(registry) = self.command_registry.lock() {
+        if let Ok(registry) = self.command_registry.read() {
             result.registered_commands = registry.list_available_commands();
             result.failed_commands = registry.get_anomalous_commands();
         }
@@ -195,11 +212,15 @@ impl StartupManager {
             );
         } else {
             eprintln!(
-                "[ERROR] Startup validation failed with {} errors",
-                result.errors.len()
+                "[ERROR] Startup validation failed with {} errors, {} warnings",
+                result.errors.len(),
+                result.warnings.len()
             );
             for error in &result.errors {
                 eprintln!("[ERROR]   - {}", error);
+            }
+            for warning in &result.warnings {
+                eprintln!("[WARN]   - {}", warning);
             }
         }
 
@@ -208,7 +229,7 @@ impl StartupManager {
 
     /// Run diagnostic check
     pub fn run_diagnostics(&self) -> Option<DiagnosticReport> {
-        let registry = self.command_registry.lock().ok()?;
+        let registry = self.command_registry.read().ok()?;
         let initializer = self.module_initializer.lock().ok()?;
         
         // Create a diagnostic tool with Arc references
@@ -641,7 +662,7 @@ mod tests {
     #[test]
     fn test_startup_manager_creation() {
         let manager = StartupManager::new();
-        assert!(manager.command_registry.lock().is_ok());
+        assert!(manager.command_registry.read().is_ok());
         assert!(manager.module_initializer.lock().is_ok());
     }
 
@@ -711,7 +732,7 @@ mod property_tests {
             
             // Register commands with the manager
             {
-                let mut registry = manager.command_registry.lock().unwrap();
+                let mut registry = manager.command_registry.write().unwrap();
                 let mut registered = HashSet::new();
                 
                 for name in &command_names {
@@ -730,7 +751,7 @@ mod property_tests {
             
             // Verify all commands are registered
             {
-                let registry = manager.command_registry.lock().unwrap();
+                let registry = manager.command_registry.read().unwrap();
                 let available = registry.list_available_commands();
                 
                 // All registered commands should be available
@@ -746,7 +767,7 @@ mod property_tests {
             
             // Verify commands can be verified
             {
-                let registry = manager.command_registry.lock().unwrap();
+                let registry = manager.command_registry.read().unwrap();
                 let errors = registry.verify_all_commands();
                 
                 // Commands without dependencies should have no verification errors
@@ -856,7 +877,7 @@ mod property_tests {
             
             // Register command with dependencies (but don't register the dependencies)
             {
-                let mut registry = manager.command_registry.lock().unwrap();
+                let mut registry = manager.command_registry.write().unwrap();
                 
                 // Filter out self-dependencies and duplicates
                 let filtered_deps: Vec<String> = dependency_names.iter()

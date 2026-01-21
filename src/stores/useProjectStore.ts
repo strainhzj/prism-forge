@@ -239,7 +239,9 @@ export const useProjectStore = create<ProjectState>()(
         debugLog('getLatestSessionFile', 'start', projectPath);
 
         try {
-          const latestPath = await invoke<string>('get_latest_session_path');
+          const latestPath = await invoke<string>('get_latest_session_path', {
+            projectPath,
+          });
           debugLog('getLatestSessionFile', 'success', latestPath);
           return latestPath;
         } catch (error) {

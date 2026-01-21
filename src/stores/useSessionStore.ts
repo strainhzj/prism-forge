@@ -85,6 +85,8 @@ export interface SessionFileInfo {
   display_name?: string;
   summary?: string;
   modified_time: string;
+  /** 项目路径（所属监控目录路径） */
+  projectPath: string;
 }
 
 /**
