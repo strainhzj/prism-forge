@@ -9,7 +9,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
 import { save } from '@tauri-apps/plugin-dialog';
-import { ChevronLeft, RefreshCw, Download, ArrowUpDown, Repeat, Code, RefreshCwOff } from 'lucide-react';
+import { ChevronLeft, RefreshCw, Download, ArrowUpDown, Code, RefreshCwOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -80,7 +80,7 @@ export function SessionContentView({
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc'); // 默认倒序
 
   // ===== 内容显示模式管理 =====
-  const [contentDisplayMode, setContentDisplayMode] = useState<'raw' | 'extracted'>('raw'); // 默认显示原始JSON
+  const [contentDisplayMode, setContentDisplayMode] = useState<'raw' | 'extracted'>('extracted'); // 默认显示提取内容
 
   // ===== 导出下拉框状态管理 =====
   const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
@@ -134,24 +134,6 @@ export function SessionContentView({
     debounceMs: 2000,
     onRefresh: handleAutoRefresh,
   });
-
-  // ===== 清除缓存并重新加载 =====
-  const [isClearingCache, setIsClearingCache] = useState(false);
-
-  const handleClearCacheAndReload = async () => {
-    setIsClearingCache(true);
-    try {
-      forceRefresh();
-      debugLog('handleClearCacheAndReload', '缓存已清除，正在重新加载');
-    } catch (error) {
-      console.error('[SessionContentView] 清除缓存失败:', error);
-    } finally {
-      // 延迟重置加载状态，确保用户看到反馈
-      setTimeout(() => {
-        setIsClearingCache(false);
-      }, 500);
-    }
-  };
 
   // ===== 排序后的消息列表 =====
   const sortedMessages = useMemo(() => {
@@ -340,8 +322,8 @@ export function SessionContentView({
               setContentDisplayMode(prev => prev === 'raw' ? 'extracted' : 'raw');
             }}
             disabled={contentLoading}
-            className={cn('shrink-0 hover:bg-[var(--color-app-secondary)]', contentDisplayMode === 'extracted' && 'bg-[var(--color-app-secondary)]')}
-            title={contentDisplayMode === 'raw' ? t('detailView.showExtracted') : t('detailView.showRaw')}
+            className={cn('shrink-0 hover:bg-[var(--color-app-secondary)]', contentDisplayMode === 'raw' && 'bg-[var(--color-app-secondary)]')}
+            title={contentDisplayMode === 'extracted' ? t('detailView.showRaw') : t('detailView.showExtracted')}
           >
             <Code className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
           </Button>
@@ -358,18 +340,6 @@ export function SessionContentView({
             title={t(`detailView.sortOrder.${sortOrder}`)}
           >
             <ArrowUpDown className="h-4 w-4" style={{ color: 'var(--color-text-primary)' }} />
-          </Button>
-
-          {/* 清除缓存并重新加载按钮 */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleClearCacheAndReload}
-            disabled={contentLoading || isClearingCache}
-            className="shrink-0 hover:bg-[var(--color-app-secondary)]"
-            title={t('detailView.clearCache')}
-          >
-            <Repeat className={cn('h-4 w-4', isClearingCache && 'animate-spin')} style={{ color: 'var(--color-text-primary)' }} />
           </Button>
 
           {/* 导出按钮（下拉菜单） */}
