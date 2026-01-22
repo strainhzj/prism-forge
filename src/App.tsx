@@ -42,6 +42,42 @@ function debugLog(action: string, ...args: unknown[]) {
   }
 }
 
+// ==================== 工具函数 ====================
+
+/**
+ * 从增强提示词中分离目标偏离程度和真正的提示词
+ *
+ * @param enhancedPrompt - LLM 生成的完整提示词
+ * @returns 包含分离后的目标偏离程度和清理后的提示词
+ */
+function parseEnhancedPrompt(enhancedPrompt: string): {
+  goalDivergence: string | null;
+  cleanedPrompt: string;
+} {
+  if (!enhancedPrompt) {
+    return { goalDivergence: null, cleanedPrompt: '' };
+  }
+
+  // 查找"目标偏离程度"部分
+  const goalDivergenceRegex = /###\s*\*\*目标偏离程度\*\*\s*\n([\s\S]*?)(?=\n###\s*\*\*|\n##|$)/;
+  const match = enhancedPrompt.match(goalDivergenceRegex);
+
+  if (match) {
+    // 提取目标偏离程度内容（去掉标题）
+    const goalDivergence = match[1].trim();
+
+    // 移除目标偏离程度部分，得到清理后的提示词
+    const cleanedPrompt = enhancedPrompt
+      .replace(goalDivergenceRegex, '')
+      .trim();
+
+    return { goalDivergence, cleanedPrompt };
+  }
+
+  // 没有找到目标偏离程度部分，返回原内容
+  return { goalDivergence: null, cleanedPrompt: enhancedPrompt };
+}
+
 // ==================== 主组件 ====================
 
 function App() {
@@ -50,7 +86,7 @@ function App() {
   const navigate = useNavigate();
   const currentProject = useCurrentProject();
   const currentSessionFile = useCurrentSessionFile();
-  const { fetchProjects, setCurrentSessionFile, getLatestSessionFile, getSessionFiles } = useProjectActions();
+  const { fetchProjects, setCurrentSessionFile, getLatestSessionFile } = useProjectActions();
   const projectLoading = useProjectLoading();
 
   // 获取全局会话状态管理 actions（不解构，避免创建新引用）
@@ -80,6 +116,14 @@ function App() {
   const [analyzing, setAnalyzing] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false); // 复制状态
+
+  // 解析增强提示词，分离目标偏离程度和真正的提示词
+  const parsedPrompt = useMemo(() => {
+    if (!analysisResult?.enhancedPrompt) {
+      return { goalDivergence: null, cleanedPrompt: '' };
+    }
+    return parseEnhancedPrompt(analysisResult.enhancedPrompt);
+  }, [analysisResult?.enhancedPrompt]);
 
   // 右侧面板 ref，用于编程式控制折叠
   const rightPanelRef = useRef<any>(null);
@@ -233,12 +277,12 @@ function App() {
     // 移除自动检测，避免覆盖用户选择的会话文件
   }, []);
 
-  // 复制提示词到剪贴板
+  // 复制提示词到剪贴板（只复制清理后的部分，不包含目标偏离程度）
   const handleCopyPrompt = useCallback(async () => {
-    if (!analysisResult?.enhancedPrompt) return;
+    if (!parsedPrompt.cleanedPrompt) return;
 
     try {
-      await navigator.clipboard.writeText(analysisResult.enhancedPrompt);
+      await navigator.clipboard.writeText(parsedPrompt.cleanedPrompt);
       setCopiedPrompt(true);
       // 2秒后恢复状态
       setTimeout(() => {
@@ -247,7 +291,7 @@ function App() {
     } catch (error) {
       debugLog('handleCopyPrompt', 'copy failed', error);
     }
-  }, [analysisResult?.enhancedPrompt]);
+  }, [parsedPrompt.cleanedPrompt]);
 
   // 从文件路径提取 sessionId
   // 会话文件名格式：claude-UUID.jsonl，提取 UUID 作为 sessionId
@@ -452,8 +496,24 @@ function App() {
                           </div>
                         )}
 
-                        {/* 增强的提示词 */}
-                        <div>
+                        {/* 目标偏离程度 */}
+                        {parsedPrompt.goalDivergence && (
+                          <div className="mt-4">
+                            <p className="text-sm font-medium mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                              目标偏离程度
+                            </p>
+                            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed p-3 rounded" style={{
+                              color: 'var(--color-text-primary)',
+                              backgroundColor: 'var(--color-bg-primary)',
+                              border: '1px solid var(--color-border-light)'
+                            }}>
+                              {parsedPrompt.goalDivergence}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 增强的提示词（从"任务目标"开始，不包含目标偏离程度） */}
+                        <div className={parsedPrompt.goalDivergence ? "mt-4" : ""}>
                           <div className="flex items-center justify-between mb-2">
                             <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
                               {t('messages.enhancedPrompt')}
@@ -469,7 +529,7 @@ function App() {
                                 backgroundColor: 'var(--color-bg-primary)',
                                 border: '1px solid var(--color-border-light)'
                               }}
-                              disabled={!analysisResult.enhancedPrompt}
+                              disabled={!parsedPrompt.cleanedPrompt}
                             >
                               {copiedPrompt ? (
                                 <>
@@ -490,7 +550,7 @@ function App() {
                             backgroundColor: 'var(--color-bg-primary)',
                             border: '1px solid var(--color-border-light)'
                           }}>
-                            {analysisResult.enhancedPrompt}
+                            {parsedPrompt.cleanedPrompt || analysisResult.enhancedPrompt}
                           </pre>
                         </div>
                       </div>

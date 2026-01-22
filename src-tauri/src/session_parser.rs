@@ -274,6 +274,9 @@ impl SessionParserService {
             }
         });
 
+        // 提取 content（从 message.content 或 message.content[].text）
+        let content = self.extract_message_content(&entry.data);
+
         // 提取 content_type（从 message.content[0].type）
         let content_type = self.extract_content_type(&entry.data);
 
@@ -307,6 +310,7 @@ impl SessionParserService {
             offset: entry.offset as i64,
             length: entry.length as i64,
             summary,
+            content,
             parent_idx: None,
             created_at: timestamp,
         })
@@ -345,6 +349,60 @@ impl SessionParserService {
                     return Some("thinking".to_string());
                 }
             }
+        }
+
+        None
+    }
+
+    /// 提取消息内容（从 message.content 或 message.content[].text）
+    ///
+    /// 支持以下格式：
+    /// 1. message 是字符串：直接使用
+    /// 2. message.content 是字符串：直接使用
+    /// 3. message.content 是数组：提取所有 type="text" 的元素的 text 字段并合并
+    fn extract_message_content(&self, data: &serde_json::Value) -> Option<String> {
+        let message = data.get("message")?;
+
+        // 情况 1: message 是字符串
+        if let Some(s) = message.as_str() {
+            return Some(s.to_string());
+        }
+
+        // message 是对象，获取 content 字段
+        let message_obj = message.as_object()?;
+        let content = message_obj.get("content")?;
+
+        // 情况 2: content 是字符串
+        if let Some(s) = content.as_str() {
+            return Some(s.to_string());
+        }
+
+        // 情况 3: content 是数组，提取所有 text 类型的内容
+        if let Some(content_array) = content.as_array() {
+            let text_parts: Vec<String> = content_array
+                .iter()
+                .filter_map(|item| {
+                    // 只处理 type 为 "text" 的元素
+                    if let Some(type_val) = item.get("type") {
+                        if type_val.as_str() == Some("text") {
+                            // 提取 text 字段
+                            if let Some(text) = item.get("text").and_then(|t| t.as_str()) {
+                                return Some(text.to_string());
+                            }
+                        }
+                    }
+                    None
+                })
+                .collect();
+
+            if !text_parts.is_empty() {
+                return Some(text_parts.join("\n"));
+            }
+        }
+
+        // 回退：尝试从 message.text 提取
+        if let Some(text) = message_obj.get("text").and_then(|t| t.as_str()) {
+            return Some(text.to_string());
         }
 
         None

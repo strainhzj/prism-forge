@@ -18,6 +18,20 @@ use super::config::ConfigManager;
 
 // ==================== 数据结构 ====================
 
+/// 会话消息（用于 JSON 序列化）
+///
+/// 将 QAPair 转换为统一的 JSON 格式，注入到提示词模板中
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMessage {
+    /// 消息文本内容
+    pub text: String,
+    /// 消息角色 (user/assistant)
+    pub role: String,
+    /// 消息时间戳
+    pub timestamp: String,
+}
+
 /// 增强提示词请求
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -101,6 +115,7 @@ impl PromptGenerator {
         // 优先级：开发环境使用项目根目录，生产环境使用可执行文件目录
         let config_path = Self::resolve_config_path()?;
 
+        #[cfg(debug_assertions)]
         eprintln!("[PromptGenerator] 配置文件路径: {:?}", config_path);
 
         let config_manager = Arc::new(ConfigManager::new(config_path)?);
@@ -129,8 +144,11 @@ impl PromptGenerator {
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| PathBuf::from("."));
 
-        eprintln!("[PromptGenerator] 可执行文件路径: {:?}", exe_path);
-        eprintln!("[PromptGenerator] 可执行文件目录: {:?}", exe_dir);
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[PromptGenerator] 可执行文件路径: {:?}", exe_path);
+            eprintln!("[PromptGenerator] 可执行文件目录: {:?}", exe_dir);
+        }
 
         // 策略 1: 从可执行文件目录向上查找项目根目录
         // 开发环境结构: project/src-tauri/target/debug/prism-forge.exe
@@ -144,6 +162,7 @@ impl PromptGenerator {
             let config_path = src_tauri_path.join("optimizer_config.toml");
 
             if config_path.exists() {
+                #[cfg(debug_assertions)]
                 eprintln!("[PromptGenerator] 找到开发环境配置（向上查找 {} 层）: {:?}", depth, config_path);
                 return Ok(config_path);
             }
@@ -158,6 +177,7 @@ impl PromptGenerator {
         let prod_path = exe_dir.join("optimizer_config.toml");
 
         if prod_path.exists() {
+            #[cfg(debug_assertions)]
             eprintln!("[PromptGenerator] 使用生产环境配置路径: {:?}", prod_path);
             return Ok(prod_path);
         }
@@ -169,6 +189,7 @@ impl PromptGenerator {
 
         if let Some(ref path) = cwd_path {
             if path.exists() {
+                #[cfg(debug_assertions)]
                 eprintln!("[PromptGenerator] 使用当前工作目录配置路径: {:?}", path);
                 return Ok(path.clone());
             }
@@ -243,6 +264,7 @@ impl PromptGenerator {
             let filter = MessageFilter::new(ViewLevel::QAPairs);
             let qa_pairs = filter.extract_qa_pairs(parse_result.messages);
 
+            #[cfg(debug_assertions)]
             eprintln!("[PromptGenerator] 提取到 {} 个问答对", qa_pairs.len());
 
             // 4. 判断问答对是否为空
@@ -263,11 +285,13 @@ impl PromptGenerator {
             // 7. 调用 LLM 生成增强提示词
             let enhanced_prompt = match self.call_llm_generate(&full_prompt, llm_manager).await {
                 Ok(prompt) => {
+                    #[cfg(debug_assertions)]
                     eprintln!("[PromptGenerator] LLM 生成成功，长度: {}", prompt.len());
                     prompt
                 },
                 Err(e) => {
                     // LLM 调用失败时，回退到模板生成
+                    #[cfg(debug_assertions)]
                     eprintln!("[PromptGenerator] LLM 调用失败，使用模板: {}", e);
                     self.generate_conversation_template_prompt(&request.goal)
                 }
@@ -308,41 +332,51 @@ impl PromptGenerator {
         }
     }
 
-    /// 将问答对转换为对话流格式（时间正序）
+    /// 将问答对转换为 JSON 格式的会话消息列表
     fn format_qa_pairs_to_conversation(&self, qa_pairs: &[QAPair]) -> Result<(usize, String)> {
-        // 构建对话流格式（时间正序，已经是正序因为 extract_qa_pairs 会反转）
-        let conversation_lines: Vec<String> = qa_pairs.iter().map(|pair| {
-            // 问题
-            let question_text = pair.question.summary.as_ref()
+        use crate::database::models::Message;
+
+        // 构建 SessionMessage 列表（时间正序）
+        let session_messages: Vec<SessionMessage> = qa_pairs.iter().flat_map(|pair| {
+            let mut messages = Vec::new();
+
+            // 用户问题
+            let user_text = pair.question.content.as_ref()
+                .or(pair.question.summary.as_ref())
                 .unwrap_or(&String::new())
-                .lines()
-                .take(3) // 最多取3行
-                .collect::<Vec<_>>()
-                .join("\n");
+                .clone();
 
-            let mut result = format!("[User] {}", question_text);
+            messages.push(SessionMessage {
+                text: user_text,
+                role: "user".to_string(),
+                timestamp: pair.question.timestamp.clone(),
+            });
 
-            // 答案（如果有）
+            // 助手回复（如果有）
             if let Some(ref answer) = pair.answer {
-                let answer_text = answer.summary.as_ref()
+                let assistant_text = answer.content.as_ref()
+                    .or(answer.summary.as_ref())
                     .unwrap_or(&String::new())
-                    .lines()
-                    .take(5) // 最多取5行
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                    .clone();
 
-                result.push_str(&format!("\n[Assistant] {}", answer_text));
+                messages.push(SessionMessage {
+                    text: assistant_text,
+                    role: "assistant".to_string(),
+                    timestamp: answer.timestamp.clone(),
+                });
             }
 
-            result
+            messages
         }).collect();
 
-        let conversation = conversation_lines.join("\n\n");
+        // 序列化为 JSON 字符串
+        let json_str = serde_json::to_string_pretty(&session_messages)
+            .map_err(|e| anyhow::anyhow!("序列化 SessionMessage 失败: {}", e))?;
 
-        // 计算原始 Token 数
-        let original_tokens = self.token_counter.count_tokens(&conversation)?;
+        // 计算 Token 数
+        let original_tokens = self.token_counter.count_tokens(&json_str)?;
 
-        Ok((original_tokens, conversation))
+        Ok((original_tokens, json_str))
     }
 
     /// 使用对话上下文构建完整提示词
@@ -351,31 +385,15 @@ impl PromptGenerator {
         goal: &str,
         conversation: &str,
     ) -> String {
-        format!(
-            r#"你是一个专业的编程助手提示词优化器。
+        // 从配置获取模板
+        let meta_prompt = self.config_manager.get_meta_prompt();
+        let prompt_structure = self.config_manager.get_prompt_structure();
 
-基于以下对话记录和用户目标，生成一个清晰、具体的提示词。
-
-## 对话记录
-
-{conversation}
-
-## 用户目标
-
-{goal}
-
-## 要求
-
-1. 分析对话中的上下文和用户意图
-2. 生成一个可直接使用的、结构化的提示词
-3. 提示词要简洁明了（控制在 500 字以内）
-4. 突出关键技术点和注意事项
-
-## 输出格式
-
-请直接输出优化后的提示词，无需额外解释。
-"#
-        )
+        // 组装完整提示词
+        prompt_structure
+            .replace("{{meta_prompt}}", &meta_prompt)
+            .replace("{{goal}}", goal)
+            .replace("{{sessions}}", conversation)
     }
 
     /// 生成对话开始提示词（会话为空时，使用 LLM 生成）
@@ -392,11 +410,13 @@ impl PromptGenerator {
         // 2. 调用 LLM 生成增强提示词
         let enhanced_prompt = match self.call_llm_generate(&full_prompt, llm_manager).await {
             Ok(prompt) => {
+                #[cfg(debug_assertions)]
                 eprintln!("[PromptGenerator] 对话开始提示词生成成功，长度: {}", prompt.len());
                 prompt
             },
             Err(e) => {
                 // LLM 调用失败时，使用回退模板
+                #[cfg(debug_assertions)]
                 eprintln!("[PromptGenerator] LLM 调用失败，使用回退模板: {}", e);
                 self.generate_conversation_fallback_template(goal)
             }
@@ -532,5 +552,181 @@ impl PromptGenerator {
         Ok(response.content)
     }
 
+    /// 测试辅助方法：直接构建提示词（不调用 LLM）
+    ///
+    /// 此方法仅用于单元测试，验证模板加载和变量替换是否正确
+    #[cfg(test)]
+    #[doc(hidden)]
+    pub fn test_build_prompt(
+        &self,
+        goal: &str,
+        sessions: &str,
+    ) -> String {
+        // 直接调用私有方法
+        self.build_prompt_with_conversation(goal, sessions)
+    }
+}
 
+// ==================== 测试模块 ====================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // 使用全局互斥锁确保测试顺序执行，避免数据库初始化冲突
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn test_build_prompt_from_config() {
+        // 获取锁，确保测试顺序执行
+        let _lock = TEST_LOCK.lock().unwrap();
+
+        // 1. 解析配置文件路径（使用开发环境的默认路径）
+        let config_path = std::path::PathBuf::from("optimizer_config.toml");
+
+        // 如果配置文件不存在，跳过测试
+        if !config_path.exists() {
+            println!("警告: 配置文件 optimizer_config.toml 不存在，跳过测试");
+            println!("预期路径: {:?}", config_path);
+            println!("当前工作目录: {:?}", std::env::current_dir().unwrap());
+            return;
+        }
+
+        // 2. 创建 PromptGenerator 实例
+        let generator = match PromptGenerator::with_config_path(config_path) {
+            Ok(gen) => gen,
+            Err(e) => {
+                panic!("创建 PromptGenerator 失败: {}", e);
+            }
+        };
+
+        // 3. 准备测试数据（新 JSON 格式）
+        let goal = "Write a Hello World program in Python";
+        let sessions = r#"[
+  {
+    "text": "How do I print in Python?",
+    "role": "user",
+    "timestamp": "2025-01-22T10:00:00Z"
+  },
+  {
+    "text": "You can use the print() function.",
+    "role": "assistant",
+    "timestamp": "2025-01-22T10:00:01Z"
+  },
+  {
+    "text": "Show me an example",
+    "role": "user",
+    "timestamp": "2025-01-22T10:00:02Z"
+  },
+  {
+    "text": "print(\"Hello, World!\")",
+    "role": "assistant",
+    "timestamp": "2025-01-22T10:00:03Z"
+  }
+]"#;
+
+        // 4. 调用测试辅助方法生成提示词
+        let result = generator.test_build_prompt(goal, sessions);
+
+        // 5. 打印生成的提示词（便于人工检查）
+        println!("\n========== 生成的提示词 ==========\n");
+        println!("{}", result);
+        println!("\n========== 提示词结束 ==========\n");
+
+        // 6. 验证结果包含预期的结构
+        let assertions = vec![
+            // Meta-Prompt 的内容
+            ("Meta-Prompt 标题", "专业的编程助手提示词优化器"),
+            ("分析方法步骤", "分析目标与上下文"),
+            ("限制条件", "提示词应简洁明了"),
+
+            // Prompt Structure 的内容
+            ("输入信息标题", "## 输入信息"),
+            ("用户目标标签", "**用户目标**"),
+            ("会话标签", "**相关历史会话**"),
+
+            // 输出格式说明（更新后的模板）
+            ("输出格式标题", "## 输出格式"),
+            ("目标偏离程度标题", "### **目标偏离程度**"),
+            ("任务目标标题", "### **任务目标**"),
+            ("具体步骤标题", "### **具体步骤**"),
+            ("预期输出标题", "### **预期输出**"),
+
+            // 注入的变量内容
+            ("注入的 goal", "Write a Hello World program in Python"),
+            ("注入的 sessions (text)", "How do I print in Python?"),
+            ("注入的 sessions (role)", "\"user\""),
+            ("注入的 sessions (timestamp)", "\"timestamp\""),
+        ];
+
+        for (description, expected) in assertions {
+            assert!(
+                result.contains(expected),
+                "验证失败: {} - 未找到预期内容 '{}'\n生成的提示词:\n{}",
+                description,
+                expected,
+                result
+            );
+        }
+
+        // 7. 验证变量占位符已被替换
+        assert!(
+            !result.contains("{{goal}}") && !result.contains("{{sessions}}") && !result.contains("{{meta_prompt}}"),
+            "错误: 变量占位符未被完全替换\n发现的占位符: {}",
+            if result.contains("{{goal}}") { " {{goal}}" }
+            else if result.contains("{{sessions}}") { " {{sessions}}" }
+            else if result.contains("{{meta_prompt}}") { " {{meta_prompt}}" }
+            else { "" }
+        );
+
+        println!("✅ 所有断言通过！");
+    }
+
+    #[test]
+    fn test_config_loading() {
+        // 获取锁，确保测试顺序执行
+        let _lock = TEST_LOCK.lock().unwrap();
+
+        // 测试配置文件是否能正确加载
+        let config_path = std::path::PathBuf::from("optimizer_config.toml");
+
+        if !config_path.exists() {
+            println!("警告: 配置文件不存在，跳过测试");
+            return;
+        }
+
+        let generator = PromptGenerator::with_config_path(config_path)
+            .expect("创建 PromptGenerator 失败");
+
+        // 验证配置管理器能正确读取配置
+        let meta_prompt = generator.config_manager.get_meta_prompt();
+        let prompt_structure = generator.config_manager.get_prompt_structure();
+
+        println!("Meta-Prompt 长度: {} 字符", meta_prompt.len());
+        println!("Prompt Structure 长度: {} 字符", prompt_structure.len());
+
+        assert!(
+            !meta_prompt.is_empty(),
+            "Meta-Prompt 不应为空"
+        );
+        assert!(
+            !prompt_structure.is_empty(),
+            "Prompt Structure 不应为空"
+        );
+        assert!(
+            prompt_structure.contains("{{meta_prompt}}"),
+            "Prompt Structure 应包含 {{meta_prompt}} 占位符"
+        );
+        assert!(
+            prompt_structure.contains("{{goal}}"),
+            "Prompt Structure 应包含 {{goal}} 占位符"
+        );
+        assert!(
+            prompt_structure.contains("{{sessions}}"),
+            "Prompt Structure 应包含 {{sessions}} 占位符"
+        );
+
+        println!("✅ 配置加载测试通过！");
+    }
 }

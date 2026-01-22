@@ -478,6 +478,9 @@ pub struct Message {
     /// 消息摘要 (用于列表展示)
     pub summary: Option<String>,
 
+    /// 消息内容 (从 message.content 提取的原始文本)
+    pub content: Option<String>,
+
     /// 父消息在数组中的索引
     pub parent_idx: Option<i32>,
 
@@ -847,6 +850,7 @@ mod tests_wave1 {
             offset: 0,
             length: 100,
             summary: Some("Test".to_string()),
+            content: Some("Test content".to_string()),
             parent_idx: None,
             created_at: "2025-01-16T12:34:56Z".to_string(),
         };
@@ -903,6 +907,7 @@ mod tests_wave1 {
             offset: 1024,
             length: 2048,
             summary: Some("Test message".to_string()),
+            content: Some("Test content".to_string()),
             parent_idx: Some(0),
             created_at: "2025-01-16T12:34:56Z".to_string(),
         };
