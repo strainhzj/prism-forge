@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
+import { RefreshCw, CheckCircle, AlertCircle, Copy, Check } from "lucide-react";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -46,6 +46,7 @@ function debugLog(action: string, ...args: unknown[]) {
 
 function App() {
   const { t } = useTranslation('index');
+  const { t: commonT } = useTranslation('common'); // 获取 common 命名空间的翻译函数
   const navigate = useNavigate();
   const currentProject = useCurrentProject();
   const currentSessionFile = useCurrentSessionFile();
@@ -78,6 +79,7 @@ function App() {
   const [analysisResult, setAnalysisResult] = useState<EnhancedPrompt | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [copiedPrompt, setCopiedPrompt] = useState(false); // 复制状态
 
   // 右侧面板 ref，用于编程式控制折叠
   const rightPanelRef = useRef<any>(null);
@@ -230,6 +232,22 @@ function App() {
     debugLog('handleProjectChange', 'project changed');
     // 移除自动检测，避免覆盖用户选择的会话文件
   }, []);
+
+  // 复制提示词到剪贴板
+  const handleCopyPrompt = useCallback(async () => {
+    if (!analysisResult?.enhancedPrompt) return;
+
+    try {
+      await navigator.clipboard.writeText(analysisResult.enhancedPrompt);
+      setCopiedPrompt(true);
+      // 2秒后恢复状态
+      setTimeout(() => {
+        setCopiedPrompt(false);
+      }, 2000);
+    } catch (error) {
+      debugLog('handleCopyPrompt', 'copy failed', error);
+    }
+  }, [analysisResult?.enhancedPrompt]);
 
   // 从文件路径提取 sessionId
   // 会话文件名格式：claude-UUID.jsonl，提取 UUID 作为 sessionId
@@ -436,9 +454,36 @@ function App() {
 
                         {/* 增强的提示词 */}
                         <div>
-                          <p className="text-sm font-medium mb-2" style={{ color: 'var(--color-text-primary)' }}>
-                            {t('messages.enhancedPrompt')}
-                          </p>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                              {t('messages.enhancedPrompt')}
+                            </p>
+                            <button
+                              onClick={handleCopyPrompt}
+                              className={cn(
+                                "flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
+                                "hover:opacity-80 active:scale-95"
+                              )}
+                              style={{
+                                color: copiedPrompt ? 'var(--color-accent-blue)' : 'var(--color-text-secondary)',
+                                backgroundColor: 'var(--color-bg-primary)',
+                                border: '1px solid var(--color-border-light)'
+                              }}
+                              disabled={!analysisResult.enhancedPrompt}
+                            >
+                              {copiedPrompt ? (
+                                <>
+                                  <Check className="h-3.5 w-3.5" />
+                                  {commonT('buttons.copied')}
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3.5 w-3.5" />
+                                  {commonT('buttons.copy')}
+                                </>
+                              )}
+                            </button>
+                          </div>
                           <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed p-3 rounded" style={{
                             color: 'var(--color-text-primary)',
                             fontFamily: 'Consolas, Monaco, "Courier New", monospace',
