@@ -100,24 +100,17 @@ export function OptimizerSettings() {
         </div>
       )}
 
-      {/* Meta-Prompt 配置 */}
+      {/* Meta-Prompt 配置 - 提示用户直接编辑配置文件 */}
       <div className="space-y-2">
         <h3 className="text-lg font-medium">Meta-Prompt 模板</h3>
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          指导 LLM 生成优化提示词的核心模板
+          模板支持多语言（中文 template_zh 和英文 template_en）
         </p>
-        <textarea
-          value={config.meta_prompt.template}
-          onChange={(e) => setConfig({
-            ...config,
-            meta_prompt: { ...config.meta_prompt, template: e.target.value }
-          })}
-          className="w-full h-40 p-3 rounded-lg border font-mono text-sm"
-          style={{
-            backgroundColor: 'var(--color-bg-card)',
-            borderColor: 'var(--color-border-light)'
-          }}
-        />
+        <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 text-sm">
+          <p>提示词模板已在配置文件中支持中英文双语切换。</p>
+          <p className="mt-1">如需修改模板内容，请直接编辑文件：</p>
+          <code className="block mt-1 p-1 bg-white dark:bg-gray-800 rounded">src-tauri/optimizer_config.toml</code>
+        </div>
       </div>
 
       {/* LLM 参数配置 */}

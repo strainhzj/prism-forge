@@ -1920,17 +1920,27 @@ pub async fn compress_context(
 /// 优化提示词
 ///
 /// 整合向量检索、上下文压缩和 LLM 生成，创建增强的提示词
+///
+/// # 参数
+/// - `request`: 增强提示词请求
+/// - `language`: 语言标识（"zh" 或 "en"），可选，默认 "zh"
+/// - `llm_manager`: LLM 客户端管理器
 #[tauri::command]
 pub async fn optimize_prompt(
     request: EnhancedPromptRequest,
+    language: Option<String>,
     llm_manager: State<'_, LLMClientManager>,
 ) -> Result<EnhancedPrompt, CommandError> {
     use crate::optimizer::prompt_generator::PromptGenerator;
+
+    // 设置默认语言为英文
+    let language = language.unwrap_or_else(|| "en".to_string());
 
     // 调试：输出收到的请求
     eprintln!("[optimize_prompt] 收到请求:");
     eprintln!("  goal: {}", request.goal);
     eprintln!("  current_session_file_path: {:?}", request.current_session_file_path);
+    eprintln!("  language: {}", language);
 
     // 创建提示词生成器
     let generator = PromptGenerator::new()
@@ -1940,7 +1950,7 @@ pub async fn optimize_prompt(
 
     // 生成增强提示词
     let result = generator
-        .generate_enhanced_prompt(request, &llm_manager)
+        .generate_enhanced_prompt(request, &llm_manager, &language)
         .await
         .map_err(|e| CommandError {
             message: format!("生成提示词失败: {}", e),

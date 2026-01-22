@@ -22,7 +22,10 @@ pub struct OptimizerConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct MetaPromptConfig {
-    pub template: String,
+    /// 中文版本模板
+    pub template_zh: String,
+    /// 英文版本模板
+    pub template_en: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -36,15 +39,26 @@ pub struct LLMParamsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct PromptStructureConfig {
-    pub structure: String,
+    /// 中文版本结构模板
+    pub structure_zh: String,
+    /// 英文版本结构模板
+    pub structure_en: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct FallbackConfig {
-    pub no_sessions_template: String,
-    pub llm_error_template: String,
-    /// 对话开始模板（当会话消息为空时使用）
-    pub conversation_starter_template: String,
+    /// 中文版本：无会话时模板
+    pub no_sessions_template_zh: String,
+    /// 英文版本：无会话时模板
+    pub no_sessions_template_en: String,
+    /// 中文版本：LLM 调用失败时模板
+    pub llm_error_template_zh: String,
+    /// 英文版本：LLM 调用失败时模板
+    pub llm_error_template_en: String,
+    /// 中文版本：对话开始模板（当会话消息为空时使用）
+    pub conversation_starter_template_zh: String,
+    /// 英文版本：对话开始模板
+    pub conversation_starter_template_en: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -52,7 +66,10 @@ pub struct SessionContextConfig {
     pub max_summary_length: usize,
     pub include_rating: bool,
     pub include_project: bool,
-    pub session_format: String,
+    /// 中文版本：会话格式化模板
+    pub session_format_zh: String,
+    /// 英文版本：会话格式化模板
+    pub session_format_en: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -75,7 +92,7 @@ impl Default for OptimizerConfig {
     fn default() -> Self {
         Self {
             meta_prompt: MetaPromptConfig {
-                template: r#"
+                template_zh: r#"
 你是一个专业的编程助手提示词优化器。基于以下信息，生成一个清晰、具体的提示词，帮助用户高效完成编程任务。
 
 ## 你的任务
@@ -96,6 +113,27 @@ impl Default for OptimizerConfig {
 - 优先参考高评分、高相似度的历史方案
 - 突出关键技术点和注意事项
 "#.trim().to_string(),
+                template_en: r#"
+You are a professional programming assistant prompt optimizer. Based on the following information, generate a clear, specific prompt to help users efficiently complete programming tasks.
+
+## Your Task
+1. Analyze the user's programming goals
+2. Reference solutions from relevant conversation history
+3. Generate a directly usable, structured prompt
+
+## Output Format
+Please generate a prompt containing the following sections:
+1. **Task Background**: Briefly describe the task to be completed
+2. **Technical Requirements**: Technology stack and constraints involved
+3. **Reference Solutions**: Suggestions based on historical experience
+4. **Specific Steps**: Clear implementation steps
+5. **Expected Output**: Expected result format
+
+## Constraints
+- The prompt should be concise and clear (within 500 words)
+- Prioritize high-rating, high-similarity historical solutions
+- Highlight key technical points and considerations
+"#.trim().to_string(),
             },
             llm_params: LLMParamsConfig {
                 temperature: 0.3,
@@ -105,7 +143,7 @@ impl Default for OptimizerConfig {
                 presence_penalty: 0.0,
             },
             prompt_structure: PromptStructureConfig {
-                structure: r#"
+                structure_zh: r#"
 {{meta_prompt}}
 
 ## 用户目标
@@ -120,16 +158,38 @@ impl Default for OptimizerConfig {
 ## 请求
 基于上述信息，生成一个优化的提示词。
 "#.trim().to_string(),
+                structure_en: r#"
+{{meta_prompt}}
+
+## User Goal
+{{goal}}
+
+## Related Conversation History
+{{sessions}}
+
+## Context Summary
+{{context}}
+
+## Request
+Based on the above information, generate an optimized prompt.
+"#.trim().to_string(),
             },
             fallback: FallbackConfig {
-                no_sessions_template: r#"
+                no_sessions_template_zh: r#"
 请帮我完成以下编程任务：
 
 {{goal}}
 
 请提供详细的实现方案和代码示例。
 "#.trim().to_string(),
-                llm_error_template: r#"
+                no_sessions_template_en: r#"
+Please help me complete the following programming task:
+
+{{goal}}
+
+Please provide a detailed implementation plan and code examples.
+"#.trim().to_string(),
+                llm_error_template_zh: r#"
 请帮我完成以下编程任务：
 
 {{goal}}
@@ -140,7 +200,18 @@ impl Default for OptimizerConfig {
 
 请提供详细的实现方案和代码示例。
 "#.trim().to_string(),
-                conversation_starter_template: r#"
+                llm_error_template_en: r#"
+Please help me complete the following programming task:
+
+{{goal}}
+
+## Reference
+Related session: (Rating: {{best_session_rating}})
+{{best_session_summary}}
+
+Please provide a detailed implementation plan and code examples.
+"#.trim().to_string(),
+                conversation_starter_template_zh: r#"
 你是一个专业的编程助手。用户想要开始一个新的对话，请生成一个清晰、友好的提示词来帮助用户开始对话。
 
 ## 用户目标
@@ -154,12 +225,27 @@ impl Default for OptimizerConfig {
 
 请生成一个对话开始的提示词。
 "#.trim().to_string(),
+                conversation_starter_template_en: r#"
+You are a professional programming assistant. The user wants to start a new conversation. Please generate a clear, friendly prompt to help the user begin the conversation.
+
+## User Goal
+{{goal}}
+
+## Requirements
+1. Understand the user's goal and provide a friendly opening
+2. Ask targeted questions to clarify requirements
+3. Provide relevant suggestions or reference directions
+4. Keep it concise and clear (within 200 words)
+
+Please generate a conversation-starting prompt.
+"#.trim().to_string(),
             },
             session_context: SessionContextConfig {
                 max_summary_length: 200,
                 include_rating: true,
                 include_project: true,
-                session_format: "- 会话 {{session_id}} (项目: {{project_name}}) (评分: {{rating}}):\n  {{summary}}".to_string(),
+                session_format_zh: "- 会话 {{session_id}} (项目: {{project_name}}) (评分: {{rating}}):\n  {{summary}}".to_string(),
+                session_format_en: "- Session {{session_id}} (Project: {{project_name}}) (Rating: {{rating}}):\n  {{summary}}".to_string(),
             },
             compression: CompressionConfig {
                 level: "basic".to_string(),
@@ -221,34 +307,52 @@ impl ConfigManager {
         self.config.read().unwrap().clone()
     }
 
-    /// 获取 Meta-Prompt 模板
-    pub fn get_meta_prompt(&self) -> String {
-        self.config.read().unwrap().meta_prompt.template.clone()
+    /// 获取 Meta-Prompt 模板（根据语言）
+    pub fn get_meta_prompt(&self, language: &str) -> String {
+        match language {
+            "zh" => self.config.read().unwrap().meta_prompt.template_zh.clone(),
+            _ => self.config.read().unwrap().meta_prompt.template_en.clone(),  // 默认英文
+        }
     }
 
-    /// 获取提示词结构模板
-    pub fn get_prompt_structure(&self) -> String {
-        self.config.read().unwrap().prompt_structure.structure.clone()
+    /// 获取提示词结构模板（根据语言）
+    pub fn get_prompt_structure(&self, language: &str) -> String {
+        match language {
+            "zh" => self.config.read().unwrap().prompt_structure.structure_zh.clone(),
+            _ => self.config.read().unwrap().prompt_structure.structure_en.clone(),  // 默认英文
+        }
     }
 
-    /// 获取无会话回退模板
-    pub fn get_no_sessions_template(&self) -> String {
-        self.config.read().unwrap().fallback.no_sessions_template.clone()
+    /// 获取无会话回退模板（根据语言）
+    pub fn get_no_sessions_template(&self, language: &str) -> String {
+        match language {
+            "zh" => self.config.read().unwrap().fallback.no_sessions_template_zh.clone(),
+            _ => self.config.read().unwrap().fallback.no_sessions_template_en.clone(),  // 默认英文
+        }
     }
 
-    /// 获取 LLM 错误回退模板
-    pub fn get_llm_error_template(&self) -> String {
-        self.config.read().unwrap().fallback.llm_error_template.clone()
+    /// 获取 LLM 错误回退模板（根据语言）
+    pub fn get_llm_error_template(&self, language: &str) -> String {
+        match language {
+            "zh" => self.config.read().unwrap().fallback.llm_error_template_zh.clone(),
+            _ => self.config.read().unwrap().fallback.llm_error_template_en.clone(),  // 默认英文
+        }
     }
 
-    /// 获取对话开始模板
-    pub fn get_conversation_starter_template(&self) -> String {
-        self.config.read().unwrap().fallback.conversation_starter_template.clone()
+    /// 获取对话开始模板（根据语言）
+    pub fn get_conversation_starter_template(&self, language: &str) -> String {
+        match language {
+            "zh" => self.config.read().unwrap().fallback.conversation_starter_template_zh.clone(),
+            _ => self.config.read().unwrap().fallback.conversation_starter_template_en.clone(),  // 默认英文
+        }
     }
 
-    /// 获取会话格式化模板
-    pub fn get_session_format(&self) -> String {
-        self.config.read().unwrap().session_context.session_format.clone()
+    /// 获取会话格式化模板（根据语言）
+    pub fn get_session_format(&self, language: &str) -> String {
+        match language {
+            "zh" => self.config.read().unwrap().session_context.session_format_zh.clone(),
+            _ => self.config.read().unwrap().session_context.session_format_en.clone(),  // 默认英文
+        }
     }
 
     /// 获取会话上下文配置

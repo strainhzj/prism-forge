@@ -20,6 +20,7 @@ import {
   useProjectLoading,
 } from "./stores/useProjectStore";
 import { useCurrentSessionActions, useCurrentSessionStore } from "./stores/useCurrentSessionStore";
+import { useCurrentLanguage } from "@/stores/useLanguageStore";
 import { cn } from "@/lib/utils";
 import type { EnhancedPrompt } from "@/types/prompt";
 
@@ -116,6 +117,9 @@ function App() {
   const [analyzing, setAnalyzing] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [copiedPrompt, setCopiedPrompt] = useState(false); // 复制状态
+
+  // 获取当前语言（用于提示词优化）
+  const currentLanguage = useCurrentLanguage();
 
   // 解析增强提示词，分离目标偏离程度和真正的提示词
   const parsedPrompt = useMemo(() => {
@@ -236,12 +240,13 @@ function App() {
     setAnalysisResult(null);
 
     try {
-      // 使用新的请求结构，传递当前会话文件路径
+      // 使用新的请求结构，传递当前会话文件路径和语言
       const result = await invoke<EnhancedPrompt>("optimize_prompt", {
         request: {
           goal: goal.trim(),
           currentSessionFilePath: currentSessionFile,  // 使用新字段
-        }
+        },
+        language: currentLanguage,  // 传递当前语言
       });
       debugLog('handleAnalyze', 'result received:', result);
       debugLog('handleAnalyze', 'result JSON:', JSON.stringify(result, null, 2));

@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useCurrentSessionFilePath, useCurrentSession } from '@/stores/useCurrentSessionStore';
+import { useCurrentLanguage } from '@/stores/useLanguageStore';
 import type { EnhancedPrompt, EnhancedPromptRequest } from '@/types/prompt';
 
 export interface PromptBuilderProps {
@@ -50,6 +51,8 @@ export function PromptBuilder({
   // 获取当前会话文件路径
   const currentSessionFilePath = useCurrentSessionFilePath();
   const currentSession = useCurrentSession();
+  // 获取当前语言（用于提示词优化）
+  const currentLanguage = useCurrentLanguage();
 
   // 调试日志
   const DEBUG = import.meta.env.DEV;
@@ -85,6 +88,7 @@ export function PromptBuilder({
 
       const response = await invoke<EnhancedPrompt>('optimize_prompt', {
         request,
+        language: currentLanguage,  // 传递当前语言
       });
 
       setResult(response);

@@ -5,7 +5,8 @@
 [meta_prompt]
 # 通用方法论模板，用于指导 LLM 生成优化后的提示词
 # 此模板不包含具体变量，保持独立性和可复用性
-template = """你是一位专业的提示词工程师。你的任务是分析用户目标和会话历史，生成一个结构化、高信噪比的提示词，以指导 AI 编程助手高效地完成任务。
+# 中文版本
+template_zh = """你是一位专业的提示词工程师。你的任务是分析用户目标和会话历史，生成一个结构化、高信噪比的提示词，以指导 AI 编程助手高效地完成任务。
 
 ## 你的分析与构建步骤
 
@@ -23,6 +24,27 @@ template = """你是一位专业的提示词工程师。你的任务是分析用
 - 必须根据**上下文**与**下一步目标**的关联程度严格判断目标偏离程度
 - 严禁仅参考最新对话，必须建立对**整体历史会话**的认知
 - 突出关键技术点和注意事项
+"""
+
+# 英文版本
+template_en = """You are a professional prompt engineer. Your task is to analyze user goals and conversation history to generate a structured, high signal-to-noise ratio prompt that will guide an AI programming assistant to efficiently complete tasks.
+
+## Your Analysis and Construction Steps
+
+1. **Analyze Goals and Context**:
+   - **Establish Core Requirements**: Carefully read the user's goal.
+   - **Global History Review**: Comprehensively review the entire conversation history (seeking the main task thread), avoiding making one-sided judgments based only on the most recent exchange.
+   - **Determine Goal Drift**: Based on the relevance between context and next step, assess whether the next goal represents noise for the overall conversation.
+   - **Identify Conversation Stage**: Determine whether you are in task exploration, implementation, debugging/refinement, or refactoring/optimization phase.
+
+2. **Construct Structured Prompt**: Based on your analysis, populate each section of the "Output Format" below.
+
+## Constraints
+
+- The prompt should be concise and focused, avoiding unnecessary pleasantries or background information
+- Must rigorously assess goal drift based on the relevance between **context** and **next step**
+- Strictly prohibit referencing only the latest conversation; must establish cognition of the **entire conversation history**
+- Highlight key technical points and considerations
 """
 
 # ==================== LLM 调用参数 ====================
@@ -61,7 +83,9 @@ presence_penalty = 0.0
 #   {{meta_prompt}}: Meta-Prompt 模板内容
 #   {{goal}}: 用户输入的目标
 #   {{sessions}}: 格式化的会话上下文
-structure = """{{meta_prompt}}
+
+# 中文版本
+structure_zh = """{{meta_prompt}}
 
 ## 输入信息
 
@@ -94,19 +118,68 @@ structure = """{{meta_prompt}}
 请基于上述信息，生成一个优化的提示词。
 """
 
+# 英文版本
+structure_en = """{{meta_prompt}}
+
+## Input Information
+
+- **Next Goal**: {{goal}}
+- **Related Conversation History**:
+{{sessions}}
+
+## Output Format
+
+Please strictly follow the structure below to generate a prompt, using Markdown headings:
+
+### **Goal Drift Level**
+
+Assess the degree of drift between the **next goal** and **related conversation history**, and provide your recommendation (e.g., can continue conversation, suggest user start a new conversation, if drift is high then truncate response and directly suggest user start a new conversation)
+
+### **Task Objective**
+
+Briefly describe the task and objectives to be completed.
+
+### **Specific Steps**
+
+Provide clear, actionable step-by-step instructions to guide the AI in completing the task.
+
+### **Expected Output**
+
+Describe what the final deliverable should be and specify its key requirements.
+
+---
+
+Please generate an optimized prompt based on the information above.
+"""
+
 # ==================== 回退模板 ====================
 [fallback]
 # 当没有相关会话时使用的简单模板
 # 可用变量: {{goal}}
-no_sessions_template = "请帮我完成以下编程任务：\n\n{{goal}}\n\n请提供详细的实现方案和代码示例。"
+
+# 中文版本
+no_sessions_template_zh = "请帮我完成以下编程任务：\n\n{{goal}}\n\n请提供详细的实现方案和代码示例。"
+
+# 英文版本
+no_sessions_template_en = "Please help me complete the following programming task:\n\n{{goal}}\n\nPlease provide a detailed implementation plan and code examples."
 
 # LLM 调用失败时使用的模板
 # 可用变量: {{goal}}, {{best_session_summary}}, {{best_session_rating}}
-llm_error_template = '请帮我完成以下编程任务：\n\n{{goal}}\n\n{{#if best_session_summary}}## 参考\n相关会话: (评分: {{best_session_rating}})\n{{best_session_summary}}{{/if}}\n\n请提供详细的实现方案和代码示例。'
+
+# 中文版本
+llm_error_template_zh = '请帮我完成以下编程任务：\n\n{{goal}}\n\n{{#if best_session_summary}}## 参考\n相关会话: (评分: {{best_session_rating}})\n{{best_session_summary}}{{/if}}\n\n请提供详细的实现方案和代码示例。'
+
+# 英文版本
+llm_error_template_en = 'Please help me complete the following programming task:\n\n{{goal}}\n\n{{#if best_session_summary}}## Reference\nRelated session: (Rating: {{best_session_rating}})\n{{best_session_summary}}{{/if}}\n\nPlease provide a detailed implementation plan and code examples.'
 
 # 对话开始模板（当会话消息为空时使用）
 # 可用变量: {{goal}}
-conversation_starter_template = "你是一个专业的提示词专家。用户想要在ai coding agent开始一个新的对话，请生成一段信噪比的提示词来帮助用户开始对话。\n\n## 用户目标\n{{goal}}\n\n## 要求\n1. 理解用户的目标\n2. 补充用户目标中可能缺失的部分\n3. 提供明确的方向\n4. 保持简洁明了（控制在 200 字以内）\n\n请生成一个对话开始的提示词。"
+
+# 中文版本
+conversation_starter_template_zh = "你是一个专业的提示词专家。用户想要在ai coding agent开始一个新的对话，请生成一段信噪比的提示词来帮助用户开始对话。\n\n## 用户目标\n{{goal}}\n\n## 要求\n1. 理解用户的目标\n2. 补充用户目标中可能缺失的部分\n3. 提供明确的方向\n4. 保持简洁明了（控制在 200 字以内）\n\n请生成一个对话开始的提示词。"
+
+# 英文版本
+conversation_starter_template_en = "You are a professional prompt expert. The user wants to start a new conversation in an AI coding agent. Please generate a high signal-to-noise ratio prompt to help the user begin the conversation.\n\n## User Goal\n{{goal}}\n\n## Requirements\n1. Understand the user's goal\n2. Supplement any potentially missing parts of the user's goal\n3. Provide clear direction\n4. Keep it concise and clear (within 200 words)\n\nPlease generate a conversation-starting prompt."
 
 # ==================== 会话上下文配置 ====================
 [session_context]
@@ -125,7 +198,12 @@ include_project = true
 
 # 会话列表格式模板
 # 可用变量: {{session_id}}, {{project_name}}, {{rating}}, {{summary}}
-session_format = "- 会话 {{session_id}} {{#if project_name}}(项目: {{project_name}}){{/if}} {{#if rating}}(评分: {{rating}}){{/if}}:\n  {{summary}}"
+
+# 中文版本
+session_format_zh = "- 会话 {{session_id}} {{#if project_name}}(项目: {{project_name}}){{/if}} {{#if rating}}(评分: {{rating}}){{/if}}:\n  {{summary}}"
+
+# 英文版本
+session_format_en = "- Session {{session_id}} {{#if project_name}}(Project: {{project_name}}){{/if}} {{#if rating}}(Rating: {{rating}}){{/if}}:\n  {{summary}}"
 
 # ==================== 上下文压缩配置 ====================
 [compression]
