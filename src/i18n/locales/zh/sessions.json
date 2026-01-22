@@ -8,6 +8,7 @@
   "buttons": {
     "back": "返回",
     "backToList": "返回列表",
+    "backToHome": "返回首页",
     "addDirectory": "添加目录",
     "refresh": "刷新",
     "cancel": "取消",

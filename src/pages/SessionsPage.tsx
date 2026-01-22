@@ -9,13 +9,13 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft } from 'lucide-react';
+import { Home } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ProjectSidebar } from '@/components/ProjectSidebar';
 import { SessionFileList, type SessionFileInfo } from '@/components/SessionFileList';
 import { SessionContentView } from '@/components/SessionContentView';
+import './SessionsPage.css';
 
 // ==================== 类型定义 ====================
 
@@ -76,17 +76,15 @@ export function SessionsPage({ className }: SessionsPageProps) {
   }, []);
 
   return (
-    <div className={cn('flex flex-col h-screen', className)} style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+    <div className={cn('sessions-page flex flex-col h-screen', className)} style={{ backgroundColor: 'var(--color-bg-primary)' }}>
       {/* 顶部导航栏 */}
       <div className="flex items-center gap-4 px-6 py-4 border-b" style={{ backgroundColor: 'var(--color-bg-card)', borderColor: 'var(--color-border-light)' }}>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleBack}
-          className="shrink-0 hover:bg-[var(--color-app-secondary)]"
-        >
-          <ArrowLeft className="h-5 w-5" style={{ color: 'var(--color-text-secondary)' }} />
-        </Button>
+        <div className="sessions-page-back">
+          <button className="back-btn" onClick={handleBack}>
+            <Home size={16} />
+            <span>{t('buttons.backToHome')}</span>
+          </button>
+        </div>
         <div className="flex-1">
           <h1 className="text-xl font-bold" style={{ color: 'var(--color-text-primary)' }}>{t('title')}</h1>
           <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>

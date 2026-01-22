@@ -8,6 +8,7 @@
   "buttons": {
     "back": "Back",
     "backToList": "Back to List",
+    "backToHome": "Back to Home",
     "addDirectory": "Add Directory",
     "refresh": "Refresh",
     "cancel": "Cancel",
