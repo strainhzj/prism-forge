@@ -11,6 +11,8 @@ use std::sync::{Arc, RwLock};
 use crate::llm::{LLMClientManager, interface::{Message, ModelParams}};
 use crate::database::repository::SessionRepository;
 use crate::tokenizer::TokenCounter;
+use crate::parser::view_level::{ViewLevel, MessageFilter, QAPair};
+use crate::session_parser::{SessionParserService, SessionParserConfig};
 use super::compressor::ContextCompressor;
 use super::config::ConfigManager;
 
@@ -22,15 +24,18 @@ use super::config::ConfigManager;
 pub struct EnhancedPromptRequest {
     /// 用户目标
     pub goal: String,
-    /// 可选：会话文件路径列表（从项目目录获取）
+    /// 可选：当前跟踪的会话文件路径（首页展示的会话）
+    #[serde(rename = "currentSessionFilePath")]
+    pub current_session_file_path: Option<String>,
+    /// 可选：会话文件路径列表（从项目目录获取，已弃用）
     #[serde(rename = "sessionFilePaths")]
     pub session_file_paths: Option<Vec<String>>,
     /// 可选：手动指定会话 ID 列表（已弃用，保留兼容性）
     #[serde(rename = "sessionIds")]
     pub session_ids: Option<Vec<String>>,
-    /// 检索限制
+    /// 检索限制（已弃用）
     pub limit: Option<usize>,
-    /// 是否使用加权检索
+    /// 是否使用加权检索（已弃用）
     #[serde(rename = "useWeighted")]
     pub use_weighted: Option<bool>,
 }
@@ -209,259 +214,226 @@ impl PromptGenerator {
 
     /// 生成增强提示词（主流程）
     ///
-    /// # 简化流程（不使用向量检索）
-    /// 1. 获取最近的会话（或手动指定的会话）
-    /// 2. 压缩上下文
-    /// 3. 构建 Meta-Prompt
-    /// 4. 调用 LLM 生成
+    /// # 新流程（使用当前会话的 QAPairs）
+    /// 1. 检查是否有当前会话文件路径
+    /// 2. 如果有，解析会话并提取 QAPairs（问答对）
+    /// 3. 如果问答对为空，使用对话开始模板
+    /// 4. 将问答对转换为对话流格式
+    /// 5. 构建 Meta-Prompt 并调用 LLM 生成
     pub async fn generate_enhanced_prompt(
         &self,
         request: EnhancedPromptRequest,
         llm_manager: &LLMClientManager,
     ) -> Result<EnhancedPrompt> {
-        // 1. 检索相关会话
-        // 优先使用 session_file_paths，否则使用 session_ids（兼容旧版）
-        let limit = request.limit.unwrap_or(5);
-
-        // 合并两种会话来源
-        let combined_ids: Option<Vec<String>> = request.session_file_paths.as_ref()
-            .or(request.session_ids.as_ref())
-            .cloned();
-
-        let sessions = self.get_recent_sessions(limit, &combined_ids)?;
-
-        if sessions.is_empty() {
-            // 没有相关会话，返回基础提示词
-            return Ok(self.create_fallback_prompt(&request.goal));
-        }
-
-        // 2. 提取会话上下文并压缩
-        let (original_tokens, compressed_context) = self.compress_sessions_context(&sessions)?;
-
-        // 3. 获取 Meta-Prompt（从配置）
-        let meta_prompt = self.config_manager.get_meta_prompt();
-
-        // 4. 构建完整提示词（使用配置的结构模板）
-        let full_prompt = self.build_prompt_with_meta(
-            &request.goal,
-            &sessions,
-            &compressed_context,
-            &meta_prompt,
-        );
-
-        // 5. 调用 LLM 生成增强提示词
-        let enhanced_prompt = match self.call_llm_generate(&full_prompt, llm_manager).await {
-            Ok(prompt) => {
-                eprintln!("[PromptGenerator] LLM 生成成功，长度: {}", prompt.len());
-                prompt
-            },
-            Err(e) => {
-                // LLM 调用失败时，回退到模板生成
-                eprintln!("[PromptGenerator] LLM 调用失败，使用模板: {}", e);
-                self.generate_template_prompt(&request.goal, &sessions)
+        // 1. 检查是否有当前会话文件路径
+        if let Some(ref session_file_path) = request.current_session_file_path {
+            // 检查文件是否存在
+            let path_buf = PathBuf::from(session_file_path);
+            if !path_buf.exists() {
+                return Err(anyhow::anyhow!("会话文件不存在: {}", session_file_path));
             }
-        };
 
-        // 6. 计算 Token 统计
-        let compressed_tokens = self.token_counter.count_tokens(&enhanced_prompt)?;
-        let savings_percentage = if original_tokens > 0 && compressed_tokens <= original_tokens {
-            ((original_tokens - compressed_tokens) as f64 / original_tokens as f64) * 100.0
-        } else if original_tokens > 0 {
-            // 压缩后更多，表示负节省
-            -(((compressed_tokens - original_tokens) as f64 / original_tokens as f64) * 100.0)
-        } else {
-            0.0
-        };
+            // 提取 session_id（从文件名）
+            let session_id = path_buf
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown");
 
-        // 7. 计算置信度（基于评分和更新时间）
-        let confidence = self.calculate_confidence(&sessions);
+            // 2. 解析会话并提取问答对
+            let config = SessionParserConfig {
+                enable_content_filter: false,
+                view_level: ViewLevel::Full,
+                debug: cfg!(debug_assertions),
+            };
 
-        // 8. 构建引用会话信息
-        let referenced_sessions: Vec<ReferencedSession> = sessions
-            .into_iter()
-            .map(|s| ReferencedSession {
-                session_id: s.session_id.clone(),
-                project_name: s.project_name.clone(),
-                summary: s.summary.clone().unwrap_or_else(|| "无摘要".to_string()),
-                similarity_score: s.relevance_score,
-            })
-            .collect();
+            let parser = SessionParserService::new(config);
+            let parse_result = parser.parse_session(session_file_path, session_id)
+                .map_err(|e| anyhow::anyhow!("解析会话失败: {}", e))?;
 
-        Ok(EnhancedPrompt {
-            original_goal: request.goal,
-            referenced_sessions,
-            enhanced_prompt,
-            token_stats: TokenStats {
-                original_tokens,
-                compressed_tokens,
-                savings_percentage,
-            },
-            confidence,
-        })
-    }
+            // 3. 提取问答对
+            let filter = MessageFilter::new(ViewLevel::QAPairs);
+            let qa_pairs = filter.extract_qa_pairs(parse_result.messages);
 
-    /// 获取最近的相关会话
-    fn get_recent_sessions(
-        &self,
-        limit: usize,
-        session_ids: &Option<Vec<String>>,
-    ) -> Result<Vec<SessionWithScore>> {
-        // 首先检查是否有会话文件路径（优先使用）
-        if let Some(ref file_paths) = session_ids {
-            // 这里实际是 session_file_paths，从文件路径读取会话
-            let mut results = Vec::new();
-            for file_path in file_paths {
-                // 从文件路径提取 session_id
-                let session_id = std::path::Path::new(file_path)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown");
+            eprintln!("[PromptGenerator] 提取到 {} 个问答对", qa_pairs.len());
 
-                // 提取项目名称
-                let project_name = std::path::Path::new(file_path)
-                    .parent()
-                    .and_then(|p| p.file_name())
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-
-                results.push(SessionWithScore {
-                    session_id: session_id.to_string(),
-                    project_name,
-                    summary: None,
-                    rating: None, // 从文件无法直接获取评分
-                    relevance_score: 0.5, // 默认相关性
-                });
+            // 4. 判断问答对是否为空
+            if qa_pairs.is_empty() {
+                // 使用对话开始模板
+                return Ok(self.create_conversation_starter_prompt(&request.goal, session_file_path));
             }
-            eprintln!("[PromptGenerator] 从文件加载会话: {} 个", results.len());
-            return Ok(results);
-        }
 
-        // 回退到数据库查询（旧逻辑，保留兼容性）
-        let all_sessions = self.repository.get_all_sessions()
-            .unwrap_or_default();
+            // 5. 将问答对转换为对话流格式（时间正序）
+            let (original_tokens, conversation_context) = self.format_qa_pairs_to_conversation(&qa_pairs)?;
 
-        eprintln!("[PromptGenerator] 数据库中共有 {} 个会话", all_sessions.len());
+            // 6. 构建完整提示词
+            let full_prompt = self.build_prompt_with_conversation(
+                &request.goal,
+                &conversation_context,
+            );
 
-        let mut scored_sessions: Vec<SessionWithScore> = all_sessions
-            .into_iter()
-            .filter(|s| !s.is_archived)
-            .map(|s| {
-                let rating_score = s.rating.unwrap_or(0) as f64 / 5.0;
-                let relevance_score = rating_score * 0.7 + 0.3;
-                SessionWithScore {
-                    session_id: s.session_id,
-                    project_name: s.project_name,
-                    summary: None,
-                    rating: s.rating,
-                    relevance_score,
+            // 7. 调用 LLM 生成增强提示词
+            let enhanced_prompt = match self.call_llm_generate(&full_prompt, llm_manager).await {
+                Ok(prompt) => {
+                    eprintln!("[PromptGenerator] LLM 生成成功，长度: {}", prompt.len());
+                    prompt
+                },
+                Err(e) => {
+                    // LLM 调用失败时，回退到模板生成
+                    eprintln!("[PromptGenerator] LLM 调用失败，使用模板: {}", e);
+                    self.generate_conversation_template_prompt(&request.goal)
                 }
+            };
+
+            // 8. 计算 Token 统计
+            let compressed_tokens = self.token_counter.count_tokens(&enhanced_prompt)?;
+            let savings_percentage = if original_tokens > 0 && compressed_tokens <= original_tokens {
+                ((original_tokens - compressed_tokens) as f64 / original_tokens as f64) * 100.0
+            } else if original_tokens > 0 {
+                -(((compressed_tokens - original_tokens) as f64 / original_tokens as f64) * 100.0)
+            } else {
+                0.0
+            };
+
+            // 9. 构建引用会话信息
+            let referenced_sessions = vec![ReferencedSession {
+                session_id: session_id.to_string(),
+                project_name: "当前会话".to_string(),
+                summary: format!("包含 {} 个问答对", qa_pairs.len()),
+                similarity_score: 1.0,
+            }];
+
+            Ok(EnhancedPrompt {
+                original_goal: request.goal,
+                referenced_sessions,
+                enhanced_prompt,
+                token_stats: TokenStats {
+                    original_tokens,
+                    compressed_tokens,
+                    savings_percentage,
+                },
+                confidence: 1.0, // 当前会话置信度最高
             })
-            .collect();
-
-        scored_sessions.sort_by(|a, b| {
-            b.relevance_score
-                .partial_cmp(&a.relevance_score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        scored_sessions.truncate(limit);
-
-        eprintln!("[PromptGenerator] 返回 {} 个相关会话", scored_sessions.len());
-        Ok(scored_sessions)
+        } else {
+            // 没有当前会话，返回提示要求用户先选择会话
+            Err(anyhow::anyhow!("请先在首页选择一个会话"))
+        }
     }
 
-    /// 压缩会话上下文
-    fn compress_sessions_context(
-        &self,
-        sessions: &[SessionWithScore],
-    ) -> Result<(usize, String)> {
-        // 从配置获取最大摘要长度
-        let max_summary_length = self.config_manager.get_max_summary_length();
+    /// 将问答对转换为对话流格式（时间正序）
+    fn format_qa_pairs_to_conversation(&self, qa_pairs: &[QAPair]) -> Result<(usize, String)> {
+        // 构建对话流格式（时间正序，已经是正序因为 extract_qa_pairs 会反转）
+        let conversation_lines: Vec<String> = qa_pairs.iter().map(|pair| {
+            // 问题
+            let question_text = pair.question.summary.as_ref()
+                .unwrap_or(&String::new())
+                .lines()
+                .take(3) // 最多取3行
+                .collect::<Vec<_>>()
+                .join("\n");
 
-        // 构建原始上下文
-        let original_context = sessions.iter()
-            .map(|s| {
-                format!(
-                    "会话: {}\n项目: {}\n摘要: {}\n",
-                    s.session_id,
-                    s.project_name,
-                    s.summary.as_ref().unwrap_or(&"无摘要".to_string())
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n---\n");
+            let mut result = format!("[User] {}", question_text);
+
+            // 答案（如果有）
+            if let Some(ref answer) = pair.answer {
+                let answer_text = answer.summary.as_ref()
+                    .unwrap_or(&String::new())
+                    .lines()
+                    .take(5) // 最多取5行
+                    .collect::<Vec<_>>()
+                    .join("\n");
+
+                result.push_str(&format!("\n[Assistant] {}", answer_text));
+            }
+
+            result
+        }).collect();
+
+        let conversation = conversation_lines.join("\n\n");
 
         // 计算原始 Token 数
-        let original_tokens = self.token_counter.count_tokens(&original_context)?;
+        let original_tokens = self.token_counter.count_tokens(&conversation)?;
 
-        // 简化压缩：保留结构但去除冗余，使用配置的长度限制
-        let compressed = sessions.iter()
-            .map(|s| {
-                format!(
-                    "会话 {} (评分: {}): {}",
-                    s.session_id,
-                    s.rating.unwrap_or(0),
-                    s.summary.as_ref()
-                        .unwrap_or(&"无摘要".to_string())
-                        .chars()
-                        .take(max_summary_length)
-                        .collect::<String>()
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        Ok((original_tokens, compressed))
+        Ok((original_tokens, conversation))
     }
 
-    /// 使用 Meta-Prompt 构建完整提示词
-    fn build_prompt_with_meta(
+    /// 使用对话上下文构建完整提示词
+    fn build_prompt_with_conversation(
         &self,
         goal: &str,
-        sessions: &[SessionWithScore],
-        compressed_context: &str,
-        meta_prompt: &str,
+        conversation: &str,
     ) -> String {
-        // 从配置获取结构模板
-        let structure = self.config_manager.get_prompt_structure();
+        format!(
+            r#"你是一个专业的编程助手提示词优化器。
 
-        // 格式化会话信息
-        let max_summary_length = self.config_manager.get_max_summary_length();
-        let include_rating = self.config_manager.include_rating();
-        let include_project = self.config_manager.include_project();
-        let session_format = self.config_manager.get_session_format();
+基于以下对话记录和用户目标，生成一个清晰、具体的提示词。
 
-        let sessions_info = sessions.iter()
-            .map(|s| {
-                let summary = s.summary.as_ref()
-                    .unwrap_or(&"无摘要".to_string())
-                    .chars()
-                    .take(max_summary_length)
-                    .collect::<String>();
+## 对话记录
 
-                // 简单的模板变量替换
-                let mut formatted = session_format.clone();
-                formatted = formatted.replace("{{session_id}}", &s.session_id);
-                formatted = formatted.replace("{{project_name}}", &s.project_name);
-                formatted = formatted.replace("{{summary}}", &summary);
+{conversation}
 
-                if include_rating {
-                    let rating_str = format!("{}", s.rating.unwrap_or(0));
-                    formatted = formatted.replace("{{rating}}", &rating_str);
-                }
+## 用户目标
 
-                formatted
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+{goal}
 
-        // 使用配置的结构模板
-        structure
-            .replace("{{meta_prompt}}", meta_prompt)
-            .replace("{{goal}}", goal)
-            .replace("{{sessions}}", &sessions_info)
-            .replace("{{context}}", compressed_context)
+## 要求
+
+1. 分析对话中的上下文和用户意图
+2. 生成一个可直接使用的、结构化的提示词
+3. 提示词要简洁明了（控制在 500 字以内）
+4. 突出关键技术点和注意事项
+
+## 输出格式
+
+请直接输出优化后的提示词，无需额外解释。
+"#
+        )
+    }
+
+    /// 创建对话开始提示词（会话为空时）
+    fn create_conversation_starter_prompt(&self, goal: &str, session_file_path: &str) -> EnhancedPrompt {
+        // 从配置获取对话开始模板
+        let template = self.config_manager.get_conversation_starter_template();
+
+        let enhanced_prompt = template.replace("{{goal}}", goal);
+
+        // 提取会话信息
+        let path_buf = PathBuf::from(session_file_path);
+        let session_id = path_buf
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
+
+        EnhancedPrompt {
+            original_goal: goal.to_string(),
+            referenced_sessions: vec![ReferencedSession {
+                session_id: session_id.to_string(),
+                project_name: "当前会话".to_string(),
+                summary: "新对话，无历史记录".to_string(),
+                similarity_score: 1.0,
+            }],
+            enhanced_prompt,
+            token_stats: TokenStats {
+                original_tokens: 0,
+                compressed_tokens: goal.len(),
+                savings_percentage: 0.0,
+            },
+            confidence: 0.5, // 对话开始的置信度中等
+        }
+    }
+
+    /// 生成对话模板提示词（LLM 调用失败时回退）
+    fn generate_conversation_template_prompt(&self, goal: &str) -> String {
+        format!(
+            r#"请基于以下目标生成一个优化的提示词：
+
+{goal}
+
+要求：
+1. 简洁明了，直击要点
+2. 包含必要的上下文信息
+3. 结构清晰，易于理解
+4. 适合作为编程助手的开场提示词"#
+        )
     }
 
     /// 调用 LLM 生成增强提示词
@@ -492,75 +464,5 @@ impl PromptGenerator {
         Ok(response.content)
     }
 
-    /// 生成模板提示词（LLM 调用失败时回退）
-    fn generate_template_prompt(&self, goal: &str, sessions: &[SessionWithScore]) -> String {
-        let best_session = sessions.first();
-        let reference = if let Some(ref s) = best_session {
-            let summary_str = s.summary.as_ref().map(|s| s.as_str()).unwrap_or("无摘要");
-            format!(
-                "\n## 参考\n相关会话: {} (评分: {})\n{}",
-                s.session_id,
-                s.rating.unwrap_or(0),
-                summary_str.chars().take(300).collect::<String>()
-            )
-        } else {
-            String::new()
-        };
 
-        format!(
-            "请帮我完成以下编程任务：\n\n{}\n\n{}\n\n请提供详细的实现方案和代码示例。",
-            goal, reference
-        )
-    }
-
-    /// 创建回退提示词（无相关会话时）
-    fn create_fallback_prompt(&self, goal: &str) -> EnhancedPrompt {
-        // 从配置获取无会话回退模板
-        let template = self.config_manager.get_no_sessions_template();
-
-        let enhanced_prompt = template.replace("{{goal}}", goal);
-
-        EnhancedPrompt {
-            original_goal: goal.to_string(),
-            referenced_sessions: Vec::new(),
-            enhanced_prompt,
-            token_stats: TokenStats {
-                original_tokens: 0,
-                compressed_tokens: goal.len(),
-                savings_percentage: 0.0,
-            },
-            confidence: 0.3, // 低置信度
-        }
-    }
-
-    /// 计算置信度
-    fn calculate_confidence(&self, sessions: &[SessionWithScore]) -> f64 {
-        if sessions.is_empty() {
-            return 0.0;
-        }
-
-        // 基于评分计算
-        let avg_rating: f64 = sessions.iter()
-            .filter_map(|s| s.rating)
-            .map(|r| r as f64).sum::<f64>() / sessions.len() as f64;
-
-        // 转换为 0-1 范围
-        (avg_rating / 5.0).min(1.0).max(0.0)
-    }
-}
-
-// ========== 辅助结构体 ==========
-
-/// 带相关性分数的会话
-struct SessionWithScore {
-    /// 会话 ID
-    session_id: String,
-    /// 项目名称
-    project_name: String,
-    /// 摘要（Session 没有摘要字段，总是 None）
-    summary: Option<String>,
-    /// 评分
-    rating: Option<i32>,
-    /// 相关性分数（0-1）
-    relevance_score: f64,
 }

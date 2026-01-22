@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Wand2, Copy, Save, Check, Loader2, AlertCircle } from 'lucide-react';
+import { Wand2, Copy, Save, Check, Loader2, AlertCircle, Info } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { useCurrentSessionFilePath, useCurrentSession } from '@/stores/useCurrentSessionStore';
 import type { EnhancedPrompt, EnhancedPromptRequest } from '@/types/prompt';
 
 export interface PromptBuilderProps {
@@ -40,12 +41,22 @@ export function PromptBuilder({
   className,
 }: PromptBuilderProps) {
   const [goal, setGoal] = useState(initialGoal);
-  const [selectedSessionIds, _setSelectedSessionIds] = useState<string[]>([]);
   const [result, setResult] = useState<EnhancedPrompt | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // 获取当前会话文件路径
+  const currentSessionFilePath = useCurrentSessionFilePath();
+  const currentSession = useCurrentSession();
+
+  // 调试日志
+  const DEBUG = import.meta.env.DEV;
+  if (DEBUG) {
+    console.log('[PromptBuilder] currentSession:', currentSession);
+    console.log('[PromptBuilder] currentSessionFilePath:', currentSessionFilePath);
+  }
 
   /**
    * 生成增强提示词
@@ -56,6 +67,12 @@ export function PromptBuilder({
       return;
     }
 
+    // 检查是否有当前会话
+    if (!currentSessionFilePath) {
+      setError('请先在首页选择一个会话');
+      return;
+    }
+
     setIsGenerating(true);
     setError(null);
     setResult(null);
@@ -63,9 +80,7 @@ export function PromptBuilder({
     try {
       const request: EnhancedPromptRequest = {
         goal: goal.trim(),
-        sessionIds: selectedSessionIds.length > 0 ? selectedSessionIds : undefined,
-        limit: 5,
-        useWeighted: true,
+        currentSessionFilePath,
       };
 
       const response = await invoke<EnhancedPrompt>('optimize_prompt', {
@@ -82,7 +97,7 @@ export function PromptBuilder({
     } finally {
       setIsGenerating(false);
     }
-  }, [goal, selectedSessionIds, onGenerated]);
+  }, [goal, currentSessionFilePath, onGenerated]);
 
   /**
    * 复制增强提示词
@@ -147,12 +162,27 @@ export function PromptBuilder({
       {/* 输入区域 */}
       <Card className="p-4">
         <div className="space-y-3">
+          {/* 会话状态提示 */}
+          {currentSessionFilePath ? (
+            <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded-md border border-green-500/20">
+              <Check className="h-4 w-4 text-green-500" />
+              <p className="text-xs text-green-500">已选择当前会话</p>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 p-2 bg-amber-500/10 rounded-md border border-amber-500/20">
+              <Info className="h-4 w-4 text-amber-500" />
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                请先在首页选择一个会话，然后返回此处生成提示词
+              </p>
+            </div>
+          )}
+
           <div>
             <Label htmlFor="goal-input" className="text-base font-medium">
               目标描述
             </Label>
             <p className="text-xs text-muted-foreground mb-2">
-              描述您想要完成的任务，AI 会基于历史会话生成优化的提示词
+              描述您想要完成的任务，AI 会基于当前会话的对话记录生成优化的提示词
             </p>
             <Textarea
               id="goal-input"
@@ -180,7 +210,7 @@ export function PromptBuilder({
             </p>
             <Button
               onClick={handleGenerate}
-              disabled={isGenerating || !goal.trim()}
+              disabled={isGenerating || !goal.trim() || !currentSessionFilePath}
               className="min-w-[120px]"
             >
               {isGenerating ? (

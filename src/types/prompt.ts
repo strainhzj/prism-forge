@@ -80,7 +80,11 @@ export interface EnhancedPromptRequest {
    */
   goal: string;
   /**
-   * 可选：会话文件路径列表（从项目目录获取）
+   * 可选：当前跟踪的会话文件路径（首页展示的会话）
+   */
+  currentSessionFilePath?: string;
+  /**
+   * 可选：会话文件路径列表（从项目目录获取，已弃用）
    */
   sessionFilePaths?: string[];
   /**
@@ -88,11 +92,11 @@ export interface EnhancedPromptRequest {
    */
   sessionIds?: string[];
   /**
-   * 检索限制 (默认 5)
+   * 检索限制（已弃用）
    */
   limit?: number;
   /**
-   * 是否使用加权检索 (默认 true)
+   * 是否使用加权检索（已弃用）
    */
   useWeighted?: boolean;
 }

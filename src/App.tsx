@@ -19,6 +19,7 @@ import {
   useCurrentSessionFile,
   useProjectLoading,
 } from "./stores/useProjectStore";
+import { useCurrentSessionActions, useCurrentSessionStore } from "./stores/useCurrentSessionStore";
 import { cn } from "@/lib/utils";
 import type { EnhancedPrompt } from "@/types/prompt";
 
@@ -51,6 +52,9 @@ function App() {
   const { fetchProjects, setCurrentSessionFile, getLatestSessionFile, getSessionFiles } = useProjectActions();
   const projectLoading = useProjectLoading();
 
+  // 获取全局会话状态管理 actions（不解构，避免创建新引用）
+  const globalSessionActions = useCurrentSessionActions();
+
   // 全局 Alert 状态
   const [globalAlert, setGlobalAlert] = useState<AlertState>({
     show: false,
@@ -77,6 +81,9 @@ function App() {
 
   // 右侧面板 ref，用于编程式控制折叠
   const rightPanelRef = useRef<any>(null);
+
+  // 用于追踪已同步的会话，避免重复同步
+  const lastSyncedSessionRef = useRef<string | null>(null);
 
   // 切换右侧面板折叠
   const toggleRightCollapse = useCallback(() => {
@@ -121,6 +128,22 @@ function App() {
       debugLog('useEffect', 'project changed, auto detecting latest file');
       autoDetectFile();
     }
+  }, [currentProject]); // 移除 currentSessionFile 依赖，避免无限循环
+
+  // 应用启动时同步会话状态到全局 store
+  useEffect(() => {
+    if (currentProject && currentSessionFile && currentSessionFile !== lastSyncedSessionRef.current) {
+      debugLog('useEffect', 'syncing session to global store', currentSessionFile);
+      lastSyncedSessionRef.current = currentSessionFile;
+
+      // 直接使用 store 方法，不依赖 globalSessionActions
+      const store = useCurrentSessionStore.getState();
+      store.setCurrentSession({
+        sessionId: currentSessionFile.split(/[/\\]/).pop() || 'unknown',
+        filePath: currentSessionFile,
+        projectName: currentProject.name,
+      });
+    }
   }, [currentProject, currentSessionFile]);
 
   // 自动检测最新会话文件
@@ -132,8 +155,17 @@ function App() {
       if (path) {
         debugLog('autoDetectFile', 'latest file:', path);
         setCurrentSessionFile(path);
+
+        // 同时设置全局会话状态
+        globalSessionActions.setCurrentSession({
+          sessionId: path.split(/[/\\]/).pop() || 'unknown',
+          filePath: path,
+          projectName: currentProject.name,
+        });
       } else {
         debugLog('autoDetectFile', 'no files found');
+        // 清除全局会话状态
+        globalSessionActions.clearCurrentSession();
       }
     } catch (e) {
       const errorMsg = t('messages.autoDetectFileError', { error: String(e) });
@@ -148,26 +180,21 @@ function App() {
       return;
     }
 
+    // 检查是否有当前会话
+    if (!currentSessionFile) {
+      alert('请先在首页选择一个会话');
+      return;
+    }
+
     setAnalyzing(true);
     setAnalysisResult(null);
 
     try {
-      // 获取当前项目的会话文件列表
-      let sessionFilePaths: string[] = [];
-      if (currentProject) {
-        const sessionFiles = await getSessionFiles(currentProject.path, false);
-        // 获取最近的几个会话文件
-        sessionFilePaths = sessionFiles.slice(0, 10).map(f => f.file_path);
-        console.log(`[App] ${t('messages.foundSessionFiles', { count: sessionFilePaths.length })}`);
-      }
-
-      // 使用正确的请求结构调用 optimize_prompt
+      // 使用新的请求结构，传递当前会话文件路径
       const result = await invoke<EnhancedPrompt>("optimize_prompt", {
         request: {
           goal: goal.trim(),
-          sessionFilePaths,  // 传递会话文件路径列表
-          limit: 5,
-          useWeighted: true
+          currentSessionFilePath: currentSessionFile,  // 使用新字段
         }
       });
       debugLog('handleAnalyze', 'result received:', result);

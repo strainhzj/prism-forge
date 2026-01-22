@@ -43,6 +43,8 @@ pub struct PromptStructureConfig {
 pub struct FallbackConfig {
     pub no_sessions_template: String,
     pub llm_error_template: String,
+    /// 对话开始模板（当会话消息为空时使用）
+    pub conversation_starter_template: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -138,6 +140,20 @@ impl Default for OptimizerConfig {
 
 请提供详细的实现方案和代码示例。
 "#.trim().to_string(),
+                conversation_starter_template: r#"
+你是一个专业的编程助手。用户想要开始一个新的对话，请生成一个清晰、友好的提示词来帮助用户开始对话。
+
+## 用户目标
+{{goal}}
+
+## 要求
+1. 理解用户的目标，提供友好的开场白
+2. 提出针对性的问题来明确需求
+3. 提供相关的建议或参考方向
+4. 保持简洁明了（控制在 200 字以内）
+
+请生成一个对话开始的提示词。
+"#.trim().to_string(),
             },
             session_context: SessionContextConfig {
                 max_summary_length: 200,
@@ -223,6 +239,11 @@ impl ConfigManager {
     /// 获取 LLM 错误回退模板
     pub fn get_llm_error_template(&self) -> String {
         self.config.read().unwrap().fallback.llm_error_template.clone()
+    }
+
+    /// 获取对话开始模板
+    pub fn get_conversation_starter_template(&self) -> String {
+        self.config.read().unwrap().fallback.conversation_starter_template.clone()
     }
 
     /// 获取会话格式化模板

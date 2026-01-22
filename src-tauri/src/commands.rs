@@ -1927,6 +1927,12 @@ pub async fn optimize_prompt(
 ) -> Result<EnhancedPrompt, CommandError> {
     use crate::optimizer::prompt_generator::PromptGenerator;
 
+    // 调试：输出收到的请求
+    eprintln!("[optimize_prompt] 收到请求:");
+    eprintln!("  goal: {}", request.goal);
+    eprintln!("  current_session_file_path: {:?}", request.current_session_file_path);
+    eprintln!("  session_file_paths: {:?}", request.session_file_paths);
+
     // 创建提示词生成器
     let generator = PromptGenerator::new()
         .map_err(|e| CommandError {
