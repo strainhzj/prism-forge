@@ -43,7 +43,10 @@
     "user": "User",
     "assistant": "Assistant",
     "recordCount": "records",
-    "noLogs": "No logs yet"
+    "noLogs": "No logs yet",
+    "sortOrder": "Sort Order",
+    "sortAscending": "Ascending (Old→New)",
+    "sortDescending": "Descending (New→Old)"
   },
   "project": {
     "switchProject": "Switch Project",
