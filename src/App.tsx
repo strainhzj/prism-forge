@@ -473,7 +473,8 @@ function App() {
                                 {t('messages.tokenStats.saved')} {analysisResult.tokenStats.savingsPercentage.toFixed(1)}%
                               </span>
                             )}
-                            <span>{t('messages.tokenStats.confidence')}: {(analysisResult.confidence * 100).toFixed(0)}%</span>
+                            {/* 置信度 - 临时隐藏，等待后续实现更完善的计算逻辑 */}
+                            {/* <span>{t('messages.tokenStats.confidence')}: {(analysisResult.confidence * 100).toFixed(0)}%</span> */}
                           </div>
                         )}
 

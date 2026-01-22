@@ -145,12 +145,14 @@ export function PromptBuilder({
 
   /**
    * 计算置信度的颜色
+   *
+   * @deprecated 临时隐藏置信度展示，等待后续实现更完善的计算逻辑
    */
-  const getConfidenceColor = useCallback((confidence: number) => {
-    if (confidence >= 0.8) return 'bg-green-500/10 text-green-500';
-    if (confidence >= 0.5) return 'bg-yellow-500/10 text-yellow-500';
-    return 'bg-red-500/10 text-red-500';
-  }, []);
+  // const getConfidenceColor = useCallback((confidence: number) => {
+  //   if (confidence >= 0.8) return 'bg-green-500/10 text-green-500';
+  //   if (confidence >= 0.5) return 'bg-yellow-500/10 text-yellow-500';
+  //   return 'bg-red-500/10 text-red-500';
+  // }, []);
 
   /**
    * 重置状态
@@ -238,7 +240,7 @@ export function PromptBuilder({
         <Card className="p-4">
           <div className="space-y-4">
             {/* 统计信息 */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Token 统计 */}
               <div className="p-3 bg-muted/30 rounded-md">
                 <p className="text-xs text-muted-foreground mb-1">Token 统计</p>
@@ -268,8 +270,8 @@ export function PromptBuilder({
                 </p>
               </div>
 
-              {/* 置信度 */}
-              <div className="p-3 bg-muted/30 rounded-md">
+              {/* 置信度 - 临时隐藏，等待后续实现更完善的计算逻辑 */}
+              {/* <div className="p-3 bg-muted/30 rounded-md">
                 <p className="text-xs text-muted-foreground mb-1">置信度</p>
                 <div className="flex items-center gap-2">
                   <span className="text-2xl font-bold">
@@ -279,7 +281,7 @@ export function PromptBuilder({
                     {result.confidence >= 0.8 ? '高' : result.confidence >= 0.5 ? '中' : '低'}
                   </Badge>
                 </div>
-              </div>
+              </div> */}
             </div>
 
             {/* 引用的会话列表 */}

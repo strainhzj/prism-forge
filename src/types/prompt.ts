@@ -67,8 +67,10 @@ export interface EnhancedPrompt {
   tokenStats: TokenStats;
   /**
    * 置信度 (0.0 - 1.0)
+   *
+   * @deprecated 临时隐藏置信度展示，等待后续实现更完善的计算逻辑
    */
-  confidence: number;
+  // confidence: number;
 }
 
 /**
