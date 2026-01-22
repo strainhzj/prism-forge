@@ -1865,7 +1865,7 @@ impl ViewLevelPreferenceRepository {
     /// - `session_id`: 会话唯一标识
     ///
     /// # 返回
-    /// 如果没有找到偏好记录，返回默认值 Conversation
+    /// 如果没有找到偏好记录，返回默认值 QAPairs
     pub fn get_preference_or_default(&self, session_id: &str) -> Result<crate::parser::view_level::ViewLevel> {
         match self.get_preference(session_id)? {
             Some(view_level) => Ok(view_level),
@@ -1987,7 +1987,7 @@ mod view_level_preference_tests {
         assert_eq!(non_existent, None);
 
         let non_existent_default = repo.get_preference_or_default("non-existent").unwrap();
-        assert_eq!(non_existent_default, crate::parser::view_level::ViewLevel::Conversation);
+        assert_eq!(non_existent_default, crate::parser::view_level::ViewLevel::QAPairs);
 
         // 测试更新
         let new_view_level = crate::parser::view_level::ViewLevel::UserOnly;

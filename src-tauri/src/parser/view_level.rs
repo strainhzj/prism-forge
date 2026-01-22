@@ -43,7 +43,7 @@ fn truncate_str_to_chars(s: &str, max_chars: usize) -> String {
 /// 日志读取等级
 ///
 /// 定义五种不同的日志读取等级，按信息完整度排序。
-/// 默认值为 Conversation，包含用户、助手和思考消息。
+/// 默认值为 QAPairs，提取用户问题和助手最终回复的配对。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ViewLevel {
@@ -62,7 +62,7 @@ pub enum ViewLevel {
 
 impl Default for ViewLevel {
     fn default() -> Self {
-        ViewLevel::Conversation
+        ViewLevel::QAPairs
     }
 }
 
@@ -544,7 +544,7 @@ mod tests {
 
     #[test]
     fn test_view_level_default() {
-        assert_eq!(ViewLevel::default(), ViewLevel::Conversation);
+        assert_eq!(ViewLevel::default(), ViewLevel::QAPairs);
     }
 
     #[test]
