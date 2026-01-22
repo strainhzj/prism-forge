@@ -83,22 +83,6 @@ export interface EnhancedPromptRequest {
    * 可选：当前跟踪的会话文件路径（首页展示的会话）
    */
   currentSessionFilePath?: string;
-  /**
-   * 可选：会话文件路径列表（从项目目录获取，已弃用）
-   */
-  sessionFilePaths?: string[];
-  /**
-   * 可选：手动指定会话 ID 列表（已弃用，保留兼容性）
-   */
-  sessionIds?: string[];
-  /**
-   * 检索限制（已弃用）
-   */
-  limit?: number;
-  /**
-   * 是否使用加权检索（已弃用）
-   */
-  useWeighted?: boolean;
 }
 
 /**

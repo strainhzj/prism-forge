@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use crate::llm::{LLMClientManager, interface::{Message, ModelParams}};
 use crate::database::repository::SessionRepository;
@@ -27,17 +27,6 @@ pub struct EnhancedPromptRequest {
     /// 可选：当前跟踪的会话文件路径（首页展示的会话）
     #[serde(rename = "currentSessionFilePath")]
     pub current_session_file_path: Option<String>,
-    /// 可选：会话文件路径列表（从项目目录获取，已弃用）
-    #[serde(rename = "sessionFilePaths")]
-    pub session_file_paths: Option<Vec<String>>,
-    /// 可选：手动指定会话 ID 列表（已弃用，保留兼容性）
-    #[serde(rename = "sessionIds")]
-    pub session_ids: Option<Vec<String>>,
-    /// 检索限制（已弃用）
-    pub limit: Option<usize>,
-    /// 是否使用加权检索（已弃用）
-    #[serde(rename = "useWeighted")]
-    pub use_weighted: Option<bool>,
 }
 
 /// Token 统计
@@ -258,8 +247,8 @@ impl PromptGenerator {
 
             // 4. 判断问答对是否为空
             if qa_pairs.is_empty() {
-                // 使用对话开始模板
-                return Ok(self.create_conversation_starter_prompt(&request.goal, session_file_path));
+                // 方案 B: 调用 LLM 生成对话开始提示词
+                return self.generate_conversation_starter_with_llm(&request.goal, session_file_path, session_id, llm_manager).await;
             }
 
             // 5. 将问答对转换为对话流格式（时间正序）
@@ -389,7 +378,59 @@ impl PromptGenerator {
         )
     }
 
-    /// 创建对话开始提示词（会话为空时）
+    /// 生成对话开始提示词（会话为空时，使用 LLM 生成）
+    async fn generate_conversation_starter_with_llm(
+        &self,
+        goal: &str,
+        session_file_path: &str,
+        session_id: &str,
+        llm_manager: &LLMClientManager,
+    ) -> Result<EnhancedPrompt> {
+        // 1. 构建对话开始的完整提示词
+        let full_prompt = self.build_conversation_starter_prompt(goal);
+
+        // 2. 调用 LLM 生成增强提示词
+        let enhanced_prompt = match self.call_llm_generate(&full_prompt, llm_manager).await {
+            Ok(prompt) => {
+                eprintln!("[PromptGenerator] 对话开始提示词生成成功，长度: {}", prompt.len());
+                prompt
+            },
+            Err(e) => {
+                // LLM 调用失败时，使用回退模板
+                eprintln!("[PromptGenerator] LLM 调用失败，使用回退模板: {}", e);
+                self.generate_conversation_fallback_template(goal)
+            }
+        };
+
+        // 3. 计算 Token 统计
+        let compressed_tokens = self.token_counter.count_tokens(&enhanced_prompt)?;
+        // 对话开始没有原始上下文，所以 original_tokens 设为 0
+        let original_tokens = 0;
+        let savings_percentage = 0.0;
+
+        // 4. 构建引用会话信息
+        let referenced_sessions = vec![ReferencedSession {
+            session_id: session_id.to_string(),
+            project_name: "当前会话".to_string(),
+            summary: "对话开始（AI 生成）".to_string(),
+            similarity_score: 1.0,
+        }];
+
+        Ok(EnhancedPrompt {
+            original_goal: goal.to_string(),
+            referenced_sessions,
+            enhanced_prompt,
+            token_stats: TokenStats {
+                original_tokens,
+                compressed_tokens,
+                savings_percentage,
+            },
+            confidence: 0.7, // 对话开始的置信度（LLM 生成，置信度中等偏高）
+        })
+    }
+
+    /// 创建对话开始提示词（会话为空时，已弃用，保留用于兼容）
+    #[deprecated(note = "使用 generate_conversation_starter_with_llm 代替")]
     fn create_conversation_starter_prompt(&self, goal: &str, session_file_path: &str) -> EnhancedPrompt {
         // 从配置获取对话开始模板
         let template = self.config_manager.get_conversation_starter_template();
@@ -433,6 +474,33 @@ impl PromptGenerator {
 2. 包含必要的上下文信息
 3. 结构清晰，易于理解
 4. 适合作为编程助手的开场提示词"#
+        )
+    }
+
+    /// 构建对话开始的完整提示词（使用配置的 conversation_starter_template）
+    fn build_conversation_starter_prompt(&self, goal: &str) -> String {
+        // 从配置获取对话开始模板
+        let template = self.config_manager.get_conversation_starter_template();
+
+        // 替换变量
+        template.replace("{{goal}}", goal)
+    }
+
+    /// 生成对话回退模板（LLM 调用失败时使用）
+    fn generate_conversation_fallback_template(&self, goal: &str) -> String {
+        format!(
+            r#"你是一个专业的编程助手。用户想要开始一个新的对话。
+
+## 用户目标
+{goal}
+
+## 建议
+1. 分析用户的目标，理解其需求
+2. 提出针对性的问题来明确需求细节
+3. 提供相关的技术建议或参考方向
+4. 保持友好和专业的态度
+
+请基于以上信息生成一个对话开始的提示词。"#
         )
     }
 

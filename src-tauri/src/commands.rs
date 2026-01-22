@@ -1931,7 +1931,6 @@ pub async fn optimize_prompt(
     eprintln!("[optimize_prompt] 收到请求:");
     eprintln!("  goal: {}", request.goal);
     eprintln!("  current_session_file_path: {:?}", request.current_session_file_path);
-    eprintln!("  session_file_paths: {:?}", request.session_file_paths);
 
     // 创建提示词生成器
     let generator = PromptGenerator::new()
