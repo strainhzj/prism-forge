@@ -13,7 +13,7 @@ use crate::database::{ApiProvider, ApiProviderType, ApiProviderRepository};
 use crate::llm::security::ApiKeyStorage;
 use crate::llm::interface::{LLMService, TestConnectionResult};
 use crate::llm::providers::{OpenAIProvider, AnthropicProvider, OllamaProvider, XAIProvider, GoogleProvider, GoogleVertexProvider};
-use crate::llm::key_rotation::{ApiKeyRotator, KeyRotationConfig};
+use crate::llm::key_rotation::ApiKeyRotator;
 use crate::llm::model_resolver::ModelResolver;
 
 /// LLM 客户端管理器

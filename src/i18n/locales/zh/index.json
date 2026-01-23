@@ -43,7 +43,10 @@
     "user": "用户",
     "assistant": "助手",
     "recordCount": "条记录",
-    "noLogs": "暂无日志"
+    "noLogs": "暂无日志",
+    "sortOrder": "排序",
+    "sortAscending": "正序（旧→新）",
+    "sortDescending": "倒序（新→旧）"
   },
   "project": {
     "switchProject": "切换项目",

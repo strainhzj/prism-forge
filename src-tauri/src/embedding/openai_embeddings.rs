@@ -6,7 +6,7 @@
 
 use anyhow::{Context, Result};
 use async_openai::{
-    config::{OpenAIConfig, Config},
+    config::OpenAIConfig,
     types::{
         CreateEmbeddingRequestArgs, EmbeddingInput,
     },

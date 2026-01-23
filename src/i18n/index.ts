@@ -7,11 +7,13 @@ import zhIndex from './locales/zh/index.json';
 import zhNavigation from './locales/zh/navigation.json';
 import zhSettings from './locales/zh/settings.json';
 import zhSessions from './locales/zh/sessions.json';
+import zhPromptLab from './locales/zh/promptLab.json';
 import enCommon from './locales/en/common.json';
 import enIndex from './locales/en/index.json';
 import enNavigation from './locales/en/navigation.json';
 import enSettings from './locales/en/settings.json';
 import enSessions from './locales/en/sessions.json';
+import enPromptLab from './locales/en/promptLab.json';
 
 // ==================== i18n 配置 ====================
 
@@ -33,6 +35,7 @@ i18n
         navigation: zhNavigation,
         settings: zhSettings,
         sessions: zhSessions,
+        promptLab: zhPromptLab,
       },
       en: {
         common: enCommon,
@@ -40,12 +43,13 @@ i18n
         navigation: enNavigation,
         settings: enSettings,
         sessions: enSessions,
+        promptLab: enPromptLab,
       },
     },
     lng: 'zh', // 默认语言（中文）
     fallbackLng: 'zh', // 回退语言
     defaultNS: 'common', // 默认命名空间
-    ns: ['common', 'index', 'navigation', 'settings', 'sessions'], // 可用命名空间
+    ns: ['common', 'index', 'navigation', 'settings', 'sessions', 'promptLab'], // 可用命名空间
     debug: DEBUG, // 开发模式显示调试信息
     interpolation: {
       escapeValue: false, // React 已经做了 XSS 防护

@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Wand2, Copy, Save, Check, Loader2, AlertCircle } from 'lucide-react';
+import { Wand2, Copy, Save, Check, Loader2, AlertCircle, Info } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import type { EnhancedPrompt, EnhancedPromptRequest } from '@/types/prompt';
+import { useCurrentSessionFilePath, useCurrentSession } from '@/stores/useCurrentSessionStore';
+import { useCurrentLanguage } from '@/stores/useLanguageStore';
+import type { EnhancedPrompt, EnhancedPromptRequest } from '@/types/generated';
 
 export interface PromptBuilderProps {
   /**
@@ -40,12 +42,24 @@ export function PromptBuilder({
   className,
 }: PromptBuilderProps) {
   const [goal, setGoal] = useState(initialGoal);
-  const [selectedSessionIds, _setSelectedSessionIds] = useState<string[]>([]);
   const [result, setResult] = useState<EnhancedPrompt | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // 获取当前会话文件路径
+  const currentSessionFilePath = useCurrentSessionFilePath();
+  const currentSession = useCurrentSession();
+  // 获取当前语言（用于提示词优化）
+  const currentLanguage = useCurrentLanguage();
+
+  // 调试日志
+  const DEBUG = import.meta.env.DEV;
+  if (DEBUG) {
+    console.log('[PromptBuilder] currentSession:', currentSession);
+    console.log('[PromptBuilder] currentSessionFilePath:', currentSessionFilePath);
+  }
 
   /**
    * 生成增强提示词
@@ -56,6 +70,12 @@ export function PromptBuilder({
       return;
     }
 
+    // 检查是否有当前会话
+    if (!currentSessionFilePath) {
+      setError('请先在首页选择一个会话');
+      return;
+    }
+
     setIsGenerating(true);
     setError(null);
     setResult(null);
@@ -63,13 +83,13 @@ export function PromptBuilder({
     try {
       const request: EnhancedPromptRequest = {
         goal: goal.trim(),
-        sessionIds: selectedSessionIds.length > 0 ? selectedSessionIds : undefined,
-        limit: 5,
-        useWeighted: true,
+        currentSessionFilePath,
+        maxTokens: null,
       };
 
       const response = await invoke<EnhancedPrompt>('optimize_prompt', {
         request,
+        language: currentLanguage,  // 传递当前语言
       });
 
       setResult(response);
@@ -82,7 +102,7 @@ export function PromptBuilder({
     } finally {
       setIsGenerating(false);
     }
-  }, [goal, selectedSessionIds, onGenerated]);
+  }, [goal, currentSessionFilePath, onGenerated]);
 
   /**
    * 复制增强提示词
@@ -115,23 +135,15 @@ export function PromptBuilder({
   }, [result]);
 
   /**
-   * 计算节省百分比的颜色
-   */
-  const getSavingsColor = useCallback((percentage: number) => {
-    if (percentage >= 50) return 'text-green-500';
-    if (percentage >= 30) return 'text-blue-500';
-    if (percentage >= 10) return 'text-yellow-500';
-    return 'text-gray-500';
-  }, []);
-
-  /**
    * 计算置信度的颜色
+   *
+   * @deprecated 临时隐藏置信度展示，等待后续实现更完善的计算逻辑
    */
-  const getConfidenceColor = useCallback((confidence: number) => {
-    if (confidence >= 0.8) return 'bg-green-500/10 text-green-500';
-    if (confidence >= 0.5) return 'bg-yellow-500/10 text-yellow-500';
-    return 'bg-red-500/10 text-red-500';
-  }, []);
+  // const getConfidenceColor = useCallback((confidence: number) => {
+  //   if (confidence >= 0.8) return 'bg-green-500/10 text-green-500';
+  //   if (confidence >= 0.5) return 'bg-yellow-500/10 text-yellow-500';
+  //   return 'bg-red-500/10 text-red-500';
+  // }, []);
 
   /**
    * 重置状态
@@ -147,12 +159,27 @@ export function PromptBuilder({
       {/* 输入区域 */}
       <Card className="p-4">
         <div className="space-y-3">
+          {/* 会话状态提示 */}
+          {currentSessionFilePath ? (
+            <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded-md border border-green-500/20">
+              <Check className="h-4 w-4 text-green-500" />
+              <p className="text-xs text-green-500">已选择当前会话</p>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 p-2 bg-amber-500/10 rounded-md border border-amber-500/20">
+              <Info className="h-4 w-4 text-amber-500" />
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                请先在首页选择一个会话，然后返回此处生成提示词
+              </p>
+            </div>
+          )}
+
           <div>
             <Label htmlFor="goal-input" className="text-base font-medium">
               目标描述
             </Label>
             <p className="text-xs text-muted-foreground mb-2">
-              描述您想要完成的任务，AI 会基于历史会话生成优化的提示词
+              描述您想要完成的任务，AI 会基于当前会话的对话记录生成优化的提示词
             </p>
             <Textarea
               id="goal-input"
@@ -180,7 +207,7 @@ export function PromptBuilder({
             </p>
             <Button
               onClick={handleGenerate}
-              disabled={isGenerating || !goal.trim()}
+              disabled={isGenerating || !goal.trim() || !currentSessionFilePath}
               className="min-w-[120px]"
             >
               {isGenerating ? (
@@ -204,23 +231,20 @@ export function PromptBuilder({
         <Card className="p-4">
           <div className="space-y-4">
             {/* 统计信息 */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Token 统计 */}
               <div className="p-3 bg-muted/30 rounded-md">
                 <p className="text-xs text-muted-foreground mb-1">Token 统计</p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-bold">
-                    {result.tokenStats.compressedTokens.toLocaleString()}
+                    {result.tokenStats.totalTokens.toLocaleString()}
                   </span>
-                  <span className="text-sm text-muted-foreground">
-                    / {result.tokenStats.originalTokens.toLocaleString()}
-                  </span>
+                  {result.tokenStats.maxTokens && (
+                    <span className="text-sm text-muted-foreground">
+                      / {result.tokenStats.maxTokens.toLocaleString()}
+                    </span>
+                  )}
                 </div>
-                {result.tokenStats.savingsPercentage > 0 && (
-                  <p className={cn('text-xs font-medium mt-1', getSavingsColor(result.tokenStats.savingsPercentage))}>
-                    节省 {result.tokenStats.savingsPercentage.toFixed(1)}%
-                  </p>
-                )}
               </div>
 
               {/* 引用会话 */}
@@ -234,8 +258,8 @@ export function PromptBuilder({
                 </p>
               </div>
 
-              {/* 置信度 */}
-              <div className="p-3 bg-muted/30 rounded-md">
+              {/* 置信度 - 临时隐藏，等待后续实现更完善的计算逻辑 */}
+              {/* <div className="p-3 bg-muted/30 rounded-md">
                 <p className="text-xs text-muted-foreground mb-1">置信度</p>
                 <div className="flex items-center gap-2">
                   <span className="text-2xl font-bold">
@@ -245,7 +269,7 @@ export function PromptBuilder({
                     {result.confidence >= 0.8 ? '高' : result.confidence >= 0.5 ? '中' : '低'}
                   </Badge>
                 </div>
-              </div>
+              </div> */}
             </div>
 
             {/* 引用的会话列表 */}

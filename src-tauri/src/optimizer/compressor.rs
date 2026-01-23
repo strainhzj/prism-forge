@@ -204,7 +204,7 @@ impl ContextCompressor {
     }
 
     /// 确定消息类型
-    fn determine_message_type(&self, content: &str, json: &serde_json::Value) -> String {
+    fn determine_message_type(&self, content: &str, _json: &serde_json::Value) -> String {
         // 检查是否包含 thinking 标记
         if content.contains("<thinking>") || content.contains("Thinking:") {
             return "thinking".to_string();

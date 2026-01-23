@@ -78,107 +78,50 @@ PrismForge 是一个基于 Tauri 2 + React 18 的桌面应用程序，核心功�
 
 ### 4. 国际化与主题约束
 
-🌍 **所有用户可见文本必须支持中英文切换**
+🌍 **所有用户可见文本必须使用 `useTranslation` hook**
 
-- **强制要求**：
+```typescript
+// ✅ 正确
+const { t } = useTranslation('settings');
+t('form.providerType')
 
-  1. 所有面向用户的文本必须使用 `useTranslation` hook
-  2. 翻译键必须同时提供中文和英文版本
-  3. 禁止硬编码中文或英文文本到组件中
-  4. 动态内容（如供应商类型）必须通过翻译键映射实现
+// ❌ 错误：硬编码
+"提供商类型"
+```
 
-- **翻译文件结构**：
+- 翻译文件：`src/i18n/locales/{zh,en}/` （common.json, index.json, navigation.json, sessions.json, settings.json）
+- 翻译键规范：`namespace.category.key` （如 `settings.form.providerType`）
+- 动态内容：通过 `PROVIDER_TYPE_KEYS` 映射 + `useMemo` 缓存
 
-  ```
-  src/i18n/locales/
-  ├── zh/
-  │   ├── common.json    # 通用文本（项目切换器、按钮等）
-  │   ├── index.json     # 首页（timeline、项目操作）
-  │   ├── navigation.json # 导航菜单
-  │   ├── sessions.json   # 会话管理页面
-  │   └── settings.json   # API设置（表单、验证、供应商类型）
-  └── en/
-      └── (相同结构)
-  ```
+🎨 **组件必须适配暗色/亮色主题（使用 Tailwind `dark:` 前缀）**
 
-- **使用示例**：
+```tsx
+// ✅ 正确
+<div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
 
-  ```typescript
-  // ✅ 正确：使用翻译
-  import { useTranslation } from 'react-i18next';
-  
-  const { t } = useTranslation('settings');
-  <span>{t('form.providerType')}</span>
-  <button>{t('buttons.save')}</button>
-  
-  // ❌ 错误：硬编码文本
-  <span>提供商类型</span>
-  <button>保存</button>
-  ```
+// ❌ 错误
+<div className="bg-white text-gray-900">
+```
 
-- **动态翻译处理**：
-
-  - 供应商类型通过 `PROVIDER_TYPE_KEYS` 映射到翻译键
-  - 第三方提供商通过 `THIRD_PARTY_PROVIDER_KEYS` 映射
-  - 使用 `useMemo` 缓存动态生成的翻译内容
-
-  ```typescript
-  // 示例：供应商类型动态翻译
-  const PROVIDER_TYPE_OPTIONS = useMemo(() => {
-    return Object.entries(PROVIDER_DISPLAY_INFO).map(([key]) => {
-      const providerTypeKey = PROVIDER_TYPE_KEYS[key as ApiProviderType];
-      return {
-        value: key as ApiProviderType,
-        label: t(`providerTypes.${providerTypeKey}.label`),
-        description: t(`providerTypes.${providerTypeKey}.description`),
-      };
-    });
-  }, [t]);
-  ```
-
-- **翻译键命名规范**：
-
-  - 使用点分路径：`namespace.category.key`
-  - 命名空间：`common`, `index`, `navigation`, `sessions`, `settings`
-  - 类别：`form`, `buttons`, `placeholders`, `validation`, `helpText`, `errors`
-  - 键名：camelCase（如 `providerType`, `save`, `connectionFailed`）
-
-🎨 **组件必须适配暗色/亮色主题**
-
-- **主题系统**：应用支持暗色和亮色两种主题模式，通过 `useThemeStore` 管理
-
-- **CSS 变量规范**：使用 Tailwind 的 `dark:` 前缀适配主题
-
-  ```tsx
-  // ✅ 正确：适配两种主题
-  <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
-  <button className="bg-primary dark:bg-primary-dark text-white">
-  
-  // ❌ 错误：仅适配单一主题
-  <div className="bg-white text-gray-900">
-  <button className="bg-blue-500 text-white">
-  ```
-
-- **常用颜色值映射**：
-
-  | 元素           | 亮色主题                                  | 暗色主题                                            |
-  | -------------- | ----------------------------------------- | --------------------------------------------------- |
-  | **背景**       | `bg-white`                                | `dark:bg-gray-900`                                  |
-  | **卡片背景**   | `bg-gray-50`                              | `dark:bg-gray-800`                                  |
-  | **边框**       | `border-gray-200`                         | `dark:border-gray-700`                              |
-  | **文本主色**   | `text-gray-900`                           | `dark:text-gray-100`                                |
-  | **文本次要**   | `text-gray-600`                           | `dark:text-gray-400`                                |
-  | **文本禁用**   | `text-gray-400`                           | `dark:text-gray-600`                                |
-  | **主色调**     | `bg-orange-500`                           | `dark:bg-orange-600`                                |
-  | **主色调悬停** | `hover:bg-orange-600`                     | `dark:hover:bg-orange-700`                          |
-  | **输入框**     | `bg-white border-gray-300`                | `dark:bg-gray-800 dark:border-gray-600`             |
-  | **输入框文本** | `text-gray-900 placeholder:text-gray-400` | `dark:text-gray-100 dark:placeholder:text-gray-500` |
-  | **按钮主色**   | `bg-primary`                              | `dark:bg-primary-dark`                              |
-  | **按钮次要**   | `bg-gray-200 text-gray-900`               | `dark:bg-gray-700 dark:text-gray-100`               |
-  | **危险操作**   | `text-red-600 hover:text-red-700`         | `dark:text-red-400 dark:hover:text-red-300`         |
-  | **成功提示**   | `text-green-600 bg-green-50`              | `dark:text-green-400 dark:bg-green-900/20`          |
-  | **警告提示**   | `text-yellow-600 bg-yellow-50`            | `dark:text-yellow-400 dark:bg-yellow-900/20`        |
-  | **错误提示**   | `text-red-600 bg-red-50`                  | `dark:text-red-400 dark:bg-red-900/20`              |
+**常用颜色映射：**
+| 元素           | 亮色主题                                  | 暗色主题                                            |
+| -------------- | ----------------------------------------- | --------------------------------------------------- |
+| **背景**       | `bg-white`                                | `dark:bg-gray-900`                                  |
+| **卡片背景**   | `bg-gray-50`                              | `dark:bg-gray-800`                                  |
+| **边框**       | `border-gray-200`                         | `dark:border-gray-700`                              |
+| **文本主色**   | `text-gray-900`                           | `dark:text-gray-100`                                |
+| **文本次要**   | `text-gray-600`                           | `dark:text-gray-400`                                |
+| **文本禁用**   | `text-gray-400`                           | `dark:text-gray-600`                                |
+| **主色调**     | `bg-orange-500`                           | `dark:bg-orange-600`                                |
+| **主色调悬停** | `hover:bg-orange-600`                     | `dark:hover:bg-orange-700`                          |
+| **输入框**     | `bg-white border-gray-300`                | `dark:bg-gray-800 dark:border-gray-600`             |
+| **输入框文本** | `text-gray-900 placeholder:text-gray-400` | `dark:text-gray-100 dark:placeholder:text-gray-500` |
+| **按钮主色**   | `bg-primary`                              | `dark:bg-primary-dark`                              |
+| **按钮次要**   | `bg-gray-200 text-gray-900`               | `dark:bg-gray-700 dark:text-gray-100`               |
+| **危险操作**   | `text-red-600 hover:text-red-700`         | `dark:text-red-400 dark:hover:text-red-300`         |
+| **成功提示**   | `text-green-600 bg-green-50`              | `dark:text-green-400 dark:bg-green-900/20`          |
+| **警告提示**   | `text-yellow-600 bg-yellow-50`            | `dark:text-yellow-400 dark:bg-yellow-900/20`        |
+| **错误提示**   | `text-red-600 bg-red-50`                  | `dark:text-red-400 dark:bg-red-900/20`              |
 
 ### 5.提交git前需要先与我确认
 
@@ -211,7 +154,121 @@ if (import.meta.env.DEV) {
 }
 ```
 
+### 8. ts-rs 类型生成
 
+```rust
+#[derive(TS)]
+#[ts(rename_all = "camelCase")]
+pub struct MyStruct {
+    #[ts(type = "number")]
+    pub timeout: u64,
+}
+```
+
+- 生成命令：`cargo run --bin generate_types`
+- 类型位置：`src/types/generated/`（前端从 `@/types/generated/` 导入）
+- 入口文件：`src-tauri/src/build_types.rs`
+- ⚠️ 禁止手动编辑生成的 `.ts` 文件
+
+### 9.避免敏感信息泄露
+
+**前端防护：**
+- 使用 `import.meta.env.DEV` 判断开发环境
+- 路径、用户信息等敏感数据仅开发环境输出
+- 生产环境禁止输出敏感日志
+
+**后端防护：**
+- 使用 `#[cfg(debug_assertions)]` 条件编译
+- API Key、密码等敏感数据禁止日志输出
+- 敏感配置使用环境变量或安全存储
+
+**数据传输：**
+- API Key 仅在创建/更新时传输，使用 HTTPS
+- 返回数据使用掩码处理（如 `api_key_mask`）
+- 敏感字段使用 `secrecy::SecretString` 包装
+
+### 10. String → Path 转换错误
+
+```rust
+// ❌ 错误：String 没有 file_name() 方法
+let path = request.current_session_file_path
+    .as_ref()
+    .and_then(|p| p.file_name());
+
+// ✅ 正确：使用 Path::new 获取引用
+let path = if let Some(ref path_str) = request.current_session_file_path {
+    std::path::Path::new(path_str).file_name()
+        .and_then(|n| n.to_str())
+} else {
+    None
+};
+```
+
+### 11. 常见陷阱
+
+#### 11.1 非空断言滥用
+
+```typescript
+// ❌ 危险
+onClick={(e) => handleToggleFavorite(history.id!, e)}
+
+// ✅ 安全
+onClick={(e) => { if (!history.id) return; handleToggleFavorite(history.id, e); }}
+```
+
+#### 11.2 正则捕获组索引变化
+
+```typescript
+// ✅ 使用命名捕获组
+const regex = /###\s*\*\*(?<lang>目标偏离程度\|Goal Divergence)\*\*\s*\n(?<content>[\s\S]*?)/;
+const content = match.groups?.content ?? '';
+```
+
+#### 11.3 测试文件模块未声明
+
+```rust
+// ❌ 错误：独立测试文件
+// src-tauri/src/session_parser_tests.rs
+
+// ✅ 正确：合并到主文件
+#[cfg(test)]
+mod integration_tests { }
+```
+
+#### 11.4 数据库竞态条件
+
+```rust
+// ❌ 错误：两次调用
+self.with_conn_inner(|conn| conn.execute(...))?;
+let id = self.with_conn_inner(|conn| Ok(conn.last_insert_rowid()))?;
+
+// ✅ 正确：同一连接
+let id = self.with_conn_inner(|conn| {
+    conn.execute(...)?;
+    Ok(conn.last_insert_rowid())
+})?;
+```
+
+#### 11.5 国际化逻辑错误
+
+```rust
+// ❌ 错误：非英非中显示中文
+if language == "en" { } else { "中文" }
+
+// ✅ 正确：只有中文显示中文
+if language == "zh" { "中文" } else { "English" }
+```
+
+#### 11.6 条件编译误用
+
+```rust
+// ❌ 错误：cfg! 是运行时判断
+if cfg!(debug_assertions) { eprintln!("..."); }
+
+// ✅ 正确：使用属性
+#[cfg(debug_assertions)]
+{ eprintln!("..."); }
+```
 
 ## 技术栈
 
@@ -223,6 +280,7 @@ if (import.meta.env.DEV) {
 - `keyring 3.0` - 跨平台安全存储（API Key）
 - `secrecy 0.10` - 敏感数据保护
 - `serde/serde_json` - 序列化
+- `ts-rs 0.1` - TypeScript 类型生成
 
 **前端 (React + TypeScript):**
 - `react 18.3` + `react-dom 18.3`
@@ -230,6 +288,9 @@ if (import.meta.env.DEV) {
 - `zustand 5.0` + `immer` - 状态管理
 - `react-hook-form 7.69` - 表单管理
 - `vite 7.0` - 构建工具
+- `react-i18next` - 国际化（i18n）
+- `@tanstack/react-query` - 数据获取和缓存
+- `@heroicons/react` - 图标库
 
 ## 开发命令
 
@@ -293,8 +354,12 @@ cargo test test_name
 src-tauri/src/
 ├── main.rs              # Tauri 入口，应用生命周期
 ├── lib.rs               # 核心模块注册和 Tauri 状态管理
+├── build_types.rs       # ts-rs 类型生成入口
 ├── commands.rs          # Tauri 命令接口（前端调用入口）
-├── session_parser.rs    # 统一会话解析服务（新增）
+├── session_parser.rs    # 统一会话解析服务
+├── config/              # 配置管理模块
+│   ├── mod.rs           # 配置模块入口
+│   └── app_config.rs    # 应用配置管理
 ├── database/            # 数据持久化层
 │   ├── models.rs        # ApiProvider 数据模型
 │   ├── migrations.rs    # SQLite 表结构和初始化
@@ -318,170 +383,98 @@ src-tauri/src/
     └── mod.rs           # 会话分析和提示词生成
 ```
 
-**统一会话解析服务 (`session_parser.rs`)**：
-
-- `SessionParserService`：统一的会话解析入口
-- 集成 JSONL 解析、消息转换、内容过滤和视图等级过滤
-- 提供 `parse_session()` 方法，返回解析结果和统计信息
-- 支持配置化：`enable_content_filter`、`view_level`、`debug`
-
 ### React 前端结构
 
 ```
 src/
 ├── main.tsx             # React 入口，挂载到 #app root
-├── App.tsx              # 主应用组件（会话监控界面）
+├── App.tsx              # 主应用组件
+├── i18n/                # 国际化配置
+│   ├── config.ts        # i18next 配置
+│   └── locales/         # 翻译文件
+│       ├── zh/          # 中文翻译
+│       └── en/          # 英文翻译
 ├── stores/              # Zustand 全局状态
-│   └── useSettingsStore.ts  # 提供商管理状态（核心状态）
+│   ├── useSettingsStore.ts  # 提供商管理状态
+│   └── useThemeStore.ts     # 主题管理状态
+├── lib/                 # 工具函数库
+│   └── utils.ts         # 通用工具函数
+├── hooks/               # 自定义 React Hooks
+│   └── useTranslation.ts    # 国际化 Hook
+├── types/               # TypeScript 类型定义
+│   └── generated/       # ts-rs 生成的类型
+│       └── index.ts     # 从 Rust 导出的类型
 ├── pages/               # 页面级组件
-│   └── Settings.tsx     # 设置页面（提供商 CRUD）
+│   ├── Settings.tsx     # 设置页面（提供商 CRUD）
+│   └── Sessions.tsx     # 会话管理页面
 └── components/          # 可复用组件
-    └── settings/
-        └── ProviderForm.tsx  # 提供商表单（react-hook-form）
-```
-
-**状态管理模式：**
-
-使用 Zustand + Immer 中间件，所有状态更新都是不可变的。Store 分离为：
-- 数据状态：`providers`, `activeProviderId`, `loading`, `error`
-- 异步 Actions：`fetchProviders()`, `saveProvider()`, `deleteProvider()`, 等等
-- 便捷 Hooks：`useProviders()`, `useActiveProvider()`, `useProviderActions()`
-
-### 数据流架构
-
-```
-用户操作 → React 组件
-         ↓
-   Zustand Action
-         ↓
-   Tauri invoke(cmd_xxx)
-         ↓
-   Rust Command Handler
-         ↓
-   LLMClientManager / Repository
-         ↓
-   Keyring / SQLite / HTTP
-         ↓
-   返回结果 → 前端更新状态
+    ├── settings/
+    │   └── ProviderForm.tsx  # 提供商表单
+    └── ui/               # UI 组件库
+        ├── Button.tsx
+        ├── Input.tsx
+        └── Modal.tsx
 ```
 
 **核心设计原则：**
-
-1. **适配器模式**：`LLMService` trait 抽象多厂商 API 接口（src-tauri/src/llm/interface.rs）
-2. **工厂模式**：`LLMClientManager::create_client_from_provider()` 动态创建客户端实例
-3. **仓库模式**：`ApiProviderRepository` 封装所有数据库操作
-4. **单例模式**：`LLMClientManager` 通过 Tauri State 注入，全局唯一
-5. **安全优先**：API Key 存储在 OS 凭据管理器，数据库仅保留引用
+1. 适配器模式：`LLMService` trait 抽象多厂商 API
+2. 工厂模式：`LLMClientManager::create_client_from_provider()`
+3. 仓库模式：`ApiProviderRepository` 封装数据库操作
+4. 单例模式：`LLMClientManager` 通过 Tauri State 注入
+5. 安全优先：API Key 存储在 OS 凭据管理器
 
 ## 关键技术点
 
-### 1. Tauri 命令接口规范
-
-所有暴露给前端的命令都在 `commands.rs` 中定义，遵循以下模式：
+### 1. Tauri 命令接口
 
 ```rust
 #[tauri::command]
 pub async fn cmd_xxx(
-    manager: State<'_, LLMClientManager>,  // 注入状态
-    param: Type,                            // 请求参数
+    manager: State<'_, LLMClientManager>,
+    param: Type,
 ) -> Result<Response, CommandError> {
-    // 业务逻辑
     Ok(result)
 }
 ```
 
-**重要**：命令必须在 `lib.rs` 的 `invoke_handler!` 宏中注册，否则前端无法调用。
+⚠️ **必须在 `lib.rs` 的 `invoke_handler!` 宏中注册**
 
-### 2. 序列化命名约定
+### 2. 序列化命名
 
-- **Rust → 前端**：使用 `#[serde(rename_all = "camelCase")]` 确保字段名使用驼峰命名
-- **前端 → Rust**：同样使用 camelCase，serde 会自动转换为 Rust 的 snake_case
+- Rust → 前端：`#[serde(rename_all = "camelCase")]`
+- 前端 → Rust：自动转换 camelCase → snake_case
 
 ### 3. 敏感信息处理
 
-- **API Key 传输**：前端仅在保存时发送明文，Rust 立即存入 keyring
-- **掩码显示**：`get_providers` 返回的 `api_key_mask` 仅显示前 8 个字符（如 `sk-xxxx1234`）
-- **类型安全**：使用 `secrecy::SecretString` 包装密钥，防止意外日志泄露
+- API Key 仅保存时传输，立即存入 keyring
+- 返回掩码：`api_key_mask`（仅前 8 字符）
+- 使用 `secrecy::SecretString` 包装
 
-### 4. 多厂商适配器模式
-
-每个提供商实现 `LLMService` trait：
+### 4. 多厂商适配器
 
 ```rust
 #[async_trait]
 pub trait LLMService {
     async fn chat_completion(&self, messages: Vec<Message>, params: ModelParams)
         -> Result<ChatCompletionResponse>;
-    async fn test_connection(&self) -> Result<TestConnectionResult>;
 }
 ```
 
-扩展新厂商只需：
-1. 在 `database/models.rs` 添加 `ApiProviderType` 枚举值
-2. 在 `llm/providers/` 创建新文件实现 `LLMService`
-3. 在 `llm/manager.rs` 的工厂方法中添加分支
-4. 前端 `useSettingsStore.ts` 同步添加枚举值
+扩展新厂商：添加枚举值 → 实现 trait → 更新工厂方法 → 前端同步
 
-### 5. 统一会话解析服务
-
-`SessionParserService` 提供统一的会话文件解析接口：
+### 5. 会话解析服务
 
 ```rust
-use crate::session_parser::{SessionParserService, SessionParserConfig};
-use crate::parser::view_level::ViewLevel;
-
-let config = SessionParserConfig {
-    enable_content_filter: true,
-    view_level: ViewLevel::Full,
-    debug: true,
-};
-
 let parser = SessionParserService::new(config);
 let result = parser.parse_session("/path/to/session.jsonl", "session_id")?;
-
-// 访问解析结果
-for msg in result.messages {
-    println!("{:?}: {}", msg.msg_type, msg.summary);
-}
-
-// 查看统计信息
-println!("解析统计: {:?}", result.stats);
 ```
 
-**解析流程**：
-1. **文件解析**：使用 `JsonlParser` 读取 JSONL 文件
-2. **消息转换**：将 `JsonlEntry` 转换为 `Message` 对象
-3. **内容过滤**：应用 `FilterConfigManager` 规则过滤不需要的内容
-4. **视图等级过滤**：使用 `MessageFilter` 根据视图等级过滤消息
-
-**使用场景**：
-- `cmd_get_messages_by_level`：获取指定视图等级的消息列表
-- `cmd_get_qa_pairs_by_level`：提取问答对（使用 QAPairs 视图等级）
-- 其他需要解析会话文件的场景
+解析流程：JsonlParser → Message 转换 → 内容过滤 → 视图等级过滤
 
 ### 6. 调试模式
 
-前端和后端都支持调试模式开关：
-
-- **前端**：`const DEBUG = import.meta.env.DEV;` 配合 `debugLog()` 函数
-- **后端**：`#[cfg(debug_assertions)]` 条件编译，仅在开发模式输出日志
-
-```typescript
-// 前端调试日志示例（src/stores/useSettingsStore.ts）
-const DEBUG = import.meta.env.DEV;
-
-function debugLog(action: string, ...args: unknown[]) {
-  if (DEBUG) {
-    console.log(`[SettingsStore] ${action}`, ...args);
-  }
-}
-```
-
-```rust
-// 后端调试模式示例
-#[cfg(debug_assertions)]
-eprintln!("调试信息: {}", data);
-```
+- 前端：`const DEBUG = import.meta.env.DEV;`
+- 后端：`#[cfg(debug_assertions)]`
 
 ## 潜在风险和注意事项
 
@@ -616,73 +609,12 @@ Linux:   ~/.config/prism-forge/prism-forge.db
 
 ## 代码风格规范
 
-- **注释语言**：统一使用中文注释（参考现有代码）
+- **注释**：中文
 - **Rust 命名**：snake_case（函数/变量）、PascalCase（类型/枚举）、SCREAMING_SNAKE_CASE（常量）
 - **TypeScript 命名**：camelCase（变量/函数）、PascalCase（类型/接口/枚举）
 - **文件命名**：Rust 使用 snake_case.rs，TS/TSX 使用 PascalCase.tsx
-
-### 调试模式使用规范
-
-**前端调试（TypeScript）：**
-```typescript
-// 在模块顶部定义调试开关
-const DEBUG = import.meta.env.DEV;
-
-// 创建带模块前缀的调试日志函数
-function debugLog(action: string, ...args: unknown[]) {
-  if (DEBUG) {
-    console.log(`[ModuleName] ${action}`, ...args);
-  }
-}
-
-// 使用示例
-debugLog('fetchProviders', '开始获取提供商列表');
-```
-
-**后端调试（Rust）：**
-```rust
-// 使用条件编译，仅在开发模式输出
-#[cfg(debug_assertions)]
-eprintln!("调试信息: {:?}", data);
-
-// 或者使用日志 crate（推荐用于生产环境）
-use log::debug;
-debug!("调试信息: {:?}", data);
-```
-
-**注意事项：**
-- ⚠️ **生产环境**：前端调试日志会自动关闭（`import.meta.env.DEV` 为 false）
-- ⚠️ **敏感信息**：禁止在日志中输出 API Key、密码等敏感数据
-- ✅ **最佳实践**：使用结构化日志，包含时间戳、模块名、日志级别
-
-### 序列化命名约定
-
-**Rust ↔ 前端数据交换：**
-- Rust 结构体使用 `#[serde(rename_all = "camelCase")]` 确保序列化为驼峰命名
-- 前端发送 camelCase，serde 自动转换为 Rust 的 snake_case
-- 日期时间使用 ISO 8601 格式字符串（`2025-01-09T12:34:56Z`）
-
-```rust
-// Rust 示例
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ApiProvider {
-    pub api_key_ref: Option<String>,  // 序列化为 "apiKeyRef"
-    pub is_active: bool,               // 序列化为 "isActive"
-}
-```
-
-## 安全注意事项
-
-- **禁止**：在代码中硬编码 API Key 或其他密钥
-- **禁止**：将 API Key 记录到日志或 console
-- **必须**：使用 `secrecy::SecretString` 处理所有敏感数据
-- **必须**：前端 API Key 输入框使用 `type="password"`
 
 ## 相关资源
 
 - [Tauri 官方文档](https://tauri.app/v2/guides/)
 - [Tauri Invoke API](https://tauri.app/v2/api/js/core/#functioninvoke)
-- [async-openai 文档](https://github.com/64bit/async-openai)
-- [keyring crate 文档](https://docs.rs/keyring/)
-- [Zustand 文档](https://docs.pmnd.rs/zustand/getting-started/introduction)

@@ -3,7 +3,7 @@
     "home": "Home",
     "sessions": "Sessions",
     "settings": "API Settings",
-    "promptLab": "Prompt Lab",
+    "promptLab": "Prompt Generation History",
     "diagnostic": "Diagnostic"
   }
 }

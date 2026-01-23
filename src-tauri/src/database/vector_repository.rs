@@ -2,7 +2,7 @@
 //!
 //! 负责会话向量的存储和相似度搜索
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use rusqlite::{Connection, params};
 use std::sync::{Arc, Mutex};
 

@@ -19,7 +19,9 @@
     "submit": "Submit",
     "search": "Search",
     "refresh": "Refresh",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "copy": "Copy",
+    "copied": "Copied"
   },
   "status": {
     "loading": "Loading...",
@@ -29,7 +31,8 @@
     "empty": "No Data"
   },
   "alerts": {
-    "fillGoal": "Please fill in the goal content"
+    "fillGoal": "Please fill in the goal content",
+    "selectSessionFirst": "Please select a session on the home page first"
   },
   "projectSwitcher": {
     "title": "Switch Project",

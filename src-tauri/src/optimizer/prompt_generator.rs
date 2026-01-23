@@ -5,50 +5,51 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use crate::llm::{LLMClientManager, interface::{Message, ModelParams}};
 use crate::database::repository::SessionRepository;
+use crate::database::models::TokenStats;
 use crate::tokenizer::TokenCounter;
+use crate::parser::view_level::{ViewLevel, MessageFilter, QAPair};
+use crate::session_parser::{SessionParserService, SessionParserConfig};
 use super::compressor::ContextCompressor;
 use super::config::ConfigManager;
 
 // ==================== 数据结构 ====================
 
+/// 会话消息（用于 JSON 序列化）
+///
+/// 将 QAPair 转换为统一的 JSON 格式，注入到提示词模板中
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionMessage {
+    /// 消息文本内容
+    pub text: String,
+    /// 消息角色 (user/assistant)
+    pub role: String,
+    /// 消息时间戳
+    pub timestamp: String,
+}
+
 /// 增强提示词请求
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct EnhancedPromptRequest {
     /// 用户目标
     pub goal: String,
-    /// 可选：会话文件路径列表（从项目目录获取）
-    #[serde(rename = "sessionFilePaths")]
-    pub session_file_paths: Option<Vec<String>>,
-    /// 可选：手动指定会话 ID 列表（已弃用，保留兼容性）
-    #[serde(rename = "sessionIds")]
-    pub session_ids: Option<Vec<String>>,
-    /// 检索限制
-    pub limit: Option<usize>,
-    /// 是否使用加权检索
-    #[serde(rename = "useWeighted")]
-    pub use_weighted: Option<bool>,
-}
-
-/// Token 统计
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TokenStats {
-    /// 原始 Token 数
-    pub original_tokens: usize,
-    /// 压缩后 Token 数
-    pub compressed_tokens: usize,
-    /// 节省百分比
-    pub savings_percentage: f64,
+    /// 可选：当前跟踪的会话文件路径（首页展示的会话）
+    #[serde(rename = "currentSessionFilePath")]
+    pub current_session_file_path: Option<String>,
+    /// 最大 Token 数（用于 Token 统计）
+    #[serde(rename = "maxTokens")]
+    pub max_tokens: Option<usize>,
 }
 
 /// 引用的会话信息（简化版本，不包含相似度）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ReferencedSession {
     /// 会话 ID
@@ -65,7 +66,7 @@ pub struct ReferencedSession {
 }
 
 /// 增强提示词结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct EnhancedPrompt {
     /// 原始目标
@@ -82,6 +83,12 @@ pub struct EnhancedPrompt {
     pub token_stats: TokenStats,
     /// 置信度 (0.0 - 1.0)
     pub confidence: f64,
+    /// 使用的 LLM 提供商
+    #[serde(rename = "llmProvider")]
+    pub llm_provider: Option<String>,
+    /// 使用的 LLM 模型
+    #[serde(rename = "llmModel")]
+    pub llm_model: Option<String>,
 }
 
 // ==================== 提示词生成器 ====================
@@ -107,6 +114,7 @@ impl PromptGenerator {
         // 优先级：开发环境使用项目根目录，生产环境使用可执行文件目录
         let config_path = Self::resolve_config_path()?;
 
+        #[cfg(debug_assertions)]
         eprintln!("[PromptGenerator] 配置文件路径: {:?}", config_path);
 
         let config_manager = Arc::new(ConfigManager::new(config_path)?);
@@ -135,8 +143,11 @@ impl PromptGenerator {
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| PathBuf::from("."));
 
-        eprintln!("[PromptGenerator] 可执行文件路径: {:?}", exe_path);
-        eprintln!("[PromptGenerator] 可执行文件目录: {:?}", exe_dir);
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[PromptGenerator] 可执行文件路径: {:?}", exe_path);
+            eprintln!("[PromptGenerator] 可执行文件目录: {:?}", exe_dir);
+        }
 
         // 策略 1: 从可执行文件目录向上查找项目根目录
         // 开发环境结构: project/src-tauri/target/debug/prism-forge.exe
@@ -150,6 +161,7 @@ impl PromptGenerator {
             let config_path = src_tauri_path.join("optimizer_config.toml");
 
             if config_path.exists() {
+                #[cfg(debug_assertions)]
                 eprintln!("[PromptGenerator] 找到开发环境配置（向上查找 {} 层）: {:?}", depth, config_path);
                 return Ok(config_path);
             }
@@ -164,6 +176,7 @@ impl PromptGenerator {
         let prod_path = exe_dir.join("optimizer_config.toml");
 
         if prod_path.exists() {
+            #[cfg(debug_assertions)]
             eprintln!("[PromptGenerator] 使用生产环境配置路径: {:?}", prod_path);
             return Ok(prod_path);
         }
@@ -175,6 +188,7 @@ impl PromptGenerator {
 
         if let Some(ref path) = cwd_path {
             if path.exists() {
+                #[cfg(debug_assertions)]
                 eprintln!("[PromptGenerator] 使用当前工作目录配置路径: {:?}", path);
                 return Ok(path.clone());
             }
@@ -209,259 +223,400 @@ impl PromptGenerator {
 
     /// 生成增强提示词（主流程）
     ///
-    /// # 简化流程（不使用向量检索）
-    /// 1. 获取最近的会话（或手动指定的会话）
-    /// 2. 压缩上下文
-    /// 3. 构建 Meta-Prompt
-    /// 4. 调用 LLM 生成
+    /// # 新流程（使用当前会话的 QAPairs）
+    /// 1. 检查是否有当前会话文件路径
+    /// 2. 如果有，解析会话并提取 QAPairs（问答对）
+    /// 3. 如果问答对为空，使用对话开始模板
+    /// 4. 将问答对转换为对话流格式
+    /// 5. 构建 Meta-Prompt 并调用 LLM 生成
+    ///
+    /// # 参数
+    /// - `request`: 增强提示词请求
+    /// - `llm_manager`: LLM 客户端管理器
+    /// - `language`: 语言标识（"zh" 或 "en"）
     pub async fn generate_enhanced_prompt(
         &self,
         request: EnhancedPromptRequest,
         llm_manager: &LLMClientManager,
+        language: &str,
     ) -> Result<EnhancedPrompt> {
-        // 1. 检索相关会话
-        // 优先使用 session_file_paths，否则使用 session_ids（兼容旧版）
-        let limit = request.limit.unwrap_or(5);
+        // 1. 检查是否有当前会话文件路径
+        if let Some(ref session_file_path) = request.current_session_file_path {
+            // 检查文件是否存在
+            let path_buf = PathBuf::from(session_file_path);
+            if !path_buf.exists() {
+                return Err(anyhow::anyhow!("会话文件不存在: {}", session_file_path));
+            }
 
-        // 合并两种会话来源
-        let combined_ids: Option<Vec<String>> = request.session_file_paths.as_ref()
-            .or(request.session_ids.as_ref())
-            .cloned();
+            // 提取 session_id（从文件名）
+            let session_id = path_buf
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown");
 
-        let sessions = self.get_recent_sessions(limit, &combined_ids)?;
+            // 2. 解析会话并提取问答对
+            let config = SessionParserConfig {
+                enable_content_filter: false,
+                view_level: ViewLevel::Full,
+                debug: cfg!(debug_assertions),
+            };
 
-        if sessions.is_empty() {
-            // 没有相关会话，返回基础提示词
-            return Ok(self.create_fallback_prompt(&request.goal));
+            let parser = SessionParserService::new(config);
+            let parse_result = parser.parse_session(session_file_path, session_id)
+                .map_err(|e| anyhow::anyhow!("解析会话失败: {}", e))?;
+
+            // 3. 提取问答对
+            let filter = MessageFilter::new(ViewLevel::QAPairs);
+            let qa_pairs = filter.extract_qa_pairs(parse_result.messages);
+
+            #[cfg(debug_assertions)]
+            eprintln!("[PromptGenerator] 提取到 {} 个问答对", qa_pairs.len());
+
+            // 4. 判断问答对是否为空
+            if qa_pairs.is_empty() {
+                // 方案 B: 调用 LLM 生成对话开始提示词
+                return self.generate_conversation_starter_with_llm(&request.goal, session_file_path, session_id, llm_manager, language).await;
+            }
+
+            // 5. 将问答对转换为对话流格式（时间正序）
+            let (original_tokens, conversation_context) = self.format_qa_pairs_to_conversation(&qa_pairs)?;
+
+            // 6. 构建完整提示词
+            let full_prompt = self.build_prompt_with_conversation(
+                &request.goal,
+                &conversation_context,
+                language,
+            );
+
+            // 7. 调用 LLM 生成增强提示词
+            let enhanced_prompt = match self.call_llm_generate(&full_prompt, llm_manager).await {
+                Ok(prompt) => {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[PromptGenerator] LLM 生成成功，长度: {}", prompt.len());
+                    prompt
+                },
+                Err(e) => {
+                    // LLM 调用失败时，回退到模板生成
+                    #[cfg(debug_assertions)]
+                    eprintln!("[PromptGenerator] LLM 调用失败，使用模板: {}", e);
+                    self.generate_conversation_template_prompt(&request.goal, language)
+                }
+            };
+
+            // 8. 计算 Token 统计
+            let compressed_tokens = self.token_counter.count_tokens(&enhanced_prompt)?;
+            let _savings_percentage = if original_tokens > 0 && compressed_tokens <= original_tokens {
+                ((original_tokens - compressed_tokens) as f64 / original_tokens as f64) * 100.0
+            } else if original_tokens > 0 {
+                -(((compressed_tokens - original_tokens) as f64 / original_tokens as f64) * 100.0)
+            } else {
+                0.0
+            };
+
+            // 9. 构建引用会话信息
+            let (project_name, summary) = if language == "zh" {
+                ("当前会话".to_string(), format!("包含 {} 个问答对", qa_pairs.len()))
+            } else {
+                ("Current Session".to_string(), format!("Contains {} Q&A pairs", qa_pairs.len()))
+            };
+
+            let referenced_sessions = vec![ReferencedSession {
+                session_id: session_id.to_string(),
+                project_name,
+                summary,
+                similarity_score: 1.0,
+            }];
+
+            // 10. 获取 LLM 提供商和模型信息
+            let provider_config = llm_manager.get_active_provider_config()
+                .ok();
+            let provider_info = provider_config.as_ref()
+                .map(|p| (p.provider_type.to_string(), p.effective_model().to_string()));
+
+            // 获取 max_tokens：优先使用请求参数，否则使用提供商配置
+            let max_tokens = request.max_tokens
+                .or(provider_config.as_ref().and_then(|p| p.max_tokens.map(|v| v as usize)));
+
+            Ok(EnhancedPrompt {
+                original_goal: request.goal,
+                referenced_sessions,
+                enhanced_prompt,
+                token_stats: TokenStats {
+                    total_tokens: compressed_tokens,
+                    max_tokens,
+                },
+                confidence: 1.0, // 当前会话置信度最高
+                llm_provider: provider_info.as_ref().map(|(p, _): &(String, String)| p.clone()),
+                llm_model: provider_info.as_ref().map(|(_, m): &(String, String)| m.clone()),
+            })
+        } else {
+            // 没有当前会话，返回提示要求用户先选择会话
+            let error_msg = if language == "en" {
+                "Please select a session on the home page first"
+            } else {
+                "请先在首页选择一个会话"
+            };
+            Err(anyhow::anyhow!(error_msg))
         }
+    }
 
-        // 2. 提取会话上下文并压缩
-        let (original_tokens, compressed_context) = self.compress_sessions_context(&sessions)?;
+    /// 将问答对转换为 JSON 格式的会话消息列表
+    fn format_qa_pairs_to_conversation(&self, qa_pairs: &[QAPair]) -> Result<(usize, String)> {
+        
 
-        // 3. 获取 Meta-Prompt（从配置）
-        let meta_prompt = self.config_manager.get_meta_prompt();
+        // 构建 SessionMessage 列表（时间正序）
+        let session_messages: Vec<SessionMessage> = qa_pairs.iter().flat_map(|pair| {
+            let mut messages = Vec::new();
 
-        // 4. 构建完整提示词（使用配置的结构模板）
-        let full_prompt = self.build_prompt_with_meta(
-            &request.goal,
-            &sessions,
-            &compressed_context,
-            &meta_prompt,
-        );
+            // 用户问题
+            let user_text = pair.question.content.as_ref()
+                .or(pair.question.summary.as_ref())
+                .unwrap_or(&String::new())
+                .clone();
 
-        // 5. 调用 LLM 生成增强提示词
+            messages.push(SessionMessage {
+                text: user_text,
+                role: "user".to_string(),
+                timestamp: pair.question.timestamp.clone(),
+            });
+
+            // 助手回复（如果有）
+            if let Some(ref answer) = pair.answer {
+                let assistant_text = answer.content.as_ref()
+                    .or(answer.summary.as_ref())
+                    .unwrap_or(&String::new())
+                    .clone();
+
+                messages.push(SessionMessage {
+                    text: assistant_text,
+                    role: "assistant".to_string(),
+                    timestamp: answer.timestamp.clone(),
+                });
+            }
+
+            messages
+        }).collect();
+
+        // 序列化为 JSON 字符串
+        let json_str = serde_json::to_string_pretty(&session_messages)
+            .map_err(|e| anyhow::anyhow!("序列化 SessionMessage 失败: {}", e))?;
+
+        // 计算 Token 数
+        let original_tokens = self.token_counter.count_tokens(&json_str)?;
+
+        Ok((original_tokens, json_str))
+    }
+
+    /// 使用对话上下文构建完整提示词
+    fn build_prompt_with_conversation(
+        &self,
+        goal: &str,
+        conversation: &str,
+        language: &str,
+    ) -> String {
+        // 从配置获取模板
+        let meta_prompt = self.config_manager.get_meta_prompt(language);
+        let prompt_structure = self.config_manager.get_prompt_structure(language);
+
+        // 上下文摘要占位符（当前未实现上下文摘要功能）
+        let context_placeholder = if language == "zh" {
+            "无上下文摘要"
+        } else {
+            "No context summary"
+        };
+
+        // 组装完整提示词
+        prompt_structure
+            .replace("{{meta_prompt}}", &meta_prompt)
+            .replace("{{goal}}", goal)
+            .replace("{{sessions}}", conversation)
+            .replace("{{context}}", context_placeholder)
+    }
+
+    /// 生成对话开始提示词（会话为空时，使用 LLM 生成）
+    async fn generate_conversation_starter_with_llm(
+        &self,
+        goal: &str,
+        _session_file_path: &str,
+        session_id: &str,
+        llm_manager: &LLMClientManager,
+        language: &str,
+    ) -> Result<EnhancedPrompt> {
+        // 1. 构建对话开始的完整提示词
+        let full_prompt = self.build_conversation_starter_prompt(goal, language);
+
+        // 2. 调用 LLM 生成增强提示词
         let enhanced_prompt = match self.call_llm_generate(&full_prompt, llm_manager).await {
             Ok(prompt) => {
-                eprintln!("[PromptGenerator] LLM 生成成功，长度: {}", prompt.len());
+                #[cfg(debug_assertions)]
+                eprintln!("[PromptGenerator] 对话开始提示词生成成功，长度: {}", prompt.len());
                 prompt
             },
             Err(e) => {
-                // LLM 调用失败时，回退到模板生成
-                eprintln!("[PromptGenerator] LLM 调用失败，使用模板: {}", e);
-                self.generate_template_prompt(&request.goal, &sessions)
+                // LLM 调用失败时，使用回退模板
+                #[cfg(debug_assertions)]
+                eprintln!("[PromptGenerator] LLM 调用失败，使用回退模板: {}", e);
+                self.generate_conversation_fallback_template(goal, language)
             }
         };
 
-        // 6. 计算 Token 统计
+        // 3. 计算 Token 统计
         let compressed_tokens = self.token_counter.count_tokens(&enhanced_prompt)?;
-        let savings_percentage = if original_tokens > 0 && compressed_tokens <= original_tokens {
-            ((original_tokens - compressed_tokens) as f64 / original_tokens as f64) * 100.0
-        } else if original_tokens > 0 {
-            // 压缩后更多，表示负节省
-            -(((compressed_tokens - original_tokens) as f64 / original_tokens as f64) * 100.0)
+        // 对话开始没有原始上下文，所以 original_tokens 设为 0
+        let _original_tokens = 0;
+        let _savings_percentage = 0.0;
+
+        // 4. 构建引用会话信息
+        let (project_name, summary) = if language == "en" {
+            ("Current Session".to_string(), "Conversation start (AI-generated)".to_string())
         } else {
-            0.0
+            ("当前会话".to_string(), "对话开始（AI 生成）".to_string())
         };
 
-        // 7. 计算置信度（基于评分和更新时间）
-        let confidence = self.calculate_confidence(&sessions);
+        let referenced_sessions = vec![ReferencedSession {
+            session_id: session_id.to_string(),
+            project_name,
+            summary,
+            similarity_score: 1.0,
+        }];
 
-        // 8. 构建引用会话信息
-        let referenced_sessions: Vec<ReferencedSession> = sessions
-            .into_iter()
-            .map(|s| ReferencedSession {
-                session_id: s.session_id.clone(),
-                project_name: s.project_name.clone(),
-                summary: s.summary.clone().unwrap_or_else(|| "无摘要".to_string()),
-                similarity_score: s.relevance_score,
-            })
-            .collect();
+        // 5. 获取 LLM 提供商和模型信息
+        let provider_config = llm_manager.get_active_provider_config()
+            .ok();
+        let provider_info = provider_config.as_ref()
+            .map(|p| (p.provider_type.to_string(), p.effective_model().to_string()));
+
+        // 获取 max_tokens：使用提供商配置
+        let max_tokens = provider_config.as_ref()
+            .and_then(|p| p.max_tokens.map(|v| v as usize));
 
         Ok(EnhancedPrompt {
-            original_goal: request.goal,
+            original_goal: goal.to_string(),
             referenced_sessions,
             enhanced_prompt,
             token_stats: TokenStats {
-                original_tokens,
-                compressed_tokens,
-                savings_percentage,
+                total_tokens: compressed_tokens,
+                max_tokens,
             },
-            confidence,
+            confidence: 0.7, // 对话开始的置信度（LLM 生成，置信度中等偏高）
+            llm_provider: provider_info.as_ref().map(|(p, _): &(String, String)| p.clone()),
+            llm_model: provider_info.as_ref().map(|(_, m): &(String, String)| m.clone()),
         })
     }
 
-    /// 获取最近的相关会话
-    fn get_recent_sessions(
-        &self,
-        limit: usize,
-        session_ids: &Option<Vec<String>>,
-    ) -> Result<Vec<SessionWithScore>> {
-        // 首先检查是否有会话文件路径（优先使用）
-        if let Some(ref file_paths) = session_ids {
-            // 这里实际是 session_file_paths，从文件路径读取会话
-            let mut results = Vec::new();
-            for file_path in file_paths {
-                // 从文件路径提取 session_id
-                let session_id = std::path::Path::new(file_path)
-                    .file_stem()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown");
+    /// 创建对话开始提示词（会话为空时，已弃用，保留用于兼容）
+    ///
+    /// 注意：此方法无法获取 LLM 提供商信息，因此 llm_provider 和 llm_model 将为 None
+    #[deprecated(note = "使用 generate_conversation_starter_with_llm 代替")]
+    fn create_conversation_starter_prompt(&self, goal: &str, session_file_path: &str, language: &str) -> EnhancedPrompt {
+        // 从配置获取对话开始模板（默认使用中文）
+        let template = self.config_manager.get_conversation_starter_template(language);
 
-                // 提取项目名称
-                let project_name = std::path::Path::new(file_path)
-                    .parent()
-                    .and_then(|p| p.file_name())
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("unknown")
-                    .to_string();
+        let enhanced_prompt = template.replace("{{goal}}", goal);
 
-                results.push(SessionWithScore {
-                    session_id: session_id.to_string(),
-                    project_name,
-                    summary: None,
-                    rating: None, // 从文件无法直接获取评分
-                    relevance_score: 0.5, // 默认相关性
-                });
-            }
-            eprintln!("[PromptGenerator] 从文件加载会话: {} 个", results.len());
-            return Ok(results);
+        // 提取会话信息
+        let path_buf = PathBuf::from(session_file_path);
+        let session_id = path_buf
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("unknown");
+
+        let (project_name, summary) = if language == "en" {
+            ("Current Session".to_string(), "New conversation, no history".to_string())
+        } else {
+            ("当前会话".to_string(), "新对话，无历史记录".to_string())
+        };
+
+        EnhancedPrompt {
+            original_goal: goal.to_string(),
+            referenced_sessions: vec![ReferencedSession {
+                session_id: session_id.to_string(),
+                project_name,
+                summary,
+                similarity_score: 1.0,
+            }],
+            enhanced_prompt,
+            token_stats: TokenStats {
+                total_tokens: goal.len(),
+                max_tokens: None,
+            },
+            confidence: 0.5, // 对话开始的置信度中等
+            llm_provider: None,  // 废弃方法无法获取提供商信息
+            llm_model: None,     // 废弃方法无法获取模型信息
         }
-
-        // 回退到数据库查询（旧逻辑，保留兼容性）
-        let all_sessions = self.repository.get_all_sessions()
-            .unwrap_or_default();
-
-        eprintln!("[PromptGenerator] 数据库中共有 {} 个会话", all_sessions.len());
-
-        let mut scored_sessions: Vec<SessionWithScore> = all_sessions
-            .into_iter()
-            .filter(|s| !s.is_archived)
-            .map(|s| {
-                let rating_score = s.rating.unwrap_or(0) as f64 / 5.0;
-                let relevance_score = rating_score * 0.7 + 0.3;
-                SessionWithScore {
-                    session_id: s.session_id,
-                    project_name: s.project_name,
-                    summary: None,
-                    rating: s.rating,
-                    relevance_score,
-                }
-            })
-            .collect();
-
-        scored_sessions.sort_by(|a, b| {
-            b.relevance_score
-                .partial_cmp(&a.relevance_score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        scored_sessions.truncate(limit);
-
-        eprintln!("[PromptGenerator] 返回 {} 个相关会话", scored_sessions.len());
-        Ok(scored_sessions)
     }
 
-    /// 压缩会话上下文
-    fn compress_sessions_context(
-        &self,
-        sessions: &[SessionWithScore],
-    ) -> Result<(usize, String)> {
-        // 从配置获取最大摘要长度
-        let max_summary_length = self.config_manager.get_max_summary_length();
+    /// 生成对话模板提示词（LLM 调用失败时回退）
+    fn generate_conversation_template_prompt(&self, goal: &str, language: &str) -> String {
+        if language == "en" {
+            format!(
+                r#"Generate an optimized prompt based on the following goal:
 
-        // 构建原始上下文
-        let original_context = sessions.iter()
-            .map(|s| {
-                format!(
-                    "会话: {}\n项目: {}\n摘要: {}\n",
-                    s.session_id,
-                    s.project_name,
-                    s.summary.as_ref().unwrap_or(&"无摘要".to_string())
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n---\n");
+{goal}
 
-        // 计算原始 Token 数
-        let original_tokens = self.token_counter.count_tokens(&original_context)?;
+Requirements:
+1. Concise and to the point
+2. Include necessary context
+3. Clear structure
+4. Suitable for programming assistant prompts"#
+            )
+        } else {
+            format!(
+                r#"请基于以下目标生成一个优化的提示词：
 
-        // 简化压缩：保留结构但去除冗余，使用配置的长度限制
-        let compressed = sessions.iter()
-            .map(|s| {
-                format!(
-                    "会话 {} (评分: {}): {}",
-                    s.session_id,
-                    s.rating.unwrap_or(0),
-                    s.summary.as_ref()
-                        .unwrap_or(&"无摘要".to_string())
-                        .chars()
-                        .take(max_summary_length)
-                        .collect::<String>()
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+{goal}
 
-        Ok((original_tokens, compressed))
+要求：
+1. 简洁明了，直击要点
+2. 包含必要的上下文信息
+3. 结构清晰，易于理解
+4. 适合作为编程助手的开场提示词"#
+            )
+        }
     }
 
-    /// 使用 Meta-Prompt 构建完整提示词
-    fn build_prompt_with_meta(
-        &self,
-        goal: &str,
-        sessions: &[SessionWithScore],
-        compressed_context: &str,
-        meta_prompt: &str,
-    ) -> String {
-        // 从配置获取结构模板
-        let structure = self.config_manager.get_prompt_structure();
+    /// 构建对话开始的完整提示词（使用配置的 conversation_starter_template）
+    fn build_conversation_starter_prompt(&self, goal: &str, language: &str) -> String {
+        // 从配置获取对话开始模板
+        let template = self.config_manager.get_conversation_starter_template(language);
 
-        // 格式化会话信息
-        let max_summary_length = self.config_manager.get_max_summary_length();
-        let include_rating = self.config_manager.include_rating();
-        let include_project = self.config_manager.include_project();
-        let session_format = self.config_manager.get_session_format();
+        // 替换变量
+        template.replace("{{goal}}", goal)
+    }
 
-        let sessions_info = sessions.iter()
-            .map(|s| {
-                let summary = s.summary.as_ref()
-                    .unwrap_or(&"无摘要".to_string())
-                    .chars()
-                    .take(max_summary_length)
-                    .collect::<String>();
+    /// 生成对话回退模板（LLM 调用失败时使用）
+    fn generate_conversation_fallback_template(&self, goal: &str, language: &str) -> String {
+        if language == "en" {
+            format!(
+                r#"You are a professional programming assistant. The user wants to start a new conversation.
 
-                // 简单的模板变量替换
-                let mut formatted = session_format.clone();
-                formatted = formatted.replace("{{session_id}}", &s.session_id);
-                formatted = formatted.replace("{{project_name}}", &s.project_name);
-                formatted = formatted.replace("{{summary}}", &summary);
+## User Goal
+{goal}
 
-                if include_rating {
-                    let rating_str = format!("{}", s.rating.unwrap_or(0));
-                    formatted = formatted.replace("{{rating}}", &rating_str);
-                }
+## Suggestions
+1. Analyze the user's goal and understand their requirements
+2. Ask targeted questions to clarify requirement details
+3. Provide relevant technical suggestions or reference directions
+4. Maintain a friendly and professional attitude
 
-                formatted
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
+Please generate a conversation-starting prompt based on the above information."#
+            )
+        } else {
+            format!(
+                r#"你是一个专业的编程助手。用户想要开始一个新的对话。
 
-        // 使用配置的结构模板
-        structure
-            .replace("{{meta_prompt}}", meta_prompt)
-            .replace("{{goal}}", goal)
-            .replace("{{sessions}}", &sessions_info)
-            .replace("{{context}}", compressed_context)
+## 用户目标
+{goal}
+
+## 建议
+1. 分析用户的目标，理解其需求
+2. 提出针对性的问题来明确需求细节
+3. 提供相关的技术建议或参考方向
+4. 保持友好和专业的态度
+
+请基于以上信息生成一个对话开始的提示词。"#
+            )
+        }
     }
 
     /// 调用 LLM 生成增强提示词
@@ -492,75 +647,572 @@ impl PromptGenerator {
         Ok(response.content)
     }
 
-    /// 生成模板提示词（LLM 调用失败时回退）
-    fn generate_template_prompt(&self, goal: &str, sessions: &[SessionWithScore]) -> String {
-        let best_session = sessions.first();
-        let reference = if let Some(ref s) = best_session {
-            let summary_str = s.summary.as_ref().map(|s| s.as_str()).unwrap_or("无摘要");
-            format!(
-                "\n## 参考\n相关会话: {} (评分: {})\n{}",
-                s.session_id,
-                s.rating.unwrap_or(0),
-                summary_str.chars().take(300).collect::<String>()
-            )
-        } else {
-            String::new()
-        };
-
-        format!(
-            "请帮我完成以下编程任务：\n\n{}\n\n{}\n\n请提供详细的实现方案和代码示例。",
-            goal, reference
-        )
-    }
-
-    /// 创建回退提示词（无相关会话时）
-    fn create_fallback_prompt(&self, goal: &str) -> EnhancedPrompt {
-        // 从配置获取无会话回退模板
-        let template = self.config_manager.get_no_sessions_template();
-
-        let enhanced_prompt = template.replace("{{goal}}", goal);
-
-        EnhancedPrompt {
-            original_goal: goal.to_string(),
-            referenced_sessions: Vec::new(),
-            enhanced_prompt,
-            token_stats: TokenStats {
-                original_tokens: 0,
-                compressed_tokens: goal.len(),
-                savings_percentage: 0.0,
-            },
-            confidence: 0.3, // 低置信度
-        }
-    }
-
-    /// 计算置信度
-    fn calculate_confidence(&self, sessions: &[SessionWithScore]) -> f64 {
-        if sessions.is_empty() {
-            return 0.0;
-        }
-
-        // 基于评分计算
-        let avg_rating: f64 = sessions.iter()
-            .filter_map(|s| s.rating)
-            .map(|r| r as f64).sum::<f64>() / sessions.len() as f64;
-
-        // 转换为 0-1 范围
-        (avg_rating / 5.0).min(1.0).max(0.0)
+    /// 测试辅助方法：直接构建提示词（不调用 LLM）
+    ///
+    /// 此方法仅用于单元测试，验证模板加载和变量替换是否正确
+    #[cfg(test)]
+    #[doc(hidden)]
+    pub fn test_build_prompt(
+        &self,
+        goal: &str,
+        sessions: &str,
+        language: &str,
+    ) -> String {
+        // 直接调用私有方法
+        self.build_prompt_with_conversation(goal, sessions, language)
     }
 }
 
-// ========== 辅助结构体 ==========
+// ==================== 测试模块 ====================
 
-/// 带相关性分数的会话
-struct SessionWithScore {
-    /// 会话 ID
-    session_id: String,
-    /// 项目名称
-    project_name: String,
-    /// 摘要（Session 没有摘要字段，总是 None）
-    summary: Option<String>,
-    /// 评分
-    rating: Option<i32>,
-    /// 相关性分数（0-1）
-    relevance_score: f64,
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::optimizer::config::OptimizerConfig;
+    use std::sync::RwLock;
+
+    // 使用全局互斥锁确保需要数据库的测试顺序执行
+    static DB_TEST_LOCK: RwLock<()> = RwLock::new(());
+
+    #[test]
+    fn test_build_prompt_from_config() {
+        let _lock = DB_TEST_LOCK.read().unwrap();
+        // 获取锁，确保测试顺序执行
+
+        // 1. 解析配置文件路径（使用开发环境的默认路径）
+        let config_path = std::path::PathBuf::from("optimizer_config.toml");
+
+        // 如果配置文件不存在，跳过测试
+        if !config_path.exists() {
+            println!("警告: 配置文件 optimizer_config.toml 不存在，跳过测试");
+            println!("预期路径: {:?}", config_path);
+            println!("当前工作目录: {:?}", std::env::current_dir().unwrap());
+            return;
+        }
+
+        // 2. 创建 PromptGenerator 实例
+        let generator = match PromptGenerator::with_config_path(config_path) {
+            Ok(gen) => gen,
+            Err(e) => {
+                panic!("创建 PromptGenerator 失败: {}", e);
+            }
+        };
+
+        // 3. 准备测试数据（新 JSON 格式）
+        let goal = "Write a Hello World program in Python";
+        let sessions = r#"[
+  {
+    "text": "How do I print in Python?",
+    "role": "user",
+    "timestamp": "2025-01-22T10:00:00Z"
+  },
+  {
+    "text": "You can use the print() function.",
+    "role": "assistant",
+    "timestamp": "2025-01-22T10:00:01Z"
+  },
+  {
+    "text": "Show me an example",
+    "role": "user",
+    "timestamp": "2025-01-22T10:00:02Z"
+  },
+  {
+    "text": "print(\"Hello, World!\")",
+    "role": "assistant",
+    "timestamp": "2025-01-22T10:00:03Z"
+  }
+]"#;
+
+        // 4. 调用测试辅助方法生成提示词（测试中文版本）
+        let result = generator.test_build_prompt(goal, sessions, "zh");
+
+        // 5. 打印生成的提示词（便于人工检查）
+        println!("\n========== 生成的提示词 ==========\n");
+        println!("{}", result);
+        println!("\n========== 提示词结束 ==========\n");
+
+        // 6. 验证结果包含预期的结构
+        let assertions = vec![
+            // Meta-Prompt 的内容（已更新为新版本）
+            ("Meta-Prompt 标题", "专业的提示词工程师"),
+            ("分析方法步骤", "分析目标与上下文"),
+            ("限制条件", "提示词应简洁明了"),
+
+            // Prompt Structure 的内容
+            ("输入信息标题", "## 输入信息"),
+            ("用户目标标签", "**下一步目标**"),
+            ("会话标签", "**相关历史会话**"),
+
+            // 输出格式说明（更新后的模板）
+            ("输出格式标题", "## 输出格式"),
+            ("目标偏离程度标题", "### **目标偏离程度**"),
+            ("任务目标标题", "### **任务目标**"),
+            ("具体步骤标题", "### **具体步骤**"),
+            ("预期输出标题", "### **预期输出**"),
+
+            // 注入的变量内容
+            ("注入的 goal", "Write a Hello World program in Python"),
+            ("注入的 sessions (text)", "How do I print in Python?"),
+            ("注入的 sessions (role)", "\"user\""),
+            ("注入的 sessions (timestamp)", "\"timestamp\""),
+        ];
+
+        for (description, expected) in assertions {
+            assert!(
+                result.contains(expected),
+                "验证失败: {} - 未找到预期内容 '{}'\n生成的提示词:\n{}",
+                description,
+                expected,
+                result
+            );
+        }
+
+        // 7. 验证变量占位符已被替换
+        assert!(
+            !result.contains("{{goal}}") && !result.contains("{{sessions}}") && !result.contains("{{meta_prompt}}"),
+            "错误: 变量占位符未被完全替换\n发现的占位符: {}",
+            if result.contains("{{goal}}") { " {{goal}}" }
+            else if result.contains("{{sessions}}") { " {{sessions}}" }
+            else if result.contains("{{meta_prompt}}") { " {{meta_prompt}}" }
+            else { "" }
+        );
+
+        println!("✅ 所有断言通过！");
+    }
+
+    #[test]
+    fn test_config_loading() {
+        let _lock = DB_TEST_LOCK.read().unwrap();
+        // 获取锁，确保测试顺序执行
+
+        // 测试配置文件是否能正确加载
+        let config_path = std::path::PathBuf::from("optimizer_config.toml");
+
+        if !config_path.exists() {
+            println!("警告: 配置文件不存在，跳过测试");
+            return;
+        }
+
+        let generator = PromptGenerator::with_config_path(config_path)
+            .expect("创建 PromptGenerator 失败");
+
+        // 验证配置管理器能正确读取配置
+        let meta_prompt = generator.config_manager.get_meta_prompt("zh");
+        let prompt_structure = generator.config_manager.get_prompt_structure("zh");
+
+        println!("Meta-Prompt 长度: {} 字符", meta_prompt.len());
+        println!("Prompt Structure 长度: {} 字符", prompt_structure.len());
+
+        assert!(
+            !meta_prompt.is_empty(),
+            "Meta-Prompt 不应为空"
+        );
+        assert!(
+            !prompt_structure.is_empty(),
+            "Prompt Structure 不应为空"
+        );
+        assert!(
+            prompt_structure.contains("{{meta_prompt}}"),
+            "Prompt Structure 应包含 {{meta_prompt}} 占位符"
+        );
+        assert!(
+            prompt_structure.contains("{{goal}}"),
+            "Prompt Structure 应包含 {{goal}} 占位符"
+        );
+        assert!(
+            prompt_structure.contains("{{sessions}}"),
+            "Prompt Structure 应包含 {{sessions}} 占位符"
+        );
+
+        println!("✅ 配置加载测试通过！");
+    }
+
+    // ==================== 语言路由测试 ====================
+
+    /// 测试中文语言路由
+    ///
+    /// 验证：当传入 `language: "zh"` 时，系统正确加载中文模板
+    #[test]
+    fn test_zh_routing() {
+
+        // 1. 创建带 Mock 配置的 PromptGenerator
+        let config = create_mock_optimizer_config();
+        let generator = create_mock_prompt_generator(config);
+
+        // 2. 准备测试数据
+        let goal = "创建一个 Rust 函数";
+        let sessions = r#"[{"text":"如何定义结构体？","role":"user","timestamp":"2025-01-22T10:00:00Z"}]"#;
+
+        // 3. 调用生成方法（传入中文语言代码）
+        let result = generator.test_build_prompt(goal, sessions, "zh");
+
+        // 4. 断言：验证中文标记存在
+        assert!(
+            result.contains(MOCK_ZH_MARKER),
+            "错误: 中文路由失败，未找到中文标记 '{}'\n生成的提示词:\n{}",
+            MOCK_ZH_MARKER,
+            result
+        );
+
+        // 5. 断言：验证英文标记不存在
+        assert!(
+            !result.contains(MOCK_EN_MARKER),
+            "错误: 中文路由中混入了英文标记 '{}'\n生成的提示词:\n{}",
+            MOCK_EN_MARKER,
+            result
+        );
+
+        println!("✅ 中文路由测试通过！");
+    }
+
+    /// 测试英文语言路由
+    ///
+    /// 验证：当传入 `language: "en"` 时，系统正确加载英文模板
+    #[test]
+    fn test_en_routing() {
+
+        // 1. 创建带 Mock 配置的 PromptGenerator
+        let config = create_mock_optimizer_config();
+        let generator = create_mock_prompt_generator(config);
+
+        // 2. 准备测试数据
+        let goal = "Create a Rust function";
+        let sessions = r#"[{"text":"How to define a struct?","role":"user","timestamp":"2025-01-22T10:00:00Z"}]"#;
+
+        // 3. 调用生成方法（传入英文语言代码）
+        let result = generator.test_build_prompt(goal, sessions, "en");
+
+        // 4. 断言：验证英文标记存在
+        assert!(
+            result.contains(MOCK_EN_MARKER),
+            "错误: 英文路由失败，未找到英文标记 '{}'\n生成的提示词:\n{}",
+            MOCK_EN_MARKER,
+            result
+        );
+
+        // 5. 断言：验证中文标记不存在
+        assert!(
+            !result.contains(MOCK_ZH_MARKER),
+            "错误: 英文路由中混入了中文标记 '{}'\n生成的提示词:\n{}",
+            MOCK_ZH_MARKER,
+            result
+        );
+
+        println!("✅ 英文路由测试通过！");
+    }
+
+    /// 测试默认语言回退逻辑
+    ///
+    /// 验证：当传入不支持的语言代码时，系统回退到默认语言（英文）
+    #[test]
+    fn test_default_language_fallback() {
+
+        // 1. 创建带 Mock 配置的 PromptGenerator
+        let config = create_mock_optimizer_config();
+        let generator = create_mock_prompt_generator(config);
+
+        // 2. 准备测试数据
+        let goal = "Test goal";
+        let sessions = "[]";
+
+        // 3. 调用生成方法（传入不支持的语言代码，如 "fr"）
+        let result = generator.test_build_prompt(goal, sessions, "fr");
+
+        // 4. 断言：应该回退到英文（因为不支持的语言默认使用英文）
+        assert!(
+            result.contains(MOCK_EN_MARKER),
+            "错误: 默认语言回退失败，未找到英文标记 '{}'\n生成的提示词:\n{}",
+            MOCK_EN_MARKER,
+            result
+        );
+
+        assert!(
+            !result.contains(MOCK_ZH_MARKER),
+            "错误: 默认回退中混入了中文标记 '{}'\n生成的提示词:\n{}",
+            MOCK_ZH_MARKER,
+            result
+        );
+
+        println!("✅ 默认语言回退测试通过！");
+    }
+
+    /// 测试会话上下文的多语言支持
+    ///
+    /// 验证：会话格式化模板也支持语言切换
+    #[test]
+    fn test_session_format_multilingual() {
+
+        // 1. 创建 Mock 配置
+        let config = create_mock_optimizer_config();
+        let manager = MockConfigManager::new(config);
+
+        // 2. 测试中文会话格式
+        let zh_format = manager.get_session_format("zh");
+        assert!(
+            zh_format.contains("会话"),
+            "错误: 中文会话格式应包含 '会话'，实际: {}",
+            zh_format
+        );
+        assert!(
+            zh_format.contains("项目"),
+            "错误: 中文会话格式应包含 '项目'，实际: {}",
+            zh_format
+        );
+
+        // 3. 测试英文会话格式
+        let en_format = manager.get_session_format("en");
+        assert!(
+            en_format.contains("Session"),
+            "错误: 英文会话格式应包含 'Session'，实际: {}",
+            en_format
+        );
+        assert!(
+            en_format.contains("Project"),
+            "错误: 英文会话格式应包含 'Project'，实际: {}",
+            en_format
+        );
+
+        println!("✅ 会话格式多语言测试通过！");
+    }
+
+    /// 测试回退模板的多语言支持
+    ///
+    /// 验证：所有回退模板（conversation_template, fallback_template）都支持语言切换
+    #[test]
+    fn test_fallback_templates_multilingual() {
+
+        // 1. 创建 Mock 配置
+        let config = create_mock_optimizer_config();
+        let manager = MockConfigManager::new(config);
+
+        // 2. 测试对话开始模板
+        let zh_starter = manager.get_conversation_starter_template("zh");
+        assert!(
+            zh_starter.contains(MOCK_ZH_STARTER_MARKER),
+            "错误: 中文对话开始模板应包含标记 '{}'",
+            MOCK_ZH_STARTER_MARKER
+        );
+
+        let en_starter = manager.get_conversation_starter_template("en");
+        assert!(
+            en_starter.contains(MOCK_EN_STARTER_MARKER),
+            "错误: 英文对话开始模板应包含标记 '{}'",
+            MOCK_EN_STARTER_MARKER
+        );
+
+        // 3. 测试无会话回退模板
+        let zh_no_sessions = manager.get_no_sessions_template("zh");
+        assert!(
+            zh_no_sessions.contains(MOCK_ZH_NO_SESSIONS_MARKER),
+            "错误: 中文无会话模板应包含标记 '{}'",
+            MOCK_ZH_NO_SESSIONS_MARKER
+        );
+
+        let en_no_sessions = manager.get_no_sessions_template("en");
+        assert!(
+            en_no_sessions.contains(MOCK_EN_NO_SESSIONS_MARKER),
+            "错误: 英文无会话模板应包含标记 '{}'",
+            MOCK_EN_NO_SESSIONS_MARKER
+        );
+
+        println!("✅ 回退模板多语言测试通过！");
+    }
+
+    /// 综合测试：完整的 Prompt 生成流程（包含变量替换）
+    #[test]
+    fn test_full_prompt_generation_with_language() {
+        let _lock = DB_TEST_LOCK.read().unwrap();
+
+        // 1. 创建 Mock 配置
+        let config = create_mock_optimizer_config();
+        let generator = create_mock_prompt_generator(config);
+
+        // 2. 准备测试数据
+        let goal = "实现二叉树遍历";
+        let sessions = r#"[
+            {"text":"什么是二叉树？","role":"user","timestamp":"2025-01-22T10:00:00Z"},
+            {"text":"二叉树是一种数据结构...","role":"assistant","timestamp":"2025-01-22T10:00:01Z"}
+        ]"#;
+
+        // 3. 生成中文 Prompt
+        let zh_result = generator.test_build_prompt(goal, sessions, "zh");
+        assert!(
+            zh_result.contains(MOCK_ZH_MARKER),
+            "中文 Prompt 应包含中文标记"
+        );
+        assert!(
+            zh_result.contains(goal),
+            "中文 Prompt 应包含原始目标"
+        );
+        assert!(
+            zh_result.contains("实现二叉树遍历"),
+            "中文 Prompt 应包含目标内容"
+        );
+        assert!(
+            !zh_result.contains(MOCK_EN_MARKER),
+            "中文 Prompt 不应包含英文标记"
+        );
+
+        // 4. 生成英文 Prompt
+        let en_goal = "Implement binary tree traversal";
+        let en_result = generator.test_build_prompt(en_goal, sessions, "en");
+        assert!(
+            en_result.contains(MOCK_EN_MARKER),
+            "英文 Prompt 应包含英文标记"
+        );
+        assert!(
+            en_result.contains(en_goal),
+            "英文 Prompt 应包含原始目标"
+        );
+        assert!(
+            en_result.contains("Implement binary tree traversal"),
+            "英文 Prompt 应包含目标内容"
+        );
+        assert!(
+            !en_result.contains(MOCK_ZH_MARKER),
+            "英文 Prompt 不应包含中文标记"
+        );
+
+        println!("✅ 完整 Prompt 生成测试通过！");
+    }
+
+    // ==================== Mock 测试辅助工具 ====================
+
+    /// Mock 配置标记常量
+    ///
+    /// 这些标记用于区分中英文模板，验证路由逻辑是否正确
+    const MOCK_ZH_MARKER: &str = "[[[ZH_LANGUAGE_MARKER]]]";
+    const MOCK_EN_MARKER: &str = "[[[EN_LANGUAGE_MARKER]]]";
+    const MOCK_ZH_STARTER_MARKER: &str = "ZH_STARTER";
+    const MOCK_EN_STARTER_MARKER: &str = "EN_STARTER";
+    const MOCK_ZH_NO_SESSIONS_MARKER: &str = "ZH_NO_SESSIONS";
+    const MOCK_EN_NO_SESSIONS_MARKER: &str = "EN_NO_SESSIONS";
+
+    /// 创建 Mock 的 OptimizerConfig
+    ///
+    /// 使用特征明显的标记字符串，便于断言验证
+    fn create_mock_optimizer_config() -> OptimizerConfig {
+        OptimizerConfig {
+            meta_prompt: crate::optimizer::config::MetaPromptConfig {
+                template_zh: format!("{}\n# 中文 Meta-Prompt\n你是一位专业的提示词工程师。", MOCK_ZH_MARKER),
+                template_en: format!("{}\n# English Meta-Prompt\nYou are a professional prompt engineer.", MOCK_EN_MARKER),
+            },
+            llm_params: crate::optimizer::config::LLMParamsConfig {
+                temperature: 0.1,
+                max_tokens: 1500,
+                top_p: 0.9,
+                frequency_penalty: 0.0,
+                presence_penalty: 0.0,
+            },
+            prompt_structure: crate::optimizer::config::PromptStructureConfig {
+                structure_zh: format!(
+                    "{{{{meta_prompt}}}}\n## 用户目标\n{{{{goal}}}}\n## 历史会话\n{{{{sessions}}}}\n{}",
+                    MOCK_ZH_MARKER
+                ),
+                structure_en: format!(
+                    "{{{{meta_prompt}}}}\n## User Goal\n{{{{goal}}}}\n## Conversation History\n{{{{sessions}}}}\n{}",
+                    MOCK_EN_MARKER
+                ),
+            },
+            fallback: crate::optimizer::config::FallbackConfig {
+                no_sessions_template_zh: format!("{}\n请帮我完成：{{{{goal}}}}", MOCK_ZH_NO_SESSIONS_MARKER),
+                no_sessions_template_en: format!("{}\nPlease help me complete: {{{{goal}}}}", MOCK_EN_NO_SESSIONS_MARKER),
+                llm_error_template_zh: format!("{}\nLLM 调用失败：{{{{goal}}}}", MOCK_ZH_MARKER),
+                llm_error_template_en: format!("{}\nLLM call failed: {{{{goal}}}}", MOCK_EN_MARKER),
+                conversation_starter_template_zh: format!("{}\n## 用户目标\n{{{{goal}}}}", MOCK_ZH_STARTER_MARKER),
+                conversation_starter_template_en: format!("{}\n## User Goal\n{{{{goal}}}}", MOCK_EN_STARTER_MARKER),
+            },
+            session_context: crate::optimizer::config::SessionContextConfig {
+                max_summary_length: 200,
+                include_rating: true,
+                include_project: true,
+                session_format_zh: "- 会话 {{{{session_id}}}} {{#if project_name}}(项目: {{{{project_name}}}}){{/if}}".to_string(),
+                session_format_en: "- Session {{{{session_id}}}} {{#if project_name}}(Project: {{{{project_name}}}}){{/if}}".to_string(),
+            },
+            compression: crate::optimizer::config::CompressionConfig {
+                level: "basic".to_string(),
+                preserve_formatting: true,
+                min_compression_ratio: 0.0,
+            },
+            advanced: crate::optimizer::config::AdvancedConfig {
+                parallel_processing: 5,
+                cache_strategy: "memory".to_string(),
+                debug: false,
+                timeout: 30,
+            },
+        }
+    }
+
+    /// Mock 配置管理器
+    ///
+    /// 简化版的 ConfigManager，用于测试环境
+    struct MockConfigManager {
+        config: OptimizerConfig,
+    }
+
+    impl MockConfigManager {
+        fn new(config: OptimizerConfig) -> Self {
+            Self { config }
+        }
+
+        fn get_meta_prompt(&self, language: &str) -> String {
+            match language {
+                "zh" => self.config.meta_prompt.template_zh.clone(),
+                _ => self.config.meta_prompt.template_en.clone(),  // 默认英文
+            }
+        }
+
+        fn get_prompt_structure(&self, language: &str) -> String {
+            match language {
+                "zh" => self.config.prompt_structure.structure_zh.clone(),
+                _ => self.config.prompt_structure.structure_en.clone(),  // 默认英文
+            }
+        }
+
+        fn get_no_sessions_template(&self, language: &str) -> String {
+            match language {
+                "zh" => self.config.fallback.no_sessions_template_zh.clone(),
+                _ => self.config.fallback.no_sessions_template_en.clone(),  // 默认英文
+            }
+        }
+
+        fn get_llm_error_template(&self, language: &str) -> String {
+            match language {
+                "zh" => self.config.fallback.llm_error_template_zh.clone(),
+                _ => self.config.fallback.llm_error_template_en.clone(),  // 默认英文
+            }
+        }
+
+        fn get_conversation_starter_template(&self, language: &str) -> String {
+            match language {
+                "zh" => self.config.fallback.conversation_starter_template_zh.clone(),
+                _ => self.config.fallback.conversation_starter_template_en.clone(),  // 默认英文
+            }
+        }
+
+        fn get_session_format(&self, language: &str) -> String {
+            match language {
+                "zh" => self.config.session_context.session_format_zh.clone(),
+                _ => self.config.session_context.session_format_en.clone(),  // 默认英文
+            }
+        }
+    }
+
+    /// 创建 Mock PromptGenerator
+    ///
+    /// 使用临时配置文件创建测试用的 PromptGenerator
+    /// 每个测试使用唯一的文件名，避免并发测试冲突
+    fn create_mock_prompt_generator(config: OptimizerConfig) -> PromptGenerator {
+        // 使用时间戳和随机数创建唯一的临时文件名
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_path = std::env::temp_dir().join(format!("test_optimizer_config_{}.toml", timestamp));
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+        std::fs::write(&temp_path, toml_str).unwrap();
+
+        PromptGenerator::with_config_path(temp_path).unwrap()
+    }
 }

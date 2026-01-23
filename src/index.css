@@ -1,5 +1,17 @@
 @import "tailwindcss";
 
+/* 配置 Tailwind v4 暗色模式使用 class 策略 */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    color-scheme: dark;
+  }
+}
+
+/* 确保暗色模式样式正确应用 */
+.dark {
+  color-scheme: dark;
+}
+
 /* ==================== 浅色模式（默认） ==================== */
 :root,
 :root.light {

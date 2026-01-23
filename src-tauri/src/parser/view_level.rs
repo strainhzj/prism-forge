@@ -43,7 +43,7 @@ fn truncate_str_to_chars(s: &str, max_chars: usize) -> String {
 /// 日志读取等级
 ///
 /// 定义五种不同的日志读取等级，按信息完整度排序。
-/// 默认值为 Conversation，包含用户、助手和思考消息。
+/// 默认值为 QAPairs，提取用户问题和助手最终回复的配对。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ViewLevel {
@@ -62,7 +62,7 @@ pub enum ViewLevel {
 
 impl Default for ViewLevel {
     fn default() -> Self {
-        ViewLevel::Conversation
+        ViewLevel::QAPairs
     }
 }
 
@@ -306,32 +306,11 @@ impl MessageFilter {
 
         let mut qa_pairs = Vec::new();
 
-        // 调试日志
-        #[cfg(debug_assertions)]
-        {
-            eprintln!("🔍 [extract_qa_pairs] 原始消息数量: {}, 过滤后: {}", filtered_messages.len(), filtered_messages.len());
-            let mut user_count = 0;
-            let mut assistant_count = 0;
-            for msg in &filtered_messages {
-                match msg.msg_type.as_str() {
-                    "user" => user_count += 1,
-                    "assistant" => assistant_count += 1,
-                    _ => {}
-                }
-            }
-            eprintln!("🔍 [extract_qa_pairs] 过滤后统计: user={}, assistant={}", user_count, assistant_count);
-        }
-
         // 步骤 2: 从后向前扫描，配对 user 和 assistant
         let mut i = filtered_messages.len();
         while i > 0 {
             i -= 1;
             let msg = &filtered_messages[i];
-
-            #[cfg(debug_assertions)]
-            {
-                eprintln!("🔍 [extract_qa_pairs] [{}] msg_type={}", i, msg.msg_type);
-            }
 
             match msg.msg_type.as_str() {
                 "user" => {
@@ -346,27 +325,15 @@ impl MessageFilter {
                             "assistant" => {
                                 // 找到 assistant，记录为答案
                                 answer = Some(next_msg.clone());
-                                #[cfg(debug_assertions)]
-                                {
-                                    eprintln!("   → [j={}] 找到 assistant 作为答案", j);
-                                }
                                 // 继续查找，可能有更合适的 assistant
                                 j += 1;
                             }
                             "user" => {
                                 // 遇到新的 user，停止查找
-                                #[cfg(debug_assertions)]
-                                {
-                                    eprintln!("   → [j={}] 遇到新 user，停止查找", j);
-                                }
                                 break;
                             }
                             _ => {
                                 // 遇到其他类型，停止查找
-                                #[cfg(debug_assertions)]
-                                {
-                                    eprintln!("   → [j={}] 遇到其他类型 {}，停止查找", j, next_msg.msg_type);
-                                }
                                 break;
                             }
                         }
@@ -374,28 +341,9 @@ impl MessageFilter {
 
                     // 只有当找到答案时才创建问答对
                     if answer.is_some() {
-                        #[cfg(debug_assertions)]
-                        {
-                            eprintln!("   → 创建问答对: user={}, has_answer=true",
-                                truncate_str_to_chars(&msg.uuid, 8)
-                            );
-                        }
                         qa_pairs.push(QAPair {
                             question: msg.clone(),
                             answer,
-                            timestamp: msg.timestamp.clone(),
-                        });
-                    } else {
-                        // user 没有找到答案，记录但创建 None 答案
-                        #[cfg(debug_assertions)]
-                        {
-                            eprintln!("   → 创建问答对: user={}, has_answer=false",
-                                truncate_str_to_chars(&msg.uuid, 8)
-                            );
-                        }
-                        qa_pairs.push(QAPair {
-                            question: msg.clone(),
-                            answer: None,
                             timestamp: msg.timestamp.clone(),
                         });
                     }
@@ -570,6 +518,7 @@ mod tests {
             offset: 0,
             length: 100,
             summary: Some("test summary".to_string()),
+            content: Some("test content".to_string()),
             parent_idx: None,
             created_at: Utc::now().to_rfc3339(),
         }
@@ -587,6 +536,7 @@ mod tests {
             offset: 0,
             length: 100,
             summary: Some(summary.to_string()),
+            content: Some("test content".to_string()),
             parent_idx: None,
             created_at: Utc::now().to_rfc3339(),
         }
@@ -594,7 +544,7 @@ mod tests {
 
     #[test]
     fn test_view_level_default() {
-        assert_eq!(ViewLevel::default(), ViewLevel::Conversation);
+        assert_eq!(ViewLevel::default(), ViewLevel::QAPairs);
     }
 
     #[test]

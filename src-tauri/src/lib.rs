@@ -155,6 +155,15 @@ pub fn run() {
             reload_filter_config,
             get_filter_config_path,
             open_filter_config_folder,
+            // 提示词生成历史管理命令
+            cmd_save_prompt_history,
+            cmd_get_prompt_history,
+            cmd_get_prompt_history_paginated,
+            cmd_get_prompt_history_by_id,
+            cmd_delete_prompt_history,
+            cmd_toggle_prompt_history_favorite,
+            cmd_get_favorite_prompt_history,
+            cmd_count_prompt_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

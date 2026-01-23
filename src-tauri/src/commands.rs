@@ -918,7 +918,7 @@ impl From<BenchmarkResult> for BenchmarkResultResponse {
 }
 
 impl From<BenchmarkReport> for BenchmarkReportResponse {
-    fn from(mut report: BenchmarkReport) -> Self {
+    fn from(report: BenchmarkReport) -> Self {
         // 先生成 markdown 报告，避免所有权移动
         let markdown = report.to_markdown();
         Self {
@@ -1920,12 +1920,39 @@ pub async fn compress_context(
 /// 优化提示词
 ///
 /// 整合向量检索、上下文压缩和 LLM 生成，创建增强的提示词
+///
+/// # 参数
+/// - `request`: 增强提示词请求
+/// - `language`: 语言标识（"zh" 或 "en"），可选，默认 "en"
+/// - `llm_manager`: LLM 客户端管理器
 #[tauri::command]
 pub async fn optimize_prompt(
     request: EnhancedPromptRequest,
+    language: Option<String>,
     llm_manager: State<'_, LLMClientManager>,
 ) -> Result<EnhancedPrompt, CommandError> {
     use crate::optimizer::prompt_generator::PromptGenerator;
+
+    // 设置默认语言为英文
+    let language = language.unwrap_or_else(|| "en".to_string());
+
+    // 调试：输出收到的请求（仅开发环境）
+    #[cfg(debug_assertions)]
+    {
+        eprintln!("[optimize_prompt] 收到请求:");
+        eprintln!("  goal: {}", request.goal);
+        // 生产环境脱敏路径：仅显示文件名
+        let path_hint = if let Some(ref path_str) = request.current_session_file_path {
+            let path = std::path::Path::new(path_str);
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("<无文件>")
+        } else {
+            "<无文件>"
+        };
+        eprintln!("  current_session_file_path: {}", path_hint);
+        eprintln!("  language: {}", language);
+    }
 
     // 创建提示词生成器
     let generator = PromptGenerator::new()
@@ -1935,18 +1962,21 @@ pub async fn optimize_prompt(
 
     // 生成增强提示词
     let result = generator
-        .generate_enhanced_prompt(request, &llm_manager)
+        .generate_enhanced_prompt(request, &llm_manager, &language)
         .await
         .map_err(|e| CommandError {
             message: format!("生成提示词失败: {}", e),
         })?;
 
-    // 调试：输出返回结果
-    eprintln!("[optimize_prompt] 返回结果: original_goal={}, enhanced_prompt长度={}, referenced_sessions数量={}",
-        result.original_goal,
-        result.enhanced_prompt.len(),
-        result.referenced_sessions.len()
-    );
+    // 调试：输出返回结果（仅开发环境）
+    #[cfg(debug_assertions)]
+    {
+        eprintln!("[optimize_prompt] 返回结果: original_goal={}, enhanced_prompt长度={}, referenced_sessions数量={}",
+            result.original_goal,
+            result.enhanced_prompt.len(),
+            result.referenced_sessions.len()
+        );
+    }
 
     Ok(result)
 }
@@ -2003,8 +2033,8 @@ pub fn update_meta_template(
 /// 从 optimizer_config.toml 重新加载配置文件，支持运行时热更新
 #[tauri::command]
 pub fn reload_optimizer_config() -> Result<String, CommandError> {
-    use crate::optimizer::prompt_generator::PromptGenerator;
-    use std::path::PathBuf;
+    
+    
 
     // 创建临时生成器来重新加载配置
     let config_path = std::env::current_dir()
@@ -2460,7 +2490,7 @@ pub async fn find_similar_sessions(
     session_id: String,
     top_k: Option<usize>,
     min_similarity: Option<f64>,
-    manager: State<'_, LLMClientManager>,
+    _manager: State<'_, LLMClientManager>,
 ) -> Result<Vec<SemanticSearchResult>, String> {
     use crate::database::get_connection_shared;
 
@@ -2841,7 +2871,7 @@ pub async fn cmd_save_view_level_preference(
 /// - `session_id`: 会话 ID
 ///
 /// # 返回
-/// 视图等级，如果不存在则返回默认值 Conversation
+/// 视图等级，如果不存在则返回默认值 QAPairs
 #[tauri::command]
 pub async fn cmd_get_view_level_preference(
     session_id: String,
@@ -3048,6 +3078,154 @@ pub fn open_filter_config_folder() -> Result<(), CommandError> {
         })?;
 
     Ok(())
+}
+
+// ============================================================================
+// 提示词生成历史管理命令 (Prompt Generation History)
+// ============================================================================
+
+use crate::database::{PromptGenerationHistory, PromptHistoryRepository};
+
+/// 保存提示词生成历史
+///
+/// # 参数
+/// - `history`: 要保存的历史记录
+#[tauri::command]
+pub async fn cmd_save_prompt_history(
+    history: PromptGenerationHistory,
+) -> Result<PromptGenerationHistory, CommandError> {
+    let mut repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let created = repo.create_history(history).map_err(|e| CommandError {
+        message: format!("保存历史记录失败: {}", e),
+    })?;
+
+    Ok(created)
+}
+
+/// 获取所有提示词生成历史
+#[tauri::command]
+pub async fn cmd_get_prompt_history() -> Result<Vec<PromptGenerationHistory>, CommandError> {
+    let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let histories = repo.get_all_histories().map_err(|e| CommandError {
+        message: format!("获取历史记录失败: {}", e),
+    })?;
+
+    Ok(histories)
+}
+
+/// 分页获取提示词生成历史
+///
+/// # 参数
+/// - `offset`: 偏移量
+/// - `limit`: 每页数量
+#[tauri::command]
+pub async fn cmd_get_prompt_history_paginated(
+    offset: i64,
+    limit: i64,
+) -> Result<Vec<PromptGenerationHistory>, CommandError> {
+    let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let histories = repo.get_histories_paginated(offset, limit).map_err(|e| CommandError {
+        message: format!("获取历史记录失败: {}", e),
+    })?;
+
+    Ok(histories)
+}
+
+/// 根据 ID 获取提示词生成历史
+///
+/// # 参数
+/// - `id`: 历史 ID
+#[tauri::command]
+pub async fn cmd_get_prompt_history_by_id(
+    id: i64,
+) -> Result<Option<PromptGenerationHistory>, CommandError> {
+    let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let history = repo.get_history_by_id(id).map_err(|e| CommandError {
+        message: format!("获取历史记录失败: {}", e),
+    })?;
+
+    Ok(history)
+}
+
+/// 删除提示词生成历史
+///
+/// # 参数
+/// - `id`: 要删除的历史 ID
+#[tauri::command]
+pub async fn cmd_delete_prompt_history(
+    id: i64,
+) -> Result<(), CommandError> {
+    let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    repo.delete_history(id).map_err(|e| CommandError {
+        message: format!("删除历史记录失败: {}", e),
+    })?;
+
+    Ok(())
+}
+
+/// 切换提示词历史的收藏状态
+///
+/// # 参数
+/// - `id`: 历史 ID
+///
+/// # 返回
+/// 返回更新后的收藏状态
+#[tauri::command]
+pub async fn cmd_toggle_prompt_history_favorite(
+    id: i64,
+) -> Result<bool, CommandError> {
+    let mut repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let is_favorite = repo.toggle_favorite(id).map_err(|e| CommandError {
+        message: format!("切换收藏状态失败: {}", e),
+    })?;
+
+    Ok(is_favorite)
+}
+
+/// 获取收藏的提示词历史
+#[tauri::command]
+pub async fn cmd_get_favorite_prompt_history() -> Result<Vec<PromptGenerationHistory>, CommandError> {
+    let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let histories = repo.get_favorite_histories().map_err(|e| CommandError {
+        message: format!("获取收藏历史失败: {}", e),
+    })?;
+
+    Ok(histories)
+}
+
+/// 统计提示词历史数量
+#[tauri::command]
+pub async fn cmd_count_prompt_history() -> Result<i64, CommandError> {
+    let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let count = repo.count_histories().map_err(|e| CommandError {
+        message: format!("统计历史记录失败: {}", e),
+    })?;
+
+    Ok(count)
 }
 
 

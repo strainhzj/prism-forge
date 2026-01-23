@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tauri](https://img.shields.io/badge/Tauri-2.0-FFC131?logo=tauri)](https://tauri.app/)
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/)
+[![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react)](https://react.dev/)
 
 ## 什么是 PrismForge？
 
@@ -59,22 +59,88 @@ PrismForge 专为 **Claude Code** 用户解决这些痛点。
 
 ---
 
+## 特性亮点
+
+### 🌍 多语言支持
+
+- **双语界面**：支持中文和英文界面切换
+- **实时切换**：无需重启应用，即时切换语言
+- **扩展性强**：基于 `react-i18next`，易于添加新语言
+- **翻译文件**：位于 `src/i18n/locales/{zh,en}/`
+  - `common.json` - 通用文本（按钮、标签等）
+  - `settings.json` - 设置页面（表单、验证、供应商类型）
+  - `sessions.json` - 会话管理页面
+  - `navigation.json` - 导航菜单
+  - `index.json` - 首页（项目切换器、时间线）
+
+### 🎨 暗色/亮色主题
+
+- **双主题模式**：支持暗色和亮色两种主题
+- **自动检测**：根据系统主题偏好自动切换
+- **手动切换**：用户可在设置中手动切换主题
+- **全面适配**：所有组件均已适配两种主题
+
+**主题实现：**
+- 使用 Tailwind `dark:` 前缀适配主题
+- 通过 CSS 变量定义主题颜色（`src/index.css`）
+- 主题状态通过 `useThemeStore` 管理
+
+### 🔐 安全的 API Key 管理
+
+- **多厂商支持**：支持 OpenAI、Anthropic、Ollama、xAI
+- **安全存储**：使用操作系统凭据管理器存储 API Key
+  - **Windows**: Credential Manager
+  - **macOS**: Keychain
+  - **Linux**: Secret Service (libsecret)
+- **密钥隔离**：数据库仅保留密钥引用，不存储明文
+- **掩码显示**：界面显示掩码后的密钥（如 `sk-xxxx1234`）
+- **验证测试**：支持连接测试，验证 API Key 有效性
+
+### 📝 智能会话解析
+
+- **统一解析服务**：`SessionParserService` 提供统一的会话文件解析接口
+- **格式支持**：支持 Claude Code 的 JSONL 会话文件格式
+- **消息转换**：将 `JsonlEntry` 转换为结构化的 `Message` 对象
+- **内容过滤**：应用 `FilterConfigManager` 规则过滤不需要的内容
+- **视图等级**：支持多种视图等级过滤（Full、QAPairs、Summary）
+
+### ⚡ TypeScript 类型同步
+
+- **自动生成**：使用 `ts-rs` 从 Rust 结构体自动生成 TypeScript 类型
+- **类型安全**：前后端共享类型定义，减少类型错误
+- **实时同步**：修改 Rust 结构体后重新运行生成命令即可
+- **命名约定**：自动转换为驼峰命名（camelCase）
+
+### 🔄 多厂商 LLM 适配器
+
+- **统一接口**：通过 `LLMService` trait 抽象不同厂商 API
+- **工厂模式**：`LLMClientManager::create_client_from_provider()` 动态创建客户端
+- **易于扩展**：添加新厂商只需实现 trait 并更新工厂方法
+- **流式支持**：支持流式响应，实时显示生成内容
+
+---
+
 ## 技术栈
 
-### 前端
-- **React 19** + TypeScript - UI 框架
+### 前端 (React + TypeScript)
+- **React 18.3** + **React DOM 18.3** - UI 框架
 - **Vite 7.0** - 构建工具
 - **React Router 6.30** - 路由管理
-- **Zustand 5.0** + Immer - 状态管理
+- **Zustand 5.0** + **Immer** - 状态管理
 - **React Hook Form 7.69** - 表单管理
-- **Tailwind CSS** - 样式框架
+- **React i18next** - 国际化（中英文切换）
+- **@tanstack/react-query** - 数据获取和缓存
+- **@heroicons/react** - 图标库
+- **Tailwind CSS** - 样式框架（支持暗色/亮色主题）
 
-### 后端
-- **Rust** + **Tauri 2.0** - 桌面应用框架
+### 后端 (Rust + Tauri 2)
+- **Tauri 2.0** - 桌面应用框架
 - **reqwest 0.12** - HTTP 客户端（支持流式传输）
 - **rusqlite 0.32** - SQLite 数据库
 - **keyring 3.0** - 跨平台安全存储（API Key 管理）
+- **secrecy 0.10** - 敏感数据保护
 - **async-openai 0.25** - OpenAI SDK
+- **ts-rs 0.1** - TypeScript 类型生成
 - **serde / serde_json** - 序列化
 
 ---
@@ -111,13 +177,52 @@ npm run tauri build
 
 ### 会话数据库位置
 
-- **Windows**: `%APPDATA%\prism-forge\prism-forge.db`
+- **Windows**:
+  ```
+  %APPDATA%\prism-forge\prism-forge.db
+  完整路径示例：C:\Users\用户名\AppData\Roaming\prism-forge\prism-forge.db
+  ```
+
 - **macOS**: `~/Library/Application Support/prism-forge/prism-forge.db`
+
 - **Linux**: `~/.config/prism-forge/prism-forge.db`
+
+### 调试技巧
+
+**查看数据库内容：**
+- 使用 SQLite 客户端（如 [DB Browser for SQLite](https://sqlitebrowser.org/)）打开数据库文件
+- 查看表结构：`SELECT * FROM sqlite_master;`
+- 查看数据：`SELECT * FROM api_providers;`
+
+**重置数据库：**
+```bash
+# 删除数据库文件后重启应用会自动重新创建
+# Windows
+del %APPDATA%\prism-forge\prism-forge.db
+
+# macOS/Linux
+rm ~/.config/prism-forge/prism-forge.db
+```
+
+**Schema 修改：**
+- 修改 Schema 时需要删除旧数据库或编写迁移逻辑
+- 迁移文件位于 `src-tauri/src/database/migrations.rs`
 
 ### API Key 安全存储
 
-使用操作系统凭据管理器（keyring）存储 API Key，数据库仅保留密钥引用，确保安全。
+使用操作系统凭据管理器存储 API Key，确保密钥安全：
+
+| 操作系统 | 凭据管理器 |
+|---------|-----------|
+| **Windows** | Credential Manager |
+| **macOS** | Keychain |
+| **Linux** | Secret Service (libsecret) |
+
+**安全措施：**
+- 数据库仅保留密钥引用，不存储明文
+- 使用 `keyring` crate 跨平台访问系统凭据管理器
+- 使用 `secrecy::SecretString` 包装密钥，防止意外日志泄露
+- 界面显示掩码后的密钥（如 `sk-xxxx1234`）
 
 ---
 
@@ -126,11 +231,17 @@ npm run tauri build
 ### 前端开发命令
 
 ```bash
+# 安装依赖
+npm install
+
 # 启动开发服务器（端口 1420）
 npm run dev
 
 # TypeScript 类型检查
 npm run build
+
+# 生成 TypeScript 类型（从 Rust 结构体）
+cargo run --bin generate_types
 
 # 预览生产构建
 npm run preview
@@ -139,10 +250,14 @@ npm run preview
 ### Rust 后端开发
 
 ```bash
+# 进入 Rust 目录
 cd src-tauri
 
 # 运行测试
 cargo test
+
+# 运行特定测试
+cargo test test_name
 
 # 代码检查（不构建，快速验证）
 cargo check
@@ -150,12 +265,53 @@ cargo check
 # 格式化代码
 cargo fmt
 
-# Lint 检查
+# Lint 检查（捕获潜在问题）
 cargo clippy
 
 # 仅编译单个包（加速开发）
 cargo build -p prism-forge
 ```
+
+### 类型生成工作流
+
+当你修改了 Rust 结构体并需要同步 TypeScript 类型时：
+
+```bash
+# 1. 在 Rust 结构体上添加 #[derive(TS)] 属性
+# src-tauri/src/database/models.rs
+#[derive(TS)]
+#[ts(rename_all = "camelCase")]
+pub struct ApiProvider {
+    pub id: i32,
+    pub name: String,
+    pub provider_type: ApiProviderType,
+}
+
+# 2. 在 src-tauri/src/build_types.rs 中注册类型
+pub fn export_types() -> Result<()> {
+    ApiProvider::export()?;
+    // ...
+
+# 3. 运行生成命令
+cargo run --bin generate_types
+
+# 4. 前端自动获得 TypeScript 类型定义
+# src/types/generated/ApiProvider.ts
+export interface ApiProvider {
+    id: number;
+    name: string;
+    providerType: ApiProviderType;
+}
+
+# 5. 在前端使用
+import { ApiProvider } from '@/types/generated';
+```
+
+**常用 ts-rs 属性：**
+- `#[ts(rename_all = "camelCase")]` - 字段名转驼峰命名
+- `#[ts(type = "number")]` - 覆盖默认类型推断
+- `#[ts(export)]` - 强制导出类型
+- `#[ts(opaque)]` - 将类型视为不透明（不展开内部结构）
 
 ---
 
@@ -169,38 +325,52 @@ cargo build -p prism-forge
 
 ## 项目架构
 
+### 整体架构
+
+项目采用 **Tauri 前后端分离架构**，前端通过 Tauri Invoke API 调用后端命令。后端实现多厂商 LLM 适配器模式，通过统一的 `LLMService` trait 抽象不同厂商 API。
+
+### Rust 后端结构
+
 ```
 src-tauri/src/
-├── main.rs              # Tauri 入口，应用生命周期
+├── main.rs              # Tauri 入口
 ├── lib.rs               # 核心模块注册和状态管理
-├── commands.rs          # Tauri 命令接口（前端调用入口）
-├── database/            # 数据持久化层
-│   ├── models.rs        # ApiProvider 数据模型
-│   ├── migrations.rs    # SQLite 表结构和初始化
-│   └── repository.rs    # CRUD 操作实现
+├── build_types.rs       # ts-rs 类型生成
+├── commands.rs          # Tauri 命令接口
+├── session_parser.rs    # 统一会话解析服务
+├── config/              # 配置管理
+├── database/            # 数据持久化
 ├── llm/                 # LLM 客户端核心
-│   ├── interface.rs     # LLMService trait 和通用类型
-│   ├── manager.rs       # LLMClientManager（单例管理器）
-│   ├── security.rs      # API Key 安全存储（keyring + 验证）
-│   └── providers/       # 厂商适配器实现
-│       ├── openai.rs    # OpenAI 适配器
-│       ├── anthropic.rs # Anthropic Claude 适配器
-│       ├── ollama.rs    # Ollama 适配器
-│       └── xai.rs       # xAI 适配器
-└── optimizer/           # 提示词优化业务逻辑
-    └── mod.rs           # 会话分析和提示词生成
+│   └── providers/       # 厂商适配器（OpenAI、Anthropic、Ollama、xAI）
+├── parser/              # JSONL 解析
+├── filter_config.rs     # 日志过滤配置
+└── optimizer/           # 提示词优化
+```
 
+### React 前端结构
+
+```
 src/
 ├── main.tsx             # React 入口
 ├── App.tsx              # 主应用组件
+├── i18n/                # 国际化配置
+│   └── locales/         # 翻译文件 {zh,en}/
 ├── stores/              # Zustand 全局状态
-│   └── useSettingsStore.ts  # 提供商管理状态
+├── lib/                 # 工具函数库
+├── hooks/               # 自定义 Hooks
+├── types/               # TypeScript 类型
+│   └── generated/       # ts-rs 生成的类型
 ├── pages/               # 页面级组件
-│   └── Settings.tsx     # 设置页面
 └── components/          # 可复用组件
-    └── settings/
-        └── ProviderForm.tsx  # 提供商表单
+    └── ui/              # UI 组件库
 ```
+
+### 核心设计模式
+
+- **适配器模式**：`LLMService` trait 抽象多厂商 API
+- **工厂模式**：`LLMClientManager::create_client_from_provider()`
+- **仓库模式**：`ApiProviderRepository` 封装数据库操作
+- **单例模式**：`LLMClientManager` 通过 Tauri State 注入
 
 ---
 

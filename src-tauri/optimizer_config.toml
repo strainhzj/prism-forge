@@ -3,29 +3,48 @@
 
 # ==================== Meta-Prompt 模板 ====================
 [meta_prompt]
-# 默认 Meta-Prompt 模板，用于指导 LLM 生成优化后的提示词
-# 这个模板会被注入到每个提示词生成请求中
-# 可用变量: {{goal}}, {{sessions}}, {{context}}
-template = """
-你是一个专业的编程助手提示词优化器。基于以下信息，生成一个清晰、具体的提示词，帮助用户高效完成编程任务。
+# 通用方法论模板，用于指导 LLM 生成优化后的提示词
+# 此模板不包含具体变量，保持独立性和可复用性
+# 中文版本
+template_zh = """你是一位专业的提示词工程师。你的任务是分析用户目标和会话历史，生成一个结构化、高信噪比的提示词，以指导 AI 编程助手高效地完成任务。
 
-## 你的任务
-1. 分析用户的编程目标
-2. 参考相关历史会话中的解决方案
-3. 生成一个可直接使用的、结构化的提示词
+## 你的分析与构建步骤
 
-## 输出格式
-请生成一个包含以下部分的提示词：
-1. **任务背景**: 简要描述要完成的任务
-2. **技术要求**: 涉及的技术栈和约束条件
-3. **参考方案**: 基于历史经验的建议
-4. **具体步骤**: 明确的实施步骤
-5. **预期输出**: 期望的结果格式
+1. **分析目标与上下文**:
+   - **确立核心需求**: 仔细阅读用户目标。
+   - **全局历史回顾**: 综合浏览整段历史会话（寻找主线任务），避免仅基于最近一轮对话做出片面判断。
+   - **判断目标偏离度**: 根据上下文与下一步目标的关联程度，判断下一步目标对于整个会话来说是否噪音。
+   - **确定会话阶段**: 明确当前处于任务探索、代码实现、调试修复还是重构优化阶段。
+
+2. **构建结构化提示词**: 根据分析结果，填充以下"输出格式"的各个部分。
 
 ## 限制条件
-- 提示词要简洁明了（控制在 500 字以内）
-- 优先参考高评分、高相似度的历史方案
+
+- 提示词应简洁明了，重点突出，避免不必要的寒暄或背景信息
+- 必须根据**上下文**与**下一步目标**的关联程度严格判断目标偏离程度，是否同一个项目不在判断范围内
+- 严禁仅参考最新对话，必须建立对**整体历史会话**的认知
 - 突出关键技术点和注意事项
+"""
+
+# 英文版本
+template_en = """You are a professional prompt engineer. Your task is to analyze user goals and conversation history to generate a structured, high signal-to-noise ratio prompt that will guide an AI programming assistant to efficiently complete tasks.
+
+## Your Analysis and Construction Steps
+
+1. **Analyze Goals and Context**:
+   - **Establish Core Requirements**: Carefully read the user's goal.
+   - **Global History Review**: Comprehensively review the entire conversation history (seeking the main task thread), avoiding making one-sided judgments based only on the most recent exchange.
+   - **Determine Goal Drift**: Based on the relevance between context and next step, assess whether the next goal represents noise for the overall conversation.
+   - **Identify Conversation Stage**: Determine whether you are in task exploration, implementation, debugging/refinement, or refactoring/optimization phase.
+
+2. **Construct Structured Prompt**: Based on your analysis, populate each section of the "Output Format" below.
+
+## Constraints
+
+- The prompt should be concise and focused, avoiding unnecessary pleasantries or background information
+- Must rigorously assess goal drift based on the relevance between **context** and **next step**, irrespective of whether it belongs to the same project
+- Strictly prohibit referencing only the latest conversation; must establish cognition of the **entire conversation history**
+- Highlight key technical points and considerations
 """
 
 # ==================== LLM 调用参数 ====================
@@ -34,7 +53,7 @@ template = """
 # - 0.0: 完全确定性输出，适合需要精确答案的场景
 # - 0.3-0.7: 平衡创造性和一致性，推荐范围
 # - 1.0: 高度创造性，可能产生多样化结果
-temperature = 0.3
+temperature = 0.1
 
 # 最大生成 Token 数
 # - 建议: 1000-2000，取决于提示词复杂度
@@ -63,51 +82,104 @@ presence_penalty = 0.0
 # 可用变量:
 #   {{meta_prompt}}: Meta-Prompt 模板内容
 #   {{goal}}: 用户输入的目标
-#   {{sessions}}: 格式化的会话列表
-#   {{context}}: 压缩后的上下文摘要
-structure = """
-{{meta_prompt}}
+#   {{sessions}}: 格式化的会话上下文
 
-## 用户目标
-{{goal}}
+# 中文版本
+structure_zh = """{{meta_prompt}}
 
-## 相关历史会话
+## 输入信息
+
+- **下一步目标**: {{goal}}
+- **相关历史会话**:
 {{sessions}}
 
-## 上下文摘要
-{{context}}
+## 输出格式
 
-## 请求
-基于上述信息，生成一个优化的提示词。
+请严格按照以下结构生成提示词，并用 Markdown 标题标识：
+
+### **目标偏离程度**
+
+判断**下一步目标**与**相关历史会话**的偏离程度，给出你的建议（例如：可以继续会话、建议用户开启新的会话、如偏离程度高则截断回答直接建议用户开启新会话）
+
+### **任务目标**
+
+简要描述要完成的任务和目标。
+
+### **具体步骤**
+
+提供清晰、可执行的步骤列表，指导 AI 如何完成任务。
+
+### **预期输出**
+
+描述期望的最终产出物是什么，并说明其关键要求。
+
+---
+
+请基于上述信息，生成一个优化的提示词。
+"""
+
+# 英文版本
+structure_en = """{{meta_prompt}}
+
+## Input Information
+
+- **Next Goal**: {{goal}}
+- **Related Conversation History**:
+{{sessions}}
+
+## Output Format
+
+Please strictly follow the structure below to generate a prompt, using Markdown headings:
+
+### **Goal Drift Level**
+
+Assess the degree of drift between the **next goal** and **related conversation history**, and provide your recommendation (e.g., can continue conversation, suggest user start a new conversation, if drift is high then truncate response and directly suggest user start a new conversation)
+
+### **Task Objective**
+
+Briefly describe the task and objectives to be completed.
+
+### **Specific Steps**
+
+Provide clear, actionable step-by-step instructions to guide the AI in completing the task.
+
+### **Expected Output**
+
+Describe what the final deliverable should be and specify its key requirements.
+
+---
+
+Please generate an optimized prompt based on the information above.
 """
 
 # ==================== 回退模板 ====================
 [fallback]
 # 当没有相关会话时使用的简单模板
 # 可用变量: {{goal}}
-no_sessions_template = """
-请帮我完成以下编程任务：
 
-{{goal}}
+# 中文版本
+no_sessions_template_zh = "请帮我完成以下编程任务：\n\n{{goal}}\n\n请提供详细的实现方案和代码示例。"
 
-请提供详细的实现方案和代码示例。
-"""
+# 英文版本
+no_sessions_template_en = "Please help me complete the following programming task:\n\n{{goal}}\n\nPlease provide a detailed implementation plan and code examples."
 
 # LLM 调用失败时使用的模板
 # 可用变量: {{goal}}, {{best_session_summary}}, {{best_session_rating}}
-llm_error_template = """
-请帮我完成以下编程任务：
 
-{{goal}}
+# 中文版本
+llm_error_template_zh = '请帮我完成以下编程任务：\n\n{{goal}}\n\n{{#if best_session_summary}}## 参考\n相关会话: (评分: {{best_session_rating}})\n{{best_session_summary}}{{/if}}\n\n请提供详细的实现方案和代码示例。'
 
-{{#if best_session_summary}}
-## 参考
-相关会话: (评分: {{best_session_rating}})
-{{best_session_summary}}
-{{/if}}
+# 英文版本
+llm_error_template_en = 'Please help me complete the following programming task:\n\n{{goal}}\n\n{{#if best_session_summary}}## Reference\nRelated session: (Rating: {{best_session_rating}})\n{{best_session_summary}}{{/if}}\n\nPlease provide a detailed implementation plan and code examples.'
 
-请提供详细的实现方案和代码示例。
-"""
+# 对话开始模板（当会话消息为空时使用）
+# 可用变量: {{goal}}
+
+# 中文版本
+conversation_starter_template_zh = "你是一个专业的提示词专家。用户想要在ai coding agent开始一个新的对话，请生成一段信噪比的提示词来帮助用户开始对话。\n\n## 用户目标\n{{goal}}\n\n## 要求\n1. 理解用户的目标\n2. 补充用户目标中可能缺失的部分\n3. 提供明确的方向\n4. 保持简洁明了（控制在 200 字以内）\n\n请生成一个对话开始的提示词。"
+
+# 英文版本
+conversation_starter_template_en = "You are a professional prompt expert. The user wants to start a new conversation in an AI coding agent. Please generate a high signal-to-noise ratio prompt to help the user begin the conversation.\n\n## User Goal\n{{goal}}\n\n## Requirements\n1. Understand the user's goal\n2. Supplement any potentially missing parts of the user's goal\n3. Provide clear direction\n4. Keep it concise and clear (within 200 words)\n\nPlease generate a conversation-starting prompt."
 
 # ==================== 会话上下文配置 ====================
 [session_context]
@@ -126,7 +198,12 @@ include_project = true
 
 # 会话列表格式模板
 # 可用变量: {{session_id}}, {{project_name}}, {{rating}}, {{summary}}
-session_format = "- 会话 {{session_id}} {{#if project_name}}(项目: {{project_name}}){{/if}} {{#if rating}}(评分: {{rating}}){{/if}}:\n  {{summary}}"
+
+# 中文版本
+session_format_zh = "- 会话 {{session_id}} {{#if project_name}}(项目: {{project_name}}){{/if}} {{#if rating}}(评分: {{rating}}){{/if}}:\n  {{summary}}"
+
+# 英文版本
+session_format_en = "- Session {{session_id}} {{#if project_name}}(Project: {{project_name}}){{/if}} {{#if rating}}(Rating: {{rating}}){{/if}}:\n  {{summary}}"
 
 # ==================== 上下文压缩配置 ====================
 [compression]

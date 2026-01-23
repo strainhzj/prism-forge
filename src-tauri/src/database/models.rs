@@ -3,6 +3,7 @@
 //! 定义 API 提供商的数据结构，支持多种 LLM 服务
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use anyhow::Result;
 
 /// API 提供商类型枚举
@@ -25,6 +26,21 @@ pub enum ApiProviderType {
     AzureOpenAI,
     /// OpenAI 兼容接口（OneAPI、中转服务等第三方服务）
     OpenAICompatible,
+}
+
+impl std::fmt::Display for ApiProviderType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApiProviderType::OpenAI => write!(f, "OpenAI"),
+            ApiProviderType::Anthropic => write!(f, "Anthropic"),
+            ApiProviderType::Ollama => write!(f, "Ollama"),
+            ApiProviderType::XAI => write!(f, "xAI"),
+            ApiProviderType::Google => write!(f, "Google"),
+            ApiProviderType::GoogleVertex => write!(f, "Google Vertex AI"),
+            ApiProviderType::AzureOpenAI => write!(f, "Azure OpenAI"),
+            ApiProviderType::OpenAICompatible => write!(f, "OpenAI Compatible"),
+        }
+    }
 }
 
 impl ApiProviderType {
@@ -478,6 +494,9 @@ pub struct Message {
     /// 消息摘要 (用于列表展示)
     pub summary: Option<String>,
 
+    /// 消息内容 (从 message.content 提取的原始文本)
+    pub content: Option<String>,
+
     /// 父消息在数组中的索引
     pub parent_idx: Option<i32>,
 
@@ -648,15 +667,16 @@ pub struct MetaTemplate {
 }
 
 /// Token 统计信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenStats {
-    /// Token 数量
-    pub count: usize,
+    /// 总 Token 数
+    #[serde(rename = "totalTokens")]
+    pub total_tokens: usize,
 
-    /// 估算费用 (USD)
-    #[serde(rename = "estimated_cost")]
-    pub estimated_cost: f64,
+    /// 最大 Token 限制
+    #[serde(rename = "maxTokens")]
+    pub max_tokens: Option<usize>,
 }
 /// 向量相似度搜索结果
 ///
@@ -822,13 +842,23 @@ mod tests_wave1 {
     #[test]
     fn test_token_stats_serialization() {
         let stats = TokenStats {
-            count: 1000,
-            estimated_cost: 0.002,
+            total_tokens: 1000,
+            max_tokens: Some(5000),
         };
 
         let json = serde_json::to_string(&stats).unwrap();
-        assert!(json.contains("\"count\":1000"));
-        assert!(json.contains("\"estimatedCost\":0.002"));
+        assert!(json.contains("\"totalTokens\":1000"));
+        assert!(json.contains("\"maxTokens\":5000"));
+
+        // 测试 max_tokens 为 None 的情况
+        let stats_no_max = TokenStats {
+            total_tokens: 800,
+            max_tokens: None,
+        };
+
+        let json_no_max = serde_json::to_string(&stats_no_max).unwrap();
+        assert!(json_no_max.contains("\"totalTokens\":800"));
+        assert!(json_no_max.contains("\"maxTokens\":null"));
     }
 
     // ==================== Message 序列化测试 ====================
@@ -847,6 +877,7 @@ mod tests_wave1 {
             offset: 0,
             length: 100,
             summary: Some("Test".to_string()),
+            content: Some("Test content".to_string()),
             parent_idx: None,
             created_at: "2025-01-16T12:34:56Z".to_string(),
         };
@@ -903,6 +934,7 @@ mod tests_wave1 {
             offset: 1024,
             length: 2048,
             summary: Some("Test message".to_string()),
+            content: Some("Test content".to_string()),
             parent_idx: Some(0),
             created_at: "2025-01-16T12:34:56Z".to_string(),
         };
@@ -1007,4 +1039,52 @@ impl Settings {
             _ => 1536,
         }
     }
+}
+
+// ============================================================================
+// 提示词生成历史模型 (Prompt Generation History)
+// ============================================================================
+
+/// 提示词生成历史记录模型
+///
+/// 用于保存每次"分析并生成提示词"的生成记录
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PromptGenerationHistory {
+    /// 主键 ID
+    pub id: Option<i64>,
+
+    /// 关联的会话 ID (可为空)
+    pub session_id: Option<String>,
+
+    /// 原始目标描述
+    pub original_goal: String,
+
+    /// 优化后的提示词
+    pub enhanced_prompt: String,
+
+    /// 引用的会话列表 (JSON 格式)
+    pub referenced_sessions: Option<String>,
+
+    /// Token 统计信息 (JSON 格式)
+    pub token_stats: Option<String>,
+
+    /// 置信度 (0.0 - 1.0)
+    pub confidence: Option<f32>,
+
+    /// 使用的 LLM 提供商
+    pub llm_provider: Option<String>,
+
+    /// 使用的 LLM 模型
+    pub llm_model: Option<String>,
+
+    /// 生成时使用的语言 (zh/en)
+    pub language: String,
+
+    /// 创建时间 (RFC3339)
+    pub created_at: String,
+
+    /// 是否收藏
+    pub is_favorite: bool,
 }

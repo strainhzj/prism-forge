@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
+import { RefreshCw, CheckCircle, AlertCircle, Copy, Check } from "lucide-react";
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -19,8 +19,11 @@ import {
   useCurrentSessionFile,
   useProjectLoading,
 } from "./stores/useProjectStore";
+import { useCurrentSessionActions, useCurrentSessionStore } from "./stores/useCurrentSessionStore";
+import { useCurrentLanguage } from "@/stores/useLanguageStore";
 import { cn } from "@/lib/utils";
-import type { EnhancedPrompt } from "@/types/prompt";
+import type { EnhancedPrompt } from "@/types/generated";
+import type { PromptGenerationHistory } from "@/types/generated";
 
 // ==================== 类型定义 ====================
 
@@ -41,15 +44,63 @@ function debugLog(action: string, ...args: unknown[]) {
   }
 }
 
+// ==================== 工具函数 ====================
+
+/**
+ * 从增强提示词中分离目标偏离程度和真正的提示词
+ *
+ * @param enhancedPrompt - LLM 生成的完整提示词
+ * @returns 包含分离后的目标偏离程度和清理后的提示词
+ */
+function parseEnhancedPrompt(enhancedPrompt: string): {
+  goalDivergence: string | null;
+  cleanedPrompt: string;
+} {
+  if (!enhancedPrompt) {
+    return { goalDivergence: null, cleanedPrompt: '' };
+  }
+
+  // 查找"目标偏离程度"部分（支持多语言）
+  const goalDivergencePatterns = [
+    '目标偏离程度',      // 中文
+    'Goal Divergence',   // 英文
+  ];
+  const goalDivergenceRegex = new RegExp(
+    `###\\s*\\*\\*(${goalDivergencePatterns.join('|')})\\*\\*\\s*\\n([\\s\\S]*?)(?=\\n###\\s*\\*\\*|\\n##|$)`,
+    'i'  // 大小写不敏感
+  );
+  const match = enhancedPrompt.match(goalDivergenceRegex);
+
+  if (match) {
+    // 提取目标偏离程度内容（去掉标题）
+    // match[1] 是语言模式，match[2] 是实际内容
+    const goalDivergence = match[2] ? match[2].trim() : '';
+
+    // 移除目标偏离程度部分，得到清理后的提示词
+    const cleanedPrompt = enhancedPrompt
+      .replace(goalDivergenceRegex, '')
+      .trim();
+
+    return { goalDivergence, cleanedPrompt };
+  }
+
+  // 没有找到目标偏离程度部分，返回原内容
+  return { goalDivergence: null, cleanedPrompt: enhancedPrompt };
+}
+
 // ==================== 主组件 ====================
 
 function App() {
   const { t } = useTranslation('index');
+  const { t: commonT } = useTranslation('common'); // 获取 common 命名空间的翻译函数
   const navigate = useNavigate();
   const currentProject = useCurrentProject();
   const currentSessionFile = useCurrentSessionFile();
-  const { fetchProjects, setCurrentSessionFile, getLatestSessionFile, getSessionFiles } = useProjectActions();
+  const { fetchProjects, setCurrentSessionFile, getLatestSessionFile } = useProjectActions();
   const projectLoading = useProjectLoading();
+
+  // 获取全局会话状态管理 actions（不解构，避免创建新引用）
+  const globalSessionActions = useCurrentSessionActions();
 
   // 全局 Alert 状态
   const [globalAlert, setGlobalAlert] = useState<AlertState>({
@@ -74,9 +125,24 @@ function App() {
   const [analysisResult, setAnalysisResult] = useState<EnhancedPrompt | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [copiedPrompt, setCopiedPrompt] = useState(false); // 复制状态
+
+  // 获取当前语言（用于提示词优化）
+  const currentLanguage = useCurrentLanguage();
+
+  // 解析增强提示词，分离目标偏离程度和真正的提示词
+  const parsedPrompt = useMemo(() => {
+    if (!analysisResult?.enhancedPrompt) {
+      return { goalDivergence: null, cleanedPrompt: '' };
+    }
+    return parseEnhancedPrompt(analysisResult.enhancedPrompt);
+  }, [analysisResult?.enhancedPrompt]);
 
   // 右侧面板 ref，用于编程式控制折叠
   const rightPanelRef = useRef<any>(null);
+
+  // 用于追踪已同步的会话，避免重复同步
+  const lastSyncedSessionRef = useRef<string | null>(null);
 
   // 切换右侧面板折叠
   const toggleRightCollapse = useCallback(() => {
@@ -121,6 +187,22 @@ function App() {
       debugLog('useEffect', 'project changed, auto detecting latest file');
       autoDetectFile();
     }
+  }, [currentProject]); // 移除 currentSessionFile 依赖，避免无限循环
+
+  // 应用启动时同步会话状态到全局 store
+  useEffect(() => {
+    if (currentProject && currentSessionFile && currentSessionFile !== lastSyncedSessionRef.current) {
+      debugLog('useEffect', 'syncing session to global store', currentSessionFile);
+      lastSyncedSessionRef.current = currentSessionFile;
+
+      // 直接使用 store 方法，不依赖 globalSessionActions
+      const store = useCurrentSessionStore.getState();
+      store.setCurrentSession({
+        sessionId: currentSessionFile.split(/[/\\]/).pop() || 'unknown',
+        filePath: currentSessionFile,
+        projectName: currentProject.name,
+      });
+    }
   }, [currentProject, currentSessionFile]);
 
   // 自动检测最新会话文件
@@ -132,8 +214,17 @@ function App() {
       if (path) {
         debugLog('autoDetectFile', 'latest file:', path);
         setCurrentSessionFile(path);
+
+        // 同时设置全局会话状态
+        globalSessionActions.setCurrentSession({
+          sessionId: path.split(/[/\\]/).pop() || 'unknown',
+          filePath: path,
+          projectName: currentProject.name,
+        });
       } else {
         debugLog('autoDetectFile', 'no files found');
+        // 清除全局会话状态
+        globalSessionActions.clearCurrentSession();
       }
     } catch (e) {
       const errorMsg = t('messages.autoDetectFileError', { error: String(e) });
@@ -148,27 +239,23 @@ function App() {
       return;
     }
 
+    // 检查是否有当前会话
+    if (!currentSessionFile) {
+      alert(t('alerts.selectSessionFirst', { ns: 'common' }));
+      return;
+    }
+
     setAnalyzing(true);
     setAnalysisResult(null);
 
     try {
-      // 获取当前项目的会话文件列表
-      let sessionFilePaths: string[] = [];
-      if (currentProject) {
-        const sessionFiles = await getSessionFiles(currentProject.path, false);
-        // 获取最近的几个会话文件
-        sessionFilePaths = sessionFiles.slice(0, 10).map(f => f.file_path);
-        console.log(`[App] ${t('messages.foundSessionFiles', { count: sessionFilePaths.length })}`);
-      }
-
-      // 使用正确的请求结构调用 optimize_prompt
+      // 使用新的请求结构，传递当前会话文件路径和语言
       const result = await invoke<EnhancedPrompt>("optimize_prompt", {
         request: {
           goal: goal.trim(),
-          sessionFilePaths,  // 传递会话文件路径列表
-          limit: 5,
-          useWeighted: true
-        }
+          currentSessionFilePath: currentSessionFile,  // 使用新字段
+        },
+        language: currentLanguage,  // 传递当前语言
       });
       debugLog('handleAnalyze', 'result received:', result);
       debugLog('handleAnalyze', 'result JSON:', JSON.stringify(result, null, 2));
@@ -176,6 +263,36 @@ function App() {
       debugLog('handleAnalyze', 'enhancedPrompt content:', result?.enhancedPrompt || 'EMPTY');
       debugLog('handleAnalyze', 'result keys:', result ? Object.keys(result) : 'NO KEYS');
       setAnalysisResult(result);
+
+      // 自动保存到提示词生成历史记录
+      try {
+        // 从文件路径提取 sessionId
+        const fileName = currentSessionFile.split(/[\\/]/).pop() || '';
+        const sessionIdMatch = fileName.match(/claude-([^.]+)\.jsonl$/);
+        const sessionId = sessionIdMatch ? sessionIdMatch[1] : fileName.replace(/\.jsonl$/, '');
+
+        // 构造历史记录对象
+        const history: PromptGenerationHistory = {
+          id: null,
+          sessionId: sessionId,
+          originalGoal: result.originalGoal,
+          enhancedPrompt: result.enhancedPrompt,
+          referencedSessions: JSON.stringify(result.referencedSessions),
+          tokenStats: JSON.stringify(result.tokenStats),
+          confidence: null,  // 置信度功能暂未启用
+          llmProvider: result.llmProvider ?? null,
+          llmModel: result.llmModel ?? null,
+          language: currentLanguage,
+          createdAt: new Date().toISOString(),
+          isFavorite: false,
+        };
+
+        await invoke<PromptGenerationHistory>('cmd_save_prompt_history', { history });
+        debugLog('handleAnalyze', '保存到历史记录成功');
+      } catch (saveError) {
+        // 保存失败不影响生成结果，仅记录日志
+        debugLog('handleAnalyze', '保存到历史记录失败:', saveError);
+      }
     } catch (e) {
       // 更详细的错误处理
       let errorMsg = 'Unknown error';
@@ -203,6 +320,22 @@ function App() {
     debugLog('handleProjectChange', 'project changed');
     // 移除自动检测，避免覆盖用户选择的会话文件
   }, []);
+
+  // 复制提示词到剪贴板（只复制清理后的部分，不包含目标偏离程度）
+  const handleCopyPrompt = useCallback(async () => {
+    if (!parsedPrompt.cleanedPrompt) return;
+
+    try {
+      await navigator.clipboard.writeText(parsedPrompt.cleanedPrompt);
+      setCopiedPrompt(true);
+      // 2秒后恢复状态
+      setTimeout(() => {
+        setCopiedPrompt(false);
+      }, 2000);
+    } catch (error) {
+      debugLog('handleCopyPrompt', 'copy failed', error);
+    }
+  }, [parsedPrompt.cleanedPrompt]);
 
   // 从文件路径提取 sessionId
   // 会话文件名格式：claude-UUID.jsonl，提取 UUID 作为 sessionId
@@ -373,13 +506,12 @@ function App() {
                         {/* Token 统计 */}
                         {analysisResult.tokenStats && (
                           <div className="flex items-center gap-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                            <span>Token: {analysisResult.tokenStats.compressedTokens} / {analysisResult.tokenStats.originalTokens}</span>
-                            {analysisResult.tokenStats.savingsPercentage > 0 && (
-                              <span style={{ color: 'var(--color-accent-blue)' }}>
-                                {t('messages.tokenStats.saved')} {analysisResult.tokenStats.savingsPercentage.toFixed(1)}%
-                              </span>
+                            <span>Token: {analysisResult.tokenStats.totalTokens}</span>
+                            {analysisResult.tokenStats.maxTokens && (
+                              <span> / {analysisResult.tokenStats.maxTokens}</span>
                             )}
-                            <span>{t('messages.tokenStats.confidence')}: {(analysisResult.confidence * 100).toFixed(0)}%</span>
+                            {/* 置信度 - 临时隐藏，等待后续实现更完善的计算逻辑 */}
+                            {/* <span>{t('messages.tokenStats.confidence')}: {(analysisResult.confidence * 100).toFixed(0)}%</span> */}
                           </div>
                         )}
 
@@ -407,18 +539,61 @@ function App() {
                           </div>
                         )}
 
-                        {/* 增强的提示词 */}
-                        <div>
-                          <p className="text-sm font-medium mb-2" style={{ color: 'var(--color-text-primary)' }}>
-                            {t('messages.enhancedPrompt')}
-                          </p>
+                        {/* 目标偏离程度 */}
+                        {parsedPrompt.goalDivergence && (
+                          <div className="mt-4">
+                            <p className="text-sm font-medium mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                              目标偏离程度
+                            </p>
+                            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed p-3 rounded" style={{
+                              color: 'var(--color-text-primary)',
+                              backgroundColor: 'var(--color-bg-primary)',
+                              border: '1px solid var(--color-border-light)'
+                            }}>
+                              {parsedPrompt.goalDivergence}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 增强的提示词（从"任务目标"开始，不包含目标偏离程度） */}
+                        <div className={parsedPrompt.goalDivergence ? "mt-4" : ""}>
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                              {t('messages.enhancedPrompt')}
+                            </p>
+                            <button
+                              onClick={handleCopyPrompt}
+                              className={cn(
+                                "flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-all",
+                                "hover:opacity-80 active:scale-95"
+                              )}
+                              style={{
+                                color: copiedPrompt ? 'var(--color-accent-blue)' : 'var(--color-text-secondary)',
+                                backgroundColor: 'var(--color-bg-primary)',
+                                border: '1px solid var(--color-border-light)'
+                              }}
+                              disabled={!parsedPrompt.cleanedPrompt}
+                            >
+                              {copiedPrompt ? (
+                                <>
+                                  <Check className="h-3.5 w-3.5" />
+                                  {commonT('buttons.copied')}
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="h-3.5 w-3.5" />
+                                  {commonT('buttons.copy')}
+                                </>
+                              )}
+                            </button>
+                          </div>
                           <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed p-3 rounded" style={{
                             color: 'var(--color-text-primary)',
                             fontFamily: 'Consolas, Monaco, "Courier New", monospace',
                             backgroundColor: 'var(--color-bg-primary)',
                             border: '1px solid var(--color-border-light)'
                           }}>
-                            {analysisResult.enhancedPrompt}
+                            {parsedPrompt.cleanedPrompt || analysisResult.enhancedPrompt}
                           </pre>
                         </div>
                       </div>

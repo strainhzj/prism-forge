@@ -12,11 +12,9 @@ use anyhow::{Context, Result};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::time::SystemTime;
-use std::sync::{Arc, Mutex};
 
 use crate::llm::LLMClientManager;
-use crate::llm::interface::{Message, MessageRole, ModelParams};
+use crate::llm::interface::{Message, ModelParams};
 use crate::database::ApiProviderType;
 use crate::filter_config::FilterConfigManager;
 

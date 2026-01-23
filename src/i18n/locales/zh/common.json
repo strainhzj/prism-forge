@@ -19,7 +19,9 @@
     "submit": "提交",
     "search": "搜索",
     "refresh": "刷新",
-    "loading": "加载中..."
+    "loading": "加载中...",
+    "copy": "复制",
+    "copied": "已复制"
   },
   "status": {
     "loading": "加载中...",
@@ -29,7 +31,8 @@
     "empty": "暂无数据"
   },
   "alerts": {
-    "fillGoal": "请填写目标内容"
+    "fillGoal": "请填写目标内容",
+    "selectSessionFirst": "请先在首页选择一个会话"
   },
   "projectSwitcher": {
     "title": "切换项目",

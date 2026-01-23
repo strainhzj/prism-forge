@@ -7,7 +7,7 @@
 //! **Validates: Requirements 2.1**
 
 use std::sync::{Arc, RwLock};
-use crate::command_registry::{CommandRegistry, CommandInfo, CommandStatus};
+use crate::command_registry::{CommandRegistry, CommandStatus};
 use crate::startup::StartupManager;
 
 /// Command execution tracker
@@ -134,6 +134,7 @@ pub fn get_command_not_found_error(command_name: &str, manager: &StartupManager)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command_registry::CommandInfo;
     use crate::startup::create_startup_manager;
 
     #[test]

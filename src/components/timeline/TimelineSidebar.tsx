@@ -7,7 +7,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, ChevronLeft, RefreshCw, Filter, Check } from 'lucide-react';
+import { ChevronRight, ChevronLeft, RefreshCw, Filter, Check, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
@@ -72,6 +72,11 @@ export interface TimelineSidebarProps {
    */
   onToggleCollapse?: () => void;
 }
+
+/**
+ * 排序顺序类型
+ */
+type SortOrder = 'asc' | 'desc';
 
 // 自动刷新间隔（毫秒）
 const DEFAULT_AUTO_REFRESH_INTERVAL = 3000;
@@ -282,6 +287,7 @@ export function TimelineSidebar({
   const [selectedLog, setSelectedLog] = useState<TimelineLog | null>(null);
   const [viewLevelDropdownOpen, setViewLevelDropdownOpen] = useState(false);
   const [dropdownAlign, setDropdownAlign] = useState<'left' | 'right'>('left');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc'); // 默认倒序
   const viewLevelDropdownRef = useRef<HTMLDivElement>(null);
 
   // 获取国际化的视图等级选项
@@ -336,7 +342,7 @@ export function TimelineSidebar({
   const timelineLogs: TimelineLog[] = useMemo(() => {
     if (!messages || messages.length === 0) return [];
 
-    return messages.map((msg, i) => {
+    const logs = messages.map((msg, i) => {
       const rawContent = msg.summary || '';
       const msgTypeLower = msg.msgType?.toLowerCase() || '';
       const isUser = msgTypeLower === 'user';
@@ -370,7 +376,14 @@ export function TimelineSidebar({
         tooltipContent,
       };
     });
-  }, [messages]);
+
+    // 按时间戳排序
+    return logs.sort((a, b) => {
+      const timeA = new Date(a.timestamp).getTime();
+      const timeB = new Date(b.timestamp).getTime();
+      return sortOrder === 'desc' ? timeB - timeA : timeA - timeB;
+    });
+  }, [messages, sortOrder]);
 
   // 计算下拉框对齐方式
   useEffect(() => {
@@ -413,6 +426,11 @@ export function TimelineSidebar({
   // 切换自动刷新开关
   const toggleAutoRefresh = useCallback(() => {
     setAutoRefresh((prev) => !prev);
+  }, []);
+
+  // 切换排序顺序
+  const toggleSortOrder = useCallback(() => {
+    setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
   }, []);
 
   if (collapsed) {
@@ -472,7 +490,7 @@ export function TimelineSidebar({
           </button>
         </div>
 
-        {/* 第二行：视图等级 + 刷新按钮 */}
+        {/* 第二行：视图等级 + 排序 + 刷新按钮 */}
         <div className="flex items-center justify-end gap-1">
           {/* 视图等级按钮 */}
           <div className="relative" ref={viewLevelDropdownRef}>
@@ -526,6 +544,16 @@ export function TimelineSidebar({
               </div>
             )}
           </div>
+
+          {/* 排序按钮 */}
+          <button
+            onClick={toggleSortOrder}
+            disabled={contentLoading}
+            className="p-1.5 rounded transition-colors hover:bg-[var(--color-app-secondary)] disabled:opacity-50 disabled:cursor-not-allowed"
+            title={sortOrder === 'desc' ? t('timeline.sortDescending') : t('timeline.sortAscending')}
+          >
+            <ArrowUpDown className="h-3.5 w-3.5" style={{ color: 'var(--color-text-secondary)' }} />
+          </button>
 
           {/* 刷新按钮（自动刷新开关） */}
           <button

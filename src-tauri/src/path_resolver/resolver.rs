@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf, Component};
 use std::fs;
 use dirs::home_dir;
 use super::converter::WindowsPathConverter;
-use crate::session_type_detector::{SessionFileType, detect_session_type_by_filename, is_snapshot_file};
+use crate::session_type_detector::{SessionFileType, detect_session_type_by_filename};
 
 /// 路径解析错误
 #[derive(Debug, thiserror::Error)]
