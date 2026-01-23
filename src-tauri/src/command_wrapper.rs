@@ -134,6 +134,7 @@ pub fn get_command_not_found_error(command_name: &str, manager: &StartupManager)
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command_registry::CommandInfo;
     use crate::startup::create_startup_manager;
 
     #[test]

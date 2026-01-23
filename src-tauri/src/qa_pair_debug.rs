@@ -18,10 +18,12 @@ fn create_test_message(
         uuid: uuid.to_string(),
         parent_uuid: None,
         msg_type: msg_type.to_string(),
+        content_type: None,
         timestamp: Utc::now().to_rfc3339(),
         offset: 0,
         length: 100,
         summary: summary.map(|s| s.to_string()),
+        content: Some("test content".to_string()),
         parent_idx: None,
         created_at: Utc::now().to_rfc3339(),
     }

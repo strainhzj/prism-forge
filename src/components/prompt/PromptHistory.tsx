@@ -37,6 +37,7 @@ function debugLog(action: string, ...args: unknown[]) {
  */
 export function PromptHistory() {
   const { t } = useTranslation('promptLab');
+  const { t: tCommon, i18n } = useTranslation('common');
   debugLog('PromptHistory component mounted');
 
   // 直接使用 store，获取稳定的引用
@@ -109,12 +110,14 @@ export function PromptHistory() {
       const diffHours = Math.floor(diffMs / 3600000);
       const diffDays = Math.floor(diffMs / 86400000);
 
-      if (diffMins < 1) return '刚刚';
-      if (diffMins < 60) return `${diffMins} 分钟前`;
-      if (diffHours < 24) return `${diffHours} 小时前`;
-      if (diffDays < 7) return `${diffDays} 天前`;
+      if (diffMins < 1) return tCommon('projectSwitcher.time.justNow');
+      if (diffMins < 60) return tCommon('projectSwitcher.time.minutesAgo', { count: diffMins });
+      if (diffHours < 24) return tCommon('projectSwitcher.time.hoursAgo', { count: diffHours });
+      if (diffDays < 7) return tCommon('projectSwitcher.time.daysAgo', { count: diffDays });
 
-      return new Intl.DateTimeFormat('zh-CN', {
+      // 根据当前语言格式化日期
+      const locale = i18n.language === 'zh' ? 'zh-CN' : 'en-US';
+      return new Intl.DateTimeFormat(locale, {
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
@@ -318,7 +321,10 @@ export function PromptHistory() {
                     style={{ color: 'var(--color-text-secondary)' }}
                     onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-text-primary)'}
                     onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-secondary)'}
-                    onClick={(e) => handleToggleFavorite(history.id!, e)}
+                    onClick={(e) => {
+                      if (!history.id) return;
+                      handleToggleFavorite(history.id, e);
+                    }}
                   >
                     <Star
                       className={`h-4 w-4 ${
@@ -369,7 +375,10 @@ export function PromptHistory() {
                           {t('history.cancel')}
                         </AlertDialogCancel>
                         <AlertDialogAction
-                          onClick={(e) => handleDelete(history.id!, e)}
+                          onClick={(e) => {
+                            if (!history.id) return;
+                            handleDelete(history.id, e);
+                          }}
                           className="hover:opacity-90"
                           style={{
                             backgroundColor: 'var(--color-app-error-accent)',

@@ -31,7 +31,8 @@
     "empty": "暂无数据"
   },
   "alerts": {
-    "fillGoal": "请填写目标内容"
+    "fillGoal": "请填写目标内容",
+    "selectSessionFirst": "请先在首页选择一个会话"
   },
   "projectSwitcher": {
     "title": "切换项目",

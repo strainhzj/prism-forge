@@ -727,5 +727,48 @@ mod integration_tests {
             assert_eq!(msg.session_id, "my_test_session");
         }
     }
+
+    #[test]
+    fn test_message_order_preserved() {
+        let temp_dir = std::env::temp_dir();
+        let test_file_path = temp_dir.join("test_session_order.jsonl");
+
+        {
+            let mut file = std::fs::File::create(&test_file_path).unwrap();
+            writeln!(file, "{}", create_test_jsonl_content()).unwrap();
+        }
+
+        let file_path = test_file_path.to_str().unwrap();
+
+        let config = SessionParserConfig::default();
+        let parser = SessionParserService::new(config);
+        let result = parser.parse_session(file_path, "test_session");
+
+        let _ = std::fs::remove_file(&test_file_path);
+
+        assert!(result.is_ok());
+        let parse_result = result.unwrap();
+
+        // 验证消息顺序保持不变
+        let timestamps: Vec<&str> = parse_result.messages
+            .iter()
+            .map(|msg| msg.timestamp.as_str())
+            .collect();
+
+        let mut sorted_timestamps = timestamps.clone();
+        sorted_timestamps.sort();
+
+        assert_eq!(timestamps, sorted_timestamps);
+    }
+
+    #[test]
+    fn test_error_handling_file_not_found() {
+        let config = SessionParserConfig::default();
+        let parser = SessionParserService::new(config);
+        let result = parser.parse_session("/nonexistent/file.jsonl", "test_session");
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("会话文件不存在"));
+    }
 }
 

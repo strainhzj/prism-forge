@@ -314,10 +314,10 @@ impl PromptGenerator {
             };
 
             // 9. 构建引用会话信息
-            let (project_name, summary) = if language == "en" {
-                ("Current Session".to_string(), format!("Contains {} Q&A pairs", qa_pairs.len()))
-            } else {
+            let (project_name, summary) = if language == "zh" {
                 ("当前会话".to_string(), format!("包含 {} 个问答对", qa_pairs.len()))
+            } else {
+                ("Current Session".to_string(), format!("Contains {} Q&A pairs", qa_pairs.len()))
             };
 
             let referenced_sessions = vec![ReferencedSession {
@@ -418,11 +418,19 @@ impl PromptGenerator {
         let meta_prompt = self.config_manager.get_meta_prompt(language);
         let prompt_structure = self.config_manager.get_prompt_structure(language);
 
+        // 上下文摘要占位符（当前未实现上下文摘要功能）
+        let context_placeholder = if language == "zh" {
+            "无上下文摘要"
+        } else {
+            "No context summary"
+        };
+
         // 组装完整提示词
         prompt_structure
             .replace("{{meta_prompt}}", &meta_prompt)
             .replace("{{goal}}", goal)
             .replace("{{sessions}}", conversation)
+            .replace("{{context}}", context_placeholder)
     }
 
     /// 生成对话开始提示词（会话为空时，使用 LLM 生成）

@@ -60,13 +60,21 @@ function parseEnhancedPrompt(enhancedPrompt: string): {
     return { goalDivergence: null, cleanedPrompt: '' };
   }
 
-  // 查找"目标偏离程度"部分
-  const goalDivergenceRegex = /###\s*\*\*目标偏离程度\*\*\s*\n([\s\S]*?)(?=\n###\s*\*\*|\n##|$)/;
+  // 查找"目标偏离程度"部分（支持多语言）
+  const goalDivergencePatterns = [
+    '目标偏离程度',      // 中文
+    'Goal Divergence',   // 英文
+  ];
+  const goalDivergenceRegex = new RegExp(
+    `###\\s*\\*\\*(${goalDivergencePatterns.join('|')})\\*\\*\\s*\\n([\\s\\S]*?)(?=\\n###\\s*\\*\\*|\\n##|$)`,
+    'i'  // 大小写不敏感
+  );
   const match = enhancedPrompt.match(goalDivergenceRegex);
 
   if (match) {
     // 提取目标偏离程度内容（去掉标题）
-    const goalDivergence = match[1].trim();
+    // match[1] 是语言模式，match[2] 是实际内容
+    const goalDivergence = match[2] ? match[2].trim() : '';
 
     // 移除目标偏离程度部分，得到清理后的提示词
     const cleanedPrompt = enhancedPrompt
@@ -233,7 +241,7 @@ function App() {
 
     // 检查是否有当前会话
     if (!currentSessionFile) {
-      alert('请先在首页选择一个会话');
+      alert(t('alerts.selectSessionFirst', { ns: 'common' }));
       return;
     }
 

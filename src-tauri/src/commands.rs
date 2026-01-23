@@ -1923,7 +1923,7 @@ pub async fn compress_context(
 ///
 /// # 参数
 /// - `request`: 增强提示词请求
-/// - `language`: 语言标识（"zh" 或 "en"），可选，默认 "zh"
+/// - `language`: 语言标识（"zh" 或 "en"），可选，默认 "en"
 /// - `llm_manager`: LLM 客户端管理器
 #[tauri::command]
 pub async fn optimize_prompt(
@@ -1936,11 +1936,20 @@ pub async fn optimize_prompt(
     // 设置默认语言为英文
     let language = language.unwrap_or_else(|| "en".to_string());
 
-    // 调试：输出收到的请求
-    eprintln!("[optimize_prompt] 收到请求:");
-    eprintln!("  goal: {}", request.goal);
-    eprintln!("  current_session_file_path: {:?}", request.current_session_file_path);
-    eprintln!("  language: {}", language);
+    // 调试：输出收到的请求（仅开发环境）
+    #[cfg(debug_assertions)]
+    {
+        eprintln!("[optimize_prompt] 收到请求:");
+        eprintln!("  goal: {}", request.goal);
+        // 生产环境脱敏路径：仅显示文件名
+        let path_hint = request.current_session_file_path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("<无文件>");
+        eprintln!("  current_session_file_path: {}", path_hint);
+        eprintln!("  language: {}", language);
+    }
 
     // 创建提示词生成器
     let generator = PromptGenerator::new()
@@ -1956,12 +1965,15 @@ pub async fn optimize_prompt(
             message: format!("生成提示词失败: {}", e),
         })?;
 
-    // 调试：输出返回结果
-    eprintln!("[optimize_prompt] 返回结果: original_goal={}, enhanced_prompt长度={}, referenced_sessions数量={}",
-        result.original_goal,
-        result.enhanced_prompt.len(),
-        result.referenced_sessions.len()
-    );
+    // 调试：输出返回结果（仅开发环境）
+    #[cfg(debug_assertions)]
+    {
+        eprintln!("[optimize_prompt] 返回结果: original_goal={}, enhanced_prompt长度={}, referenced_sessions数量={}",
+            result.original_goal,
+            result.enhanced_prompt.len(),
+            result.referenced_sessions.len()
+        );
+    }
 
     Ok(result)
 }

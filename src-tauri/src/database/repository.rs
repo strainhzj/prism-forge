@@ -79,7 +79,7 @@ impl ApiProviderRepository {
         // 提取 aliases 值，避免闭包中的部分移动
         let aliases_value = provider.aliases.as_ref().unwrap_or(&"[]".to_string()).clone();
 
-        self.with_conn_inner(|conn| {
+        let id = self.with_conn_inner(|conn| {
             conn.execute(
                 "INSERT INTO api_providers (
                     provider_type, name, base_url, api_key_ref,
@@ -100,10 +100,6 @@ impl ApiProviderRepository {
                     now,
                 ],
             )?;
-            Ok(())
-        })?;
-
-        let id = self.with_conn_inner(|conn| {
             Ok(conn.last_insert_rowid())
         })?;
 
@@ -1464,7 +1460,7 @@ impl MonitoredDirectoryRepository {
 
         let now = Utc::now().to_rfc3339();
 
-        self.with_conn_inner(|conn| {
+        let id = self.with_conn_inner(|conn| {
             conn.execute(
                 "INSERT INTO monitored_directories (path, name, is_active, created_at, updated_at)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -1476,10 +1472,6 @@ impl MonitoredDirectoryRepository {
                     now,
                 ],
             )?;
-            Ok(())
-        })?;
-
-        let id = self.with_conn_inner(|conn| {
             Ok(conn.last_insert_rowid())
         })?;
 
@@ -2060,7 +2052,7 @@ impl PromptHistoryRepository {
     pub fn create_history(&mut self, mut history: crate::database::models::PromptGenerationHistory) -> Result<crate::database::models::PromptGenerationHistory> {
         let now = Utc::now().to_rfc3339();
 
-        self.with_conn_inner(|conn| {
+        let id = self.with_conn_inner(|conn| {
             conn.execute(
                 "INSERT INTO prompt_generation_history (
                     session_id, original_goal, enhanced_prompt,
@@ -2081,10 +2073,6 @@ impl PromptHistoryRepository {
                     if history.is_favorite { 1 } else { 0 },
                 ],
             )?;
-            Ok(())
-        })?;
-
-        let id = self.with_conn_inner(|conn| {
             Ok(conn.last_insert_rowid())
         })?;
 

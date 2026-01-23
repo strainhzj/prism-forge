@@ -212,8 +212,46 @@ if (import.meta.env.DEV) {
 ```
 
 ### 8.采用 ts-rs 的开发方式
+使用方式：
 
+```rust
+use ts_rs::TS;
 
+#[derive(TS)]
+#[ts(rename_all = "camelCase")]
+pub struct MyStruct {
+pub field_name: String,
+
+      #[ts(type = "number")]
+      pub timeout: u64,
+
+}
+```
+
+生成类型：
+
+```shell
+cargo run --bin generate_types
+```
+
+项目约定：
+
+- 生成的类型文件存放于 src/types/generated/ 目录
+- 类型生成入口：src-tauri/src/build_types.rs
+- 常用属性：
+  - #[ts(rename_all = "camelCase")] - 字段名转驼峰命名
+  - #[ts(type = "number")] - 覆盖默认类型推断
+- 前端使用时从 @/types/generated/xxx 导入
+
+注意事项：
+
+- 生成的 .ts 文件头部有注释标识，禁止手动编辑
+- 修改 Rust 结构体后必须重新运行生成命令
+- 新增需要导出的类型时，同步更新 build_types.rs
+
+### 9.避免敏感信息泄露
+
+避免api key、用户信息、目录地址等信息泄露，使用开发模式和生产模式隔离
 
 
 
