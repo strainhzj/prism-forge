@@ -498,11 +498,9 @@ function App() {
                         {/* Token 统计 */}
                         {analysisResult.tokenStats && (
                           <div className="flex items-center gap-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                            <span>Token: {analysisResult.tokenStats.compressedTokens} / {analysisResult.tokenStats.originalTokens}</span>
-                            {analysisResult.tokenStats.savingsPercentage > 0 && (
-                              <span style={{ color: 'var(--color-accent-blue)' }}>
-                                {t('messages.tokenStats.saved')} {analysisResult.tokenStats.savingsPercentage.toFixed(1)}%
-                              </span>
+                            <span>Token: {analysisResult.tokenStats.totalTokens}</span>
+                            {analysisResult.tokenStats.maxTokens && (
+                              <span> / {analysisResult.tokenStats.maxTokens}</span>
                             )}
                             {/* 置信度 - 临时隐藏，等待后续实现更完善的计算逻辑 */}
                             {/* <span>{t('messages.tokenStats.confidence')}: {(analysisResult.confidence * 100).toFixed(0)}%</span> */}

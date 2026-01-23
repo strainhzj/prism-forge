@@ -126,19 +126,6 @@ export function PromptHistory() {
   };
 
   /**
-   * 解析引用会话数
-   */
-  const getReferencedSessionCount = (history: PromptGenerationHistory): number => {
-    if (!history.referencedSessions) return 0;
-    try {
-      const sessions = JSON.parse(history.referencedSessions);
-      return Array.isArray(sessions) ? sessions.length : 0;
-    } catch {
-      return 0;
-    }
-  };
-
-  /**
    * 解析 Token 统计
    */
   const getTokenStats = (history: PromptGenerationHistory) => {
@@ -248,7 +235,6 @@ export function PromptHistory() {
       <div className="space-y-3 px-6 pb-6">
         {filteredHistories.map((history) => {
           const tokenStats = getTokenStats(history);
-          const sessionCount = getReferencedSessionCount(history);
 
           return (
             <Card
@@ -289,11 +275,11 @@ export function PromptHistory() {
                       {formatTime(history.createdAt)}
                     </div>
 
-                    {tokenStats && typeof tokenStats === 'object' && (
+                    {tokenStats && typeof tokenStats === 'object' && tokenStats.totalTokens !== undefined && (
                       <div className="flex items-center gap-1">
                         <span>📊</span>
                         <span>
-                          {tokenStats.inputTokens || 0}/{tokenStats.maxTokens || 5000} tokens
+                          {tokenStats.totalTokens} tokens
                         </span>
                       </div>
                     )}
@@ -311,13 +297,6 @@ export function PromptHistory() {
                           {t('history.confidence')} {Math.round(history.confidence * 100)}%
                         </Badge>
                       )}
-
-                    {sessionCount > 0 && (
-                      <div className="flex items-center gap-1">
-                        <span>💬</span>
-                        <span>{t('history.referencedSessions')} {sessionCount}</span>
-                      </div>
-                    )}
 
                     {history.llmProvider && (
                       <div className="flex items-center gap-1">

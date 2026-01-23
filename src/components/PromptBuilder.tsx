@@ -134,16 +134,6 @@ export function PromptBuilder({
   }, [result]);
 
   /**
-   * 计算节省百分比的颜色
-   */
-  const getSavingsColor = useCallback((percentage: number) => {
-    if (percentage >= 50) return 'text-green-500';
-    if (percentage >= 30) return 'text-blue-500';
-    if (percentage >= 10) return 'text-yellow-500';
-    return 'text-gray-500';
-  }, []);
-
-  /**
    * 计算置信度的颜色
    *
    * @deprecated 临时隐藏置信度展示，等待后续实现更完善的计算逻辑
@@ -246,17 +236,14 @@ export function PromptBuilder({
                 <p className="text-xs text-muted-foreground mb-1">Token 统计</p>
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-bold">
-                    {result.tokenStats.compressedTokens.toLocaleString()}
+                    {result.tokenStats.totalTokens.toLocaleString()}
                   </span>
-                  <span className="text-sm text-muted-foreground">
-                    / {result.tokenStats.originalTokens.toLocaleString()}
-                  </span>
+                  {result.tokenStats.maxTokens && (
+                    <span className="text-sm text-muted-foreground">
+                      / {result.tokenStats.maxTokens.toLocaleString()}
+                    </span>
+                  )}
                 </div>
-                {result.tokenStats.savingsPercentage > 0 && (
-                  <p className={cn('text-xs font-medium mt-1', getSavingsColor(result.tokenStats.savingsPercentage))}>
-                    节省 {result.tokenStats.savingsPercentage.toFixed(1)}%
-                  </p>
-                )}
               </div>
 
               {/* 引用会话 */}

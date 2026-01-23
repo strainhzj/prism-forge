@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use crate::llm::{LLMClientManager, interface::{Message, ModelParams}};
 use crate::database::repository::SessionRepository;
+use crate::database::models::TokenStats;
 use crate::tokenizer::TokenCounter;
 use crate::parser::view_level::{ViewLevel, MessageFilter, QAPair};
 use crate::session_parser::{SessionParserService, SessionParserConfig};
@@ -41,18 +42,9 @@ pub struct EnhancedPromptRequest {
     /// 可选：当前跟踪的会话文件路径（首页展示的会话）
     #[serde(rename = "currentSessionFilePath")]
     pub current_session_file_path: Option<String>,
-}
-
-/// Token 统计
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TokenStats {
-    /// 原始 Token 数
-    pub original_tokens: usize,
-    /// 压缩后 Token 数
-    pub compressed_tokens: usize,
-    /// 节省百分比
-    pub savings_percentage: f64,
+    /// 最大 Token 数（用于 Token 统计）
+    #[serde(rename = "maxTokens")]
+    pub max_tokens: Option<usize>,
 }
 
 /// 引用的会话信息（简化版本，不包含相似度）
@@ -333,9 +325,8 @@ impl PromptGenerator {
                 referenced_sessions,
                 enhanced_prompt,
                 token_stats: TokenStats {
-                    original_tokens,
-                    compressed_tokens,
-                    savings_percentage,
+                    total_tokens: compressed_tokens,
+                    max_tokens: request.max_tokens,
                 },
                 confidence: 1.0, // 当前会话置信度最高
             })
@@ -467,9 +458,8 @@ impl PromptGenerator {
             referenced_sessions,
             enhanced_prompt,
             token_stats: TokenStats {
-                original_tokens,
-                compressed_tokens,
-                savings_percentage,
+                total_tokens: compressed_tokens,
+                max_tokens: None, // 对话开始时没有 max_tokens
             },
             confidence: 0.7, // 对话开始的置信度（LLM 生成，置信度中等偏高）
         })
@@ -506,9 +496,8 @@ impl PromptGenerator {
             }],
             enhanced_prompt,
             token_stats: TokenStats {
-                original_tokens: 0,
-                compressed_tokens: goal.len(),
-                savings_percentage: 0.0,
+                total_tokens: goal.len(),
+                max_tokens: None,
             },
             confidence: 0.5, // 对话开始的置信度中等
         }

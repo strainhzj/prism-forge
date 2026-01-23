@@ -9,17 +9,13 @@
  */
 export interface TokenStats {
   /**
-   * 原始 Token 数
+   * 总 Token 数
    */
-  originalTokens: number;
+  totalTokens: number;
   /**
-   * 压缩后 Token 数
+   * 最大 Token 限制
    */
-  compressedTokens: number;
-  /**
-   * 节省百分比 (0.0 - 100.0)
-   */
-  savingsPercentage: number;
+  maxTokens?: number;
 }
 
 /**
@@ -85,6 +81,10 @@ export interface EnhancedPromptRequest {
    * 可选：当前跟踪的会话文件路径（首页展示的会话）
    */
   currentSessionFilePath?: string;
+  /**
+   * 最大 Token 数（用于 Token 统计）
+   */
+  maxTokens?: number;
 }
 
 /**

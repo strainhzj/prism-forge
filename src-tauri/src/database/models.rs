@@ -654,12 +654,13 @@ pub struct MetaTemplate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenStats {
-    /// Token 数量
-    pub count: usize,
+    /// 总 Token 数
+    #[serde(rename = "totalTokens")]
+    pub total_tokens: usize,
 
-    /// 估算费用 (USD)
-    #[serde(rename = "estimated_cost")]
-    pub estimated_cost: f64,
+    /// 最大 Token 限制
+    #[serde(rename = "maxTokens")]
+    pub max_tokens: Option<usize>,
 }
 /// 向量相似度搜索结果
 ///
@@ -825,13 +826,23 @@ mod tests_wave1 {
     #[test]
     fn test_token_stats_serialization() {
         let stats = TokenStats {
-            count: 1000,
-            estimated_cost: 0.002,
+            total_tokens: 1000,
+            max_tokens: Some(5000),
         };
 
         let json = serde_json::to_string(&stats).unwrap();
-        assert!(json.contains("\"count\":1000"));
-        assert!(json.contains("\"estimatedCost\":0.002"));
+        assert!(json.contains("\"totalTokens\":1000"));
+        assert!(json.contains("\"maxTokens\":5000"));
+
+        // 测试 max_tokens 为 None 的情况
+        let stats_no_max = TokenStats {
+            total_tokens: 800,
+            max_tokens: None,
+        };
+
+        let json_no_max = serde_json::to_string(&stats_no_max).unwrap();
+        assert!(json_no_max.contains("\"totalTokens\":800"));
+        assert!(json_no_max.contains("\"maxTokens\":null"));
     }
 
     // ==================== Message 序列化测试 ====================
