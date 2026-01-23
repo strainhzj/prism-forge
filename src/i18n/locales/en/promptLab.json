@@ -1,0 +1,74 @@
+{
+  "title": "Prompt Generation History",
+  "description": "Generate optimized AI prompts based on historical sessions to improve development efficiency",
+  "tabs": {
+    "builder": "Builder",
+    "library": "Prompt Library",
+    "history": "History"
+  },
+  "builder": {
+    "createNewPrompt": "Create New Prompt",
+    "recentHistory": "Recently Generated",
+    "guide": {
+      "title": "User Guide",
+      "step1": {
+        "title": "1. Describe Goal",
+        "description": "Clearly describe the task you want to complete, be as specific as possible"
+      },
+      "step2": {
+        "title": "2. AI Analysis",
+        "description": "The system will retrieve relevant historical sessions and analyze best practices"
+      },
+      "step3": {
+        "title": "3. Generate Prompt",
+        "description": "Get structured, optimized prompts ready for AI programming assistants"
+      },
+      "step4": {
+        "title": "4. Copy & Use",
+        "description": "One-click copy or save to prompt library for later use"
+      }
+    },
+    "examples": {
+      "title": "Example Goals",
+      "example1": "Implement user login",
+      "example2": "Create REST API endpoint",
+      "example3": "Add database migration script",
+      "example4": "Implement file upload component"
+    },
+    "stats": {
+      "title": "Session Statistics",
+      "generationCount": "Generations",
+      "averageSavings": "Avg. Savings"
+    }
+  },
+  "history": {
+    "title": "History",
+    "description": "View all your generated prompt history",
+    "noHistory": "No history yet",
+    "noHistoryHint": "Generated prompts will be automatically saved here",
+    "refresh": "Refresh",
+    "loadMore": "Load More",
+    "referencedSessions": "Referenced Sessions",
+    "tokens": "tokens",
+    "confidence": "Confidence",
+    "favorite": "Favorite",
+    "unfavorite": "Unfavorite",
+    "favorited": "Favorited",
+    "notFavorited": "Not Favorited",
+    "viewDetail": "View Detail",
+    "delete": "Delete",
+    "deleteConfirm": "Are you sure you want to delete this history record? This action cannot be undone.",
+    "deleteConfirmTitle": "Confirm Delete",
+    "cancel": "Cancel",
+    "confirmDelete": "Delete",
+    "originalGoal": "Original Goal",
+    "enhancedPrompt": "Enhanced Prompt",
+    "copy": "Copy",
+    "copied": "Copied",
+    "tokenStats": "Token Stats",
+    "createdAt": "Created At",
+    "llmInfo": "LLM Info",
+    "recentHistory": "Recently Generated",
+    "unknown": "Unknown"
+  }
+}

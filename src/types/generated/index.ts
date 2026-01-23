@@ -6,3 +6,4 @@ export type { MetaPromptConfig } from "./MetaPromptConfig";
 export type { OptimizerConfig } from "./OptimizerConfig";
 export type { PromptStructureConfig } from "./PromptStructureConfig";
 export type { SessionContextConfig } from "./SessionContextConfig";
+export type { PromptGenerationHistory } from "./PromptGenerationHistory";
