@@ -1013,3 +1013,51 @@ impl Settings {
         }
     }
 }
+
+// ============================================================================
+// 提示词生成历史模型 (Prompt Generation History)
+// ============================================================================
+
+/// 提示词生成历史记录模型
+///
+/// 用于保存每次"分析并生成提示词"的生成记录
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PromptGenerationHistory {
+    /// 主键 ID
+    pub id: Option<i64>,
+
+    /// 关联的会话 ID (可为空)
+    pub session_id: Option<String>,
+
+    /// 原始目标描述
+    pub original_goal: String,
+
+    /// 优化后的提示词
+    pub enhanced_prompt: String,
+
+    /// 引用的会话列表 (JSON 格式)
+    pub referenced_sessions: Option<String>,
+
+    /// Token 统计信息 (JSON 格式)
+    pub token_stats: Option<String>,
+
+    /// 置信度 (0.0 - 1.0)
+    pub confidence: Option<f32>,
+
+    /// 使用的 LLM 提供商
+    pub llm_provider: Option<String>,
+
+    /// 使用的 LLM 模型
+    pub llm_model: Option<String>,
+
+    /// 生成时使用的语言 (zh/en)
+    pub language: String,
+
+    /// 创建时间 (RFC3339)
+    pub created_at: String,
+
+    /// 是否收藏
+    pub is_favorite: bool,
+}

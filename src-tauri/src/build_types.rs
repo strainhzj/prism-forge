@@ -14,6 +14,7 @@ use prism_forge::optimizer::config::{
     PromptStructureConfig,
     SessionContextConfig,
 };
+use prism_forge::database::models::PromptGenerationHistory;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
@@ -27,5 +28,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     SessionContextConfig::export_to(output_dir.join("SessionContextConfig.ts"))?;
     CompressionConfig::export_to(output_dir.join("CompressionConfig.ts"))?;
     AdvancedConfig::export_to(output_dir.join("AdvancedConfig.ts"))?;
+    PromptGenerationHistory::export_to(output_dir.join("PromptGenerationHistory.ts"))?;
     Ok(())
 }

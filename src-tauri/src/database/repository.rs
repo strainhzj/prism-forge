@@ -2003,3 +2003,298 @@ mod view_level_preference_tests {
         assert_eq!(after_delete, None);
     }
 }
+
+// ============================================================================
+// 提示词生成历史数据仓库 (Prompt Generation History)
+// ============================================================================
+
+/// 提示词生成历史数据仓库
+///
+/// 提供 prompt_generation_history 表的 CRUD 操作
+pub struct PromptHistoryRepository {
+    conn: Arc<Mutex<Connection>>,
+}
+
+unsafe impl Send for PromptHistoryRepository {}
+unsafe impl Sync for PromptHistoryRepository {}
+
+impl PromptHistoryRepository {
+    /// 使用共享连接创建仓库实例
+    pub fn with_conn(conn: Arc<Mutex<Connection>>) -> Self {
+        Self { conn }
+    }
+
+    /// 从默认数据库路径创建仓库
+    pub fn from_default_db() -> Result<Self> {
+        let conn = crate::database::init::get_connection_shared()?;
+        Ok(Self::with_conn(conn))
+    }
+
+    /// 创建新的仓库实例（便捷方法）
+    pub fn new() -> Self {
+        Self::from_default_db().unwrap_or_else(|_| {
+            Self {
+                conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+            }
+        })
+    }
+
+    /// 辅助方法：获取连接锁
+    fn with_conn_inner<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&rusqlite::Connection) -> Result<R>,
+    {
+        let conn = self.conn.lock().map_err(|e| {
+            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
+        })?;
+        f(&conn)
+    }
+
+    /// 创建新的提示词生成历史记录
+    ///
+    /// # 参数
+    /// - `history`: 要创建的历史记录对象
+    ///
+    /// # 返回
+    /// 返回创建后的历史记录（包含生成的 id）
+    pub fn create_history(&mut self, mut history: crate::database::models::PromptGenerationHistory) -> Result<crate::database::models::PromptGenerationHistory> {
+        let now = Utc::now().to_rfc3339();
+
+        self.with_conn_inner(|conn| {
+            conn.execute(
+                "INSERT INTO prompt_generation_history (
+                    session_id, original_goal, enhanced_prompt,
+                    referenced_sessions, token_stats, confidence,
+                    llm_provider, llm_model, language, created_at, is_favorite
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![
+                    history.session_id,
+                    history.original_goal,
+                    history.enhanced_prompt,
+                    history.referenced_sessions,
+                    history.token_stats,
+                    history.confidence,
+                    history.llm_provider,
+                    history.llm_model,
+                    history.language,
+                    now,
+                    if history.is_favorite { 1 } else { 0 },
+                ],
+            )?;
+            Ok(())
+        })?;
+
+        let id = self.with_conn_inner(|conn| {
+            Ok(conn.last_insert_rowid())
+        })?;
+
+        history.id = Some(id);
+        history.created_at = now;
+        Ok(history)
+    }
+
+    /// 获取所有历史记录
+    ///
+    /// # 返回
+    /// 返回所有历史记录的列表，按创建时间倒序排列
+    pub fn get_all_histories(&self) -> Result<Vec<crate::database::models::PromptGenerationHistory>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, original_goal, enhanced_prompt,
+                        referenced_sessions, token_stats, confidence,
+                        llm_provider, llm_model, language, created_at, is_favorite
+                 FROM prompt_generation_history
+                 ORDER BY created_at DESC"
+            )?;
+
+            let histories = stmt.query_map([], |row| {
+                Ok(crate::database::models::PromptGenerationHistory {
+                    id: Some(row.get(0)?),
+                    session_id: row.get(1)?,
+                    original_goal: row.get(2)?,
+                    enhanced_prompt: row.get(3)?,
+                    referenced_sessions: row.get(4)?,
+                    token_stats: row.get(5)?,
+                    confidence: row.get(6)?,
+                    llm_provider: row.get(7)?,
+                    llm_model: row.get(8)?,
+                    language: row.get(9)?,
+                    created_at: row.get(10)?,
+                    is_favorite: row.get::<_, i32>(11)? == 1,
+                })
+            })?;
+
+            histories.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        })
+    }
+
+    /// 分页获取历史记录
+    ///
+    /// # 参数
+    /// - `offset`: 偏移量
+    /// - `limit`: 每页数量
+    ///
+    /// # 返回
+    /// 返回历史记录的列表，按创建时间倒序排列
+    pub fn get_histories_paginated(&self, offset: i64, limit: i64) -> Result<Vec<crate::database::models::PromptGenerationHistory>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, original_goal, enhanced_prompt,
+                        referenced_sessions, token_stats, confidence,
+                        llm_provider, llm_model, language, created_at, is_favorite
+                 FROM prompt_generation_history
+                 ORDER BY created_at DESC
+                 LIMIT ?1 OFFSET ?2"
+            )?;
+
+            let histories = stmt.query_map(params![limit, offset], |row| {
+                Ok(crate::database::models::PromptGenerationHistory {
+                    id: Some(row.get(0)?),
+                    session_id: row.get(1)?,
+                    original_goal: row.get(2)?,
+                    enhanced_prompt: row.get(3)?,
+                    referenced_sessions: row.get(4)?,
+                    token_stats: row.get(5)?,
+                    confidence: row.get(6)?,
+                    llm_provider: row.get(7)?,
+                    llm_model: row.get(8)?,
+                    language: row.get(9)?,
+                    created_at: row.get(10)?,
+                    is_favorite: row.get::<_, i32>(11)? == 1,
+                })
+            })?;
+
+            histories.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        })
+    }
+
+    /// 根据 ID 获取历史记录
+    ///
+    /// # 参数
+    /// - `id`: 历史 ID
+    pub fn get_history_by_id(&self, id: i64) -> Result<Option<crate::database::models::PromptGenerationHistory>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, original_goal, enhanced_prompt,
+                        referenced_sessions, token_stats, confidence,
+                        llm_provider, llm_model, language, created_at, is_favorite
+                 FROM prompt_generation_history
+                 WHERE id = ?1"
+            )?;
+
+            let mut rows = stmt.query(params![id])?;
+
+            if let Some(row) = rows.next()? {
+                Ok(Some(crate::database::models::PromptGenerationHistory {
+                    id: Some(row.get(0)?),
+                    session_id: row.get(1)?,
+                    original_goal: row.get(2)?,
+                    enhanced_prompt: row.get(3)?,
+                    referenced_sessions: row.get(4)?,
+                    token_stats: row.get(5)?,
+                    confidence: row.get(6)?,
+                    llm_provider: row.get(7)?,
+                    llm_model: row.get(8)?,
+                    language: row.get(9)?,
+                    created_at: row.get(10)?,
+                    is_favorite: row.get::<_, i32>(11)? == 1,
+                }))
+            } else {
+                Ok(None)
+            }
+        })
+    }
+
+    /// 删除历史记录
+    ///
+    /// # 参数
+    /// - `id`: 要删除的历史 ID
+    ///
+    /// # 返回
+    /// 返回删除的行数
+    pub fn delete_history(&self, id: i64) -> Result<usize> {
+        self.with_conn_inner(|conn| {
+            let rows = conn.execute(
+                "DELETE FROM prompt_generation_history WHERE id = ?1",
+                params![id],
+            )?;
+            Ok(rows)
+        })
+    }
+
+    /// 切换收藏状态
+    ///
+    /// # 参数
+    /// - `id`: 历史 ID
+    ///
+    /// # 返回
+    /// 返回更新后的收藏状态
+    pub fn toggle_favorite(&mut self, id: i64) -> Result<bool> {
+        self.with_conn_inner(|conn| {
+            // 获取当前状态
+            let current_is_favorite: i32 = conn.query_row(
+                "SELECT is_favorite FROM prompt_generation_history WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )?;
+
+            // 切换状态
+            let new_is_favorite = if current_is_favorite == 1 { 0 } else { 1 };
+
+            conn.execute(
+                "UPDATE prompt_generation_history SET is_favorite = ?1 WHERE id = ?2",
+                params![new_is_favorite, id],
+            )?;
+
+            Ok(new_is_favorite == 1)
+        })
+    }
+
+    /// 获取收藏的历史记录
+    ///
+    /// # 返回
+    /// 返回所有收藏的历史记录，按创建时间倒序排列
+    pub fn get_favorite_histories(&self) -> Result<Vec<crate::database::models::PromptGenerationHistory>> {
+        self.with_conn_inner(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id, session_id, original_goal, enhanced_prompt,
+                        referenced_sessions, token_stats, confidence,
+                        llm_provider, llm_model, language, created_at, is_favorite
+                 FROM prompt_generation_history
+                 WHERE is_favorite = 1
+                 ORDER BY created_at DESC"
+            )?;
+
+            let histories = stmt.query_map([], |row| {
+                Ok(crate::database::models::PromptGenerationHistory {
+                    id: Some(row.get(0)?),
+                    session_id: row.get(1)?,
+                    original_goal: row.get(2)?,
+                    enhanced_prompt: row.get(3)?,
+                    referenced_sessions: row.get(4)?,
+                    token_stats: row.get(5)?,
+                    confidence: row.get(6)?,
+                    llm_provider: row.get(7)?,
+                    llm_model: row.get(8)?,
+                    language: row.get(9)?,
+                    created_at: row.get(10)?,
+                    is_favorite: row.get::<_, i32>(11)? == 1,
+                })
+            })?;
+
+            histories.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        })
+    }
+
+    /// 统计历史记录数量
+    pub fn count_histories(&self) -> Result<i64> {
+        self.with_conn_inner(|conn| {
+            let count: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM prompt_generation_history",
+                [],
+                |row| row.get(0),
+            )?;
+            Ok(count)
+        })
+    }
+}

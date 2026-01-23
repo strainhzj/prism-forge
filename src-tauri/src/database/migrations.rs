@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 15;
+const CURRENT_DB_VERSION: i32 = 16;
 
 /// 初始化数据库
 ///
@@ -84,6 +84,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             13 => migrate_v13(conn)?,
             14 => migrate_v14(conn)?,
             15 => migrate_v15(conn)?,
+            16 => migrate_v16(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -814,6 +815,67 @@ pub fn migrate_v15_impl(conn: &mut Connection) -> Result<()> {
     } else {
         log::info!("ℹ️  content_type 列已存在，跳过迁移");
     }
+
+    Ok(())
+}
+
+/// 迁移到版本 16: 创建 prompt_generation_history 表
+///
+/// # 功能
+/// - 创建提示词生成历史记录表
+/// - 用于保存每次"分析并生成提示词"的生成记录
+#[cfg(test)]
+pub fn migrate_v16(conn: &mut Connection) -> Result<()> {
+    migrate_v16_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v16(conn: &mut Connection) -> Result<()> {
+    migrate_v16_impl(conn)
+}
+
+fn migrate_v16_impl(conn: &mut Connection) -> Result<()> {
+    // 创建提示词生成历史表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS prompt_generation_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT,
+            original_goal TEXT NOT NULL,
+            enhanced_prompt TEXT NOT NULL,
+            referenced_sessions TEXT,
+            token_stats TEXT,
+            confidence REAL,
+            llm_provider TEXT,
+            llm_model TEXT,
+            language TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            is_favorite INTEGER NOT NULL DEFAULT 0
+        );",
+        [],
+    )?;
+
+    // 索引: 按创建时间倒序查询
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_history_created_at
+         ON prompt_generation_history(created_at DESC);",
+        [],
+    )?;
+
+    // 索引: 按会话 ID 查询
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_history_session_id
+         ON prompt_generation_history(session_id);",
+        [],
+    )?;
+
+    // 索引: 按收藏状态查询
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_history_favorite
+         ON prompt_generation_history(is_favorite);",
+        [],
+    )?;
+
+    log::info!("✅ 已创建 prompt_generation_history 表");
 
     Ok(())
 }

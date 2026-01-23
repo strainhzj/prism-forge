@@ -23,6 +23,7 @@ import { useCurrentSessionActions, useCurrentSessionStore } from "./stores/useCu
 import { useCurrentLanguage } from "@/stores/useLanguageStore";
 import { cn } from "@/lib/utils";
 import type { EnhancedPrompt } from "@/types/prompt";
+import type { PromptGenerationHistory } from "@/types/generated";
 
 // ==================== 类型定义 ====================
 
@@ -254,6 +255,36 @@ function App() {
       debugLog('handleAnalyze', 'enhancedPrompt content:', result?.enhancedPrompt || 'EMPTY');
       debugLog('handleAnalyze', 'result keys:', result ? Object.keys(result) : 'NO KEYS');
       setAnalysisResult(result);
+
+      // 自动保存到提示词生成历史记录
+      try {
+        // 从文件路径提取 sessionId
+        const fileName = currentSessionFile.split(/[\\/]/).pop() || '';
+        const sessionIdMatch = fileName.match(/claude-([^.]+)\.jsonl$/);
+        const sessionId = sessionIdMatch ? sessionIdMatch[1] : fileName.replace(/\.jsonl$/, '');
+
+        // 构造历史记录对象
+        const history: PromptGenerationHistory = {
+          id: null,
+          sessionId: sessionId,
+          originalGoal: result.originalGoal,
+          enhancedPrompt: result.enhancedPrompt,
+          referencedSessions: JSON.stringify(result.referencedSessions),
+          tokenStats: JSON.stringify(result.tokenStats),
+          confidence: null,  // 置信度功能暂未启用
+          llmProvider: null,
+          llmModel: null,
+          language: currentLanguage,
+          createdAt: new Date().toISOString(),
+          isFavorite: false,
+        };
+
+        await invoke<PromptGenerationHistory>('cmd_save_prompt_history', { history });
+        debugLog('handleAnalyze', '保存到历史记录成功');
+      } catch (saveError) {
+        // 保存失败不影响生成结果，仅记录日志
+        debugLog('handleAnalyze', '保存到历史记录失败:', saveError);
+      }
     } catch (e) {
       // 更详细的错误处理
       let errorMsg = 'Unknown error';

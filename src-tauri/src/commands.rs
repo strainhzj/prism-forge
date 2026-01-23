@@ -3065,4 +3065,152 @@ pub fn open_filter_config_folder() -> Result<(), CommandError> {
     Ok(())
 }
 
+// ============================================================================
+// 提示词生成历史管理命令 (Prompt Generation History)
+// ============================================================================
+
+use crate::database::{PromptGenerationHistory, PromptHistoryRepository};
+
+/// 保存提示词生成历史
+///
+/// # 参数
+/// - `history`: 要保存的历史记录
+#[tauri::command]
+pub async fn cmd_save_prompt_history(
+    history: PromptGenerationHistory,
+) -> Result<PromptGenerationHistory, CommandError> {
+    let mut repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let created = repo.create_history(history).map_err(|e| CommandError {
+        message: format!("保存历史记录失败: {}", e),
+    })?;
+
+    Ok(created)
+}
+
+/// 获取所有提示词生成历史
+#[tauri::command]
+pub async fn cmd_get_prompt_history() -> Result<Vec<PromptGenerationHistory>, CommandError> {
+    let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let histories = repo.get_all_histories().map_err(|e| CommandError {
+        message: format!("获取历史记录失败: {}", e),
+    })?;
+
+    Ok(histories)
+}
+
+/// 分页获取提示词生成历史
+///
+/// # 参数
+/// - `offset`: 偏移量
+/// - `limit`: 每页数量
+#[tauri::command]
+pub async fn cmd_get_prompt_history_paginated(
+    offset: i64,
+    limit: i64,
+) -> Result<Vec<PromptGenerationHistory>, CommandError> {
+    let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let histories = repo.get_histories_paginated(offset, limit).map_err(|e| CommandError {
+        message: format!("获取历史记录失败: {}", e),
+    })?;
+
+    Ok(histories)
+}
+
+/// 根据 ID 获取提示词生成历史
+///
+/// # 参数
+/// - `id`: 历史 ID
+#[tauri::command]
+pub async fn cmd_get_prompt_history_by_id(
+    id: i64,
+) -> Result<Option<PromptGenerationHistory>, CommandError> {
+    let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let history = repo.get_history_by_id(id).map_err(|e| CommandError {
+        message: format!("获取历史记录失败: {}", e),
+    })?;
+
+    Ok(history)
+}
+
+/// 删除提示词生成历史
+///
+/// # 参数
+/// - `id`: 要删除的历史 ID
+#[tauri::command]
+pub async fn cmd_delete_prompt_history(
+    id: i64,
+) -> Result<(), CommandError> {
+    let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    repo.delete_history(id).map_err(|e| CommandError {
+        message: format!("删除历史记录失败: {}", e),
+    })?;
+
+    Ok(())
+}
+
+/// 切换提示词历史的收藏状态
+///
+/// # 参数
+/// - `id`: 历史 ID
+///
+/// # 返回
+/// 返回更新后的收藏状态
+#[tauri::command]
+pub async fn cmd_toggle_prompt_history_favorite(
+    id: i64,
+) -> Result<bool, CommandError> {
+    let mut repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let is_favorite = repo.toggle_favorite(id).map_err(|e| CommandError {
+        message: format!("切换收藏状态失败: {}", e),
+    })?;
+
+    Ok(is_favorite)
+}
+
+/// 获取收藏的提示词历史
+#[tauri::command]
+pub async fn cmd_get_favorite_prompt_history() -> Result<Vec<PromptGenerationHistory>, CommandError> {
+    let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let histories = repo.get_favorite_histories().map_err(|e| CommandError {
+        message: format!("获取收藏历史失败: {}", e),
+    })?;
+
+    Ok(histories)
+}
+
+/// 统计提示词历史数量
+#[tauri::command]
+pub async fn cmd_count_prompt_history() -> Result<i64, CommandError> {
+    let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
+
+    let count = repo.count_histories().map_err(|e| CommandError {
+        message: format!("统计历史记录失败: {}", e),
+    })?;
+
+    Ok(count)
+}
+
 

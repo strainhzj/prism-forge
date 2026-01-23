@@ -4,7 +4,7 @@
  * 左侧导航栏，包含主要页面导航
  */
 
-import { Home, Folder, Settings } from 'lucide-react';
+import { Home, Folder, Settings, FlaskConical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavItem } from './NavItem';
 import { cn } from '@/lib/utils';
@@ -22,6 +22,7 @@ export interface SideNavProps {
 const NAV_MENU_ITEMS = [
   { to: '/', icon: <Home className="h-5 w-5" />, labelKey: 'nav.home' },
   { to: '/sessions', icon: <Folder className="h-5 w-5" />, labelKey: 'nav.sessions' },
+  { to: '/prompt-lab', icon: <FlaskConical className="h-5 w-5" />, labelKey: 'nav.promptLab' },
   { to: '/settings', icon: <Settings className="h-5 w-5" />, labelKey: 'nav.settings' },
 ] as const;
 
