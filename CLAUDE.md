@@ -253,7 +253,135 @@ cargo run --bin generate_types
 
 避免api key、用户信息、目录地址等信息泄露，使用开发模式和生产模式隔离
 
+### 10.类型转换错误
 
+Rust 中的类型转换需要显式处理，特别是在 `String` → `Path` 转换时。
+
+```rust
+// ❌ 错误：String 没有 file_name() 方法
+let path_hint = request.current_session_file_path
+    .as_ref()
+    .and_then(|p| p.file_name())
+    .and_then(|n| n.to_str())
+    .unwrap_or("<无文件>");
+
+// ❌ 错误：临时值生命周期问题
+let path_hint = request.current_session_file_path
+    .as_ref()
+    .map(|p| std::path::PathBuf::from(p))
+    .as_ref()
+    .and_then(|p| p.file_name())
+    .and_then(|n| n.to_str())
+    .unwrap_or("<无文件>");
+
+// ✅ 正确：使用 if let 显式处理
+let path_hint = if let Some(ref path_str) = request.current_session_file_path {
+    std::path::Path::new(path_str)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("<无文件>")
+} else {
+    "<无文件>"
+};
+```
+
+**关键点：**
+- `String` → `Path` 使用 `Path::new(&str)` 获取引用
+- 避免链式调用中创建临时 `PathBuf`
+- 使用 `if let` 提高可读性和生命周期安全性
+
+### 11.避免陷入陷阱
+
+以下是开发中容易遇到的问题，需要特别注意：
+
+#### 11.1 非空断言滥用
+
+```typescript
+// ❌ 危险：运行时可能 panic
+onClick={(e) => handleToggleFavorite(history.id!, e)}
+
+// ✅ 安全：显式检查
+onClick={(e) => {
+  if (!history.id) return;
+  handleToggleFavorite(history.id, e);
+}}
+```
+
+#### 11.2 正则表达式捕获组索引变化
+
+```typescript
+// 添加捕获组后，索引会变化
+// 原始: /###\s*\*\*目标偏离程度\*\*\s*\n([\s\S]*?)(?=\n###\s*\*\*|\n##|$)/
+// match[1] = 内容
+
+// 新增: /###\s*\*\*(目标偏离程度\|Goal Divergence)\*\*\s*\n([\s\S]*?)(?=\n###\s*\*\*|\n##|$)/
+// match[1] = 语言模式, match[2] = 内容
+
+// ✅ 推荐：使用命名捕获组
+const regex = /###\s*\*\*(?<lang>目标偏离程度\|Goal Divergence)\*\*\s*\n(?<content>[\s\S]*?)(?=\n###\s*\*\*|\n##|$)/;
+const content = match.groups?.content ?? '';
+```
+
+#### 11.3 测试文件模块未声明
+
+```rust
+// ❌ 错误：独立测试文件未在 lib.rs 中声明
+// src-tauri/src/session_parser_tests.rs
+
+// ✅ 正确：合并到主文件的测试模块
+// src-tauri/src/session_parser.rs
+#[cfg(test)]
+mod integration_tests {
+    // 测试代码
+}
+```
+
+#### 11.4 数据库操作的竞态条件
+
+```rust
+// ❌ 错误：两次调用之间可能被其他线程插入
+self.with_conn_inner(|conn| conn.execute(...))?;
+let id = self.with_conn_inner(|conn| Ok(conn.last_insert_rowid()))?;
+
+// ✅ 正确：在同一连接中执行 INSERT 和获取 rowid
+let id = self.with_conn_inner(|conn| {
+    conn.execute(...)?;
+    Ok(conn.last_insert_rowid())
+})?;
+```
+
+#### 11.5 国际化逻辑错误
+
+```rust
+// ❌ 错误：非英非中语言会显示中文
+let (project_name, summary) = if language == "en" {
+    ("Current Session", format!("Contains {} Q&A pairs", qa_pairs.len()))
+} else {
+    ("当前会话", format!("包含 {} 个问答对", qa_pairs.len()))
+};
+
+// ✅ 正确：只有中文显示中文，其他语言默认英文
+let (project_name, summary) = if language == "zh" {
+    ("当前会话", format!("包含 {} 个问答对", qa_pairs.len()))
+} else {
+    ("Current Session", format!("Contains {} Q&A pairs", qa_pairs.len()))
+};
+```
+
+#### 11.6 条件编译误用
+
+```rust
+// ❌ 错误：cfg! 是运行时判断，代码仍会被编译
+if cfg!(debug_assertions) {
+    eprintln!("调试信息: {}", data);  // 生产环境仍包含此代码
+}
+
+// ✅ 正确：使用 #[cfg(debug_assertions)] 属性
+#[cfg(debug_assertions)]
+{
+    eprintln!("调试信息: {}", data);
+}
+```
 
 ## 技术栈
 
