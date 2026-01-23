@@ -10,7 +10,6 @@ import { useTranslation } from 'react-i18next';
 import { Home } from 'lucide-react';
 import { SideNav } from '@/components/navigation';
 import { PromptHistory } from '@/components/prompt/PromptHistory';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import './PromptLab.css';
 
 /**
@@ -56,7 +55,6 @@ export function PromptLab() {
               {t('description')}
             </p>
           </div>
-          <ThemeToggle />
         </div>
 
         {/* 历史记录内容 */}
