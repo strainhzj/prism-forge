@@ -38,7 +38,7 @@ import type {
   PromptLibraryItem,
   PromptCategory,
   PromptLibraryFilters
-} from '@/types/prompt';
+} from '@/types/promptLibrary';
 
 export interface PromptLibraryProps {
   /**

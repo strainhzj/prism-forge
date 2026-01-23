@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -22,7 +23,7 @@ use super::config::ConfigManager;
 /// 会话消息（用于 JSON 序列化）
 ///
 /// 将 QAPair 转换为统一的 JSON 格式，注入到提示词模板中
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionMessage {
     /// 消息文本内容
@@ -34,7 +35,7 @@ pub struct SessionMessage {
 }
 
 /// 增强提示词请求
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct EnhancedPromptRequest {
     /// 用户目标
@@ -48,7 +49,7 @@ pub struct EnhancedPromptRequest {
 }
 
 /// 引用的会话信息（简化版本，不包含相似度）
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ReferencedSession {
     /// 会话 ID
@@ -65,7 +66,7 @@ pub struct ReferencedSession {
 }
 
 /// 增强提示词结果
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct EnhancedPrompt {
     /// 原始目标

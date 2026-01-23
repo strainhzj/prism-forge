@@ -30,8 +30,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle
 } from '@/components/ui/alert-dialog';
-import type { PromptLibraryItem } from '@/types/prompt';
-import { isSavedPrompt } from '@/types/prompt';
+import type { PromptLibraryItem } from '@/types/promptLibrary';
+import { isSavedPrompt } from '@/types/promptLibrary';
 
 export interface PromptCardProps {
   /**

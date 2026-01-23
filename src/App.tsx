@@ -22,7 +22,7 @@ import {
 import { useCurrentSessionActions, useCurrentSessionStore } from "./stores/useCurrentSessionStore";
 import { useCurrentLanguage } from "@/stores/useLanguageStore";
 import { cn } from "@/lib/utils";
-import type { EnhancedPrompt } from "@/types/prompt";
+import type { EnhancedPrompt } from "@/types/generated";
 import type { PromptGenerationHistory } from "@/types/generated";
 
 // ==================== 类型定义 ====================

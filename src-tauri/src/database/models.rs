@@ -3,6 +3,7 @@
 //! 定义 API 提供商的数据结构，支持多种 LLM 服务
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 use anyhow::Result;
 
 /// API 提供商类型枚举
@@ -666,7 +667,7 @@ pub struct MetaTemplate {
 }
 
 /// Token 统计信息
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TokenStats {
     /// 总 Token 数

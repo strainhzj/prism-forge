@@ -16,7 +16,7 @@ import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useCurrentSessionFilePath, useCurrentSession } from '@/stores/useCurrentSessionStore';
 import { useCurrentLanguage } from '@/stores/useLanguageStore';
-import type { EnhancedPrompt, EnhancedPromptRequest } from '@/types/prompt';
+import type { EnhancedPrompt, EnhancedPromptRequest } from '@/types/generated';
 
 export interface PromptBuilderProps {
   /**
@@ -84,6 +84,7 @@ export function PromptBuilder({
       const request: EnhancedPromptRequest = {
         goal: goal.trim(),
         currentSessionFilePath,
+        maxTokens: null,
       };
 
       const response = await invoke<EnhancedPrompt>('optimize_prompt', {
