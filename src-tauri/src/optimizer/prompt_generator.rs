@@ -82,6 +82,12 @@ pub struct EnhancedPrompt {
     pub token_stats: TokenStats,
     /// 置信度 (0.0 - 1.0)
     pub confidence: f64,
+    /// 使用的 LLM 提供商
+    #[serde(rename = "llmProvider")]
+    pub llm_provider: Option<String>,
+    /// 使用的 LLM 模型
+    #[serde(rename = "llmModel")]
+    pub llm_model: Option<String>,
 }
 
 // ==================== 提示词生成器 ====================
@@ -320,6 +326,11 @@ impl PromptGenerator {
                 similarity_score: 1.0,
             }];
 
+            // 10. 获取 LLM 提供商和模型信息
+            let provider_info = llm_manager.get_active_provider_config()
+                .ok()
+                .map(|p| (p.provider_type.to_string(), p.effective_model().to_string()));
+
             Ok(EnhancedPrompt {
                 original_goal: request.goal,
                 referenced_sessions,
@@ -329,6 +340,8 @@ impl PromptGenerator {
                     max_tokens: request.max_tokens,
                 },
                 confidence: 1.0, // 当前会话置信度最高
+                llm_provider: provider_info.as_ref().map(|(p, _): &(String, String)| p.clone()),
+                llm_model: provider_info.as_ref().map(|(_, m): &(String, String)| m.clone()),
             })
         } else {
             // 没有当前会话，返回提示要求用户先选择会话
@@ -453,6 +466,11 @@ impl PromptGenerator {
             similarity_score: 1.0,
         }];
 
+        // 5. 获取 LLM 提供商和模型信息
+        let provider_info = llm_manager.get_active_provider_config()
+            .ok()
+            .map(|p| (p.provider_type.to_string(), p.effective_model().to_string()));
+
         Ok(EnhancedPrompt {
             original_goal: goal.to_string(),
             referenced_sessions,
@@ -462,10 +480,14 @@ impl PromptGenerator {
                 max_tokens: None, // 对话开始时没有 max_tokens
             },
             confidence: 0.7, // 对话开始的置信度（LLM 生成，置信度中等偏高）
+            llm_provider: provider_info.as_ref().map(|(p, _): &(String, String)| p.clone()),
+            llm_model: provider_info.as_ref().map(|(_, m): &(String, String)| m.clone()),
         })
     }
 
     /// 创建对话开始提示词（会话为空时，已弃用，保留用于兼容）
+    ///
+    /// 注意：此方法无法获取 LLM 提供商信息，因此 llm_provider 和 llm_model 将为 None
     #[deprecated(note = "使用 generate_conversation_starter_with_llm 代替")]
     fn create_conversation_starter_prompt(&self, goal: &str, session_file_path: &str, language: &str) -> EnhancedPrompt {
         // 从配置获取对话开始模板（默认使用中文）
@@ -500,6 +522,8 @@ impl PromptGenerator {
                 max_tokens: None,
             },
             confidence: 0.5, // 对话开始的置信度中等
+            llm_provider: None,  // 废弃方法无法获取提供商信息
+            llm_model: None,     // 废弃方法无法获取模型信息
         }
     }
 

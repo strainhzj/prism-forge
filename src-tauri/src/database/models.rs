@@ -27,6 +27,21 @@ pub enum ApiProviderType {
     OpenAICompatible,
 }
 
+impl std::fmt::Display for ApiProviderType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApiProviderType::OpenAI => write!(f, "OpenAI"),
+            ApiProviderType::Anthropic => write!(f, "Anthropic"),
+            ApiProviderType::Ollama => write!(f, "Ollama"),
+            ApiProviderType::XAI => write!(f, "xAI"),
+            ApiProviderType::Google => write!(f, "Google"),
+            ApiProviderType::GoogleVertex => write!(f, "Google Vertex AI"),
+            ApiProviderType::AzureOpenAI => write!(f, "Azure OpenAI"),
+            ApiProviderType::OpenAICompatible => write!(f, "OpenAI Compatible"),
+        }
+    }
+}
+
 impl ApiProviderType {
     /// 获取提供商类型的默认 base_url
     pub fn default_base_url(&self) -> &'static str {

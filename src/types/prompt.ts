@@ -67,6 +67,14 @@ export interface EnhancedPrompt {
    * @deprecated 临时隐藏置信度展示，等待后续实现更完善的计算逻辑
    */
   // confidence: number;
+  /**
+   * 使用的 LLM 提供商
+   */
+  llmProvider?: string | null;
+  /**
+   * 使用的 LLM 模型
+   */
+  llmModel?: string | null;
 }
 
 /**

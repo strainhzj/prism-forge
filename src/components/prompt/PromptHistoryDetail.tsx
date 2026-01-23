@@ -19,8 +19,6 @@ import {
   Copy,
   Check,
   Cpu,
-  MessageSquare,
-  BarChart3,
 } from 'lucide-react';
 import type { PromptGenerationHistory } from '@/types/generated';
 
@@ -87,7 +85,6 @@ export function PromptHistoryDetail({
     }
   };
 
-  const referencedSessions = parseJsonField(history.referencedSessions);
   const tokenStats = parseJsonField(history.tokenStats);
 
   return (
@@ -124,25 +121,6 @@ export function PromptHistoryDetail({
                 </span>
               </div>
 
-              {/* 置信度 */}
-              {history.confidence !== null && history.confidence !== undefined && (
-                <div className="flex items-center gap-2 text-sm">
-                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">{t('history.confidence')}:</span>
-                  <Badge variant="secondary">
-                    {Math.round(history.confidence * 100)}%
-                  </Badge>
-                </div>
-              )}
-
-              {/* 引用会话数 */}
-              {referencedSessions && Array.isArray(referencedSessions) && (
-                <div className="flex items-center gap-2 text-sm">
-                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">{t('history.referencedSessions')}:</span>
-                  <Badge variant="secondary">{referencedSessions.length}</Badge>
-                </div>
-              )}
             </div>
 
             <Separator />

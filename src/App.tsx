@@ -272,8 +272,8 @@ function App() {
           referencedSessions: JSON.stringify(result.referencedSessions),
           tokenStats: JSON.stringify(result.tokenStats),
           confidence: null,  // 置信度功能暂未启用
-          llmProvider: null,
-          llmModel: null,
+          llmProvider: result.llmProvider ?? null,
+          llmModel: result.llmModel ?? null,
           language: currentLanguage,
           createdAt: new Date().toISOString(),
           isFavorite: false,
