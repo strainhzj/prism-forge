@@ -2,12 +2,13 @@
  * 提示词历史记录组件
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Clock, Star, Trash2, Eye, Loader2 } from 'lucide-react';
+import { Clock, Star, Trash2, Eye, Loader2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,6 +54,7 @@ export function PromptHistory() {
     null,
   );
   const [detailOpen, setDetailOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     debugLog('useEffect triggered - fetching histories');
@@ -148,6 +150,23 @@ export function PromptHistory() {
     }
   };
 
+  /**
+   * 过滤后的历史记录列表
+   */
+  const filteredHistories = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return histories;
+    }
+
+    const query = searchQuery.toLowerCase().trim();
+    return histories.filter((history) => {
+      // 搜索范围：原始目标 + 优化后的提示词
+      const goalMatch = history.originalGoal.toLowerCase().includes(query);
+      const promptMatch = history.enhancedPrompt.toLowerCase().includes(query);
+      return goalMatch || promptMatch;
+    });
+  }, [histories, searchQuery]);
+
   return (
     <div className="space-y-4">
       {/* 头部 */}
@@ -177,10 +196,24 @@ export function PromptHistory() {
             className="ml-2 p-0 h-auto text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
             onClick={clearError}
           >
-            关闭
+            {t('history.cancel')}
           </Button>
         </div>
       )}
+
+      {/* 搜索框 */}
+      <div className="px-6">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
+          <Input
+            type="text"
+            placeholder={t('history.searchPlaceholder')}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+          />
+        </div>
+      </div>
 
       {/* 加载状态 */}
       {loading && histories.length === 0 && (
@@ -200,16 +233,33 @@ export function PromptHistory() {
         </div>
       )}
 
+      {/* 搜索无结果 */}
+      {!loading && histories.length > 0 && filteredHistories.length === 0 && (
+        <div className="text-center py-12">
+          <Search className="h-12 w-12 mx-auto mb-4 text-gray-400 dark:text-gray-600" />
+          <p className="text-gray-600 dark:text-gray-400">{t('history.noSearchResults')}</p>
+          <p className="text-sm mt-2 text-gray-400 dark:text-gray-600">
+            {t('history.noSearchResultsHint')}
+          </p>
+        </div>
+      )}
+
       {/* 历史记录列表 */}
       <div className="space-y-3 px-6 pb-6">
-        {histories.map((history) => {
+        {filteredHistories.map((history) => {
           const tokenStats = getTokenStats(history);
           const sessionCount = getReferencedSessionCount(history);
 
           return (
             <Card
               key={history.id?.toString()}
-              className="p-4 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer"
+              className="p-4 hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer"
+              style={{
+                backgroundColor: 'var(--color-bg-card)',
+                border: '1px solid var(--color-border-light)',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-app-secondary)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-bg-card)'}
               onClick={() => handleViewDetail(history)}
             >
               <div className="flex items-start justify-between gap-4">
@@ -220,14 +270,20 @@ export function PromptHistory() {
                     {history.isFavorite && (
                       <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
                     )}
-                    <span className="text-sm font-medium truncate text-gray-900 dark:text-gray-100">
+                    <span
+                      className="text-sm font-medium truncate"
+                      style={{ color: 'var(--color-text-primary)' }}
+                    >
                       {history.originalGoal.slice(0, 60)}
                       {history.originalGoal.length > 60 && '...'}
                     </span>
                   </div>
 
                   {/* 元信息 */}
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600 dark:text-gray-400">
+                  <div
+                    className="flex flex-wrap items-center gap-3 text-xs"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  >
                     <div className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       {formatTime(history.createdAt)}
@@ -246,7 +302,11 @@ export function PromptHistory() {
                       history.confidence !== undefined && (
                         <Badge
                           variant="secondary"
-                          className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+                          className="text-xs"
+                          style={{
+                            backgroundColor: 'var(--color-app-button-default)',
+                            color: 'var(--color-text-secondary)',
+                          }}
                         >
                           {t('history.confidence')} {Math.round(history.confidence * 100)}%
                         </Badge>
@@ -262,7 +322,7 @@ export function PromptHistory() {
                     {history.llmProvider && (
                       <div className="flex items-center gap-1">
                         <span>🤖</span>
-                        <span className="text-gray-600 dark:text-gray-400">
+                        <span style={{ color: 'var(--color-text-secondary)' }}>
                           {history.llmProvider} / {history.llmModel || 'Unknown'}
                         </span>
                       </div>
@@ -275,7 +335,10 @@ export function PromptHistory() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-text-primary)'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-secondary)'}
                     onClick={(e) => handleToggleFavorite(history.id!, e)}
                   >
                     <Star
@@ -292,28 +355,47 @@ export function PromptHistory() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-8 p-0 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        className="h-8 w-8 p-0"
+                        style={{ color: 'var(--color-app-error-text)' }}
+                        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-settings-error)'}
+                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-app-error-text)'}
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                    <AlertDialogContent
+                      className="border"
+                      style={{
+                        backgroundColor: 'var(--color-bg-card)',
+                        borderColor: 'var(--color-border-light)',
+                      }}
+                    >
                       <AlertDialogHeader>
-                        <AlertDialogTitle className="text-gray-900 dark:text-gray-100">
+                        <AlertDialogTitle style={{ color: 'var(--color-text-primary)' }}>
                           {t('history.deleteConfirmTitle')}
                         </AlertDialogTitle>
-                        <AlertDialogDescription className="text-gray-600 dark:text-gray-400">
+                        <AlertDialogDescription style={{ color: 'var(--color-text-secondary)' }}>
                           {t('history.deleteConfirm')}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel className="bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-600">
+                        <AlertDialogCancel
+                          className="hover:opacity-80"
+                          style={{
+                            backgroundColor: 'var(--color-app-button-default)',
+                            color: 'var(--color-text-primary)',
+                          }}
+                        >
                           {t('history.cancel')}
                         </AlertDialogCancel>
                         <AlertDialogAction
                           onClick={(e) => handleDelete(history.id!, e)}
-                          className="bg-red-600 dark:bg-red-700 text-white hover:bg-red-700 dark:hover:bg-red-600"
+                          className="hover:opacity-90"
+                          style={{
+                            backgroundColor: 'var(--color-app-error-accent)',
+                            color: '#FFFFFF',
+                          }}
                         >
                           {t('history.confirmDelete')}
                         </AlertDialogAction>
@@ -324,7 +406,10 @@ export function PromptHistory() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-text-primary)'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-secondary)'}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleViewDetail(history);
@@ -340,12 +425,19 @@ export function PromptHistory() {
       </div>
 
       {/* 加载更多 */}
-      {hasMore && histories.length > 0 && (
+      {hasMore && histories.length > 0 && !searchQuery && (
         <div className="flex justify-center pt-4 pb-6">
           <button
             onClick={handleLoadMore}
             disabled={loading}
-            className="px-6 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium"
+            className="px-6 py-2.5 border rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm font-medium hover:opacity-80"
+            style={{
+              backgroundColor: 'var(--color-bg-card)',
+              borderColor: 'var(--color-border-light)',
+              color: 'var(--color-text-primary)',
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-app-secondary)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'var(--color-bg-card)'}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>

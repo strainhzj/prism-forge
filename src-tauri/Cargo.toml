@@ -59,5 +59,9 @@ name = "test_vectors"
 path = "bin/test_vectors.rs"
 
 [[bin]]
+name = "test_prompt_history"
+path = "bin/test_prompt_history.rs"
+
+[[bin]]
 name = "generate_types"
 path = "src/build_types.rs"

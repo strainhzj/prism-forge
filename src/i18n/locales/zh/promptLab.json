@@ -69,6 +69,10 @@
     "createdAt": "创建时间",
     "llmInfo": "LLM 信息",
     "recentHistory": "最近生成",
-    "unknown": "未知"
+    "unknown": "未知",
+    "search": "搜索",
+    "searchPlaceholder": "搜索提示词或目标...",
+    "noSearchResults": "未找到匹配的结果",
+    "noSearchResultsHint": "请尝试其他关键词"
   }
 }

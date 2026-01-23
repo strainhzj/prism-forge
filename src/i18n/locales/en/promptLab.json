@@ -69,6 +69,10 @@
     "createdAt": "Created At",
     "llmInfo": "LLM Info",
     "recentHistory": "Recently Generated",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "search": "Search",
+    "searchPlaceholder": "Search prompts or goals...",
+    "noSearchResults": "No matching results found",
+    "noSearchResultsHint": "Please try other keywords"
   }
 }
