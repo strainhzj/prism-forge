@@ -172,12 +172,18 @@ export function PromptHistoryDetail({
                 <div className="space-y-2">
                   <h3 className="font-semibold text-sm">{t('history.tokenStats')}</h3>
                   <div className="grid grid-cols-2 gap-2 text-sm">
-                    {typeof tokenStats === 'object' && Object.entries(tokenStats).map(([key, value]) => (
-                      <div key={key} className="flex justify-between">
-                        <span className="text-muted-foreground">{key}:</span>
-                        <span className="font-mono">{String(value)}</span>
-                      </div>
-                    ))}
+                    {typeof tokenStats === 'object' && Object.entries(tokenStats)
+                      .filter(([key, value]) => {
+                        // 过滤掉 maxTokens 为 null 的项
+                        if (key === 'maxTokens' && value === null) return false;
+                        return true;
+                      })
+                      .map(([key, value]) => (
+                        <div key={key} className="flex justify-between">
+                          <span className="text-muted-foreground">{key}:</span>
+                          <span className="font-mono">{String(value)}</span>
+                        </div>
+                      ))}
                   </div>
                 </div>
               </>

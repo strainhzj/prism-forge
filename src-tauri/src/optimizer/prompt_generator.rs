@@ -328,9 +328,14 @@ impl PromptGenerator {
             }];
 
             // 10. 获取 LLM 提供商和模型信息
-            let provider_info = llm_manager.get_active_provider_config()
-                .ok()
+            let provider_config = llm_manager.get_active_provider_config()
+                .ok();
+            let provider_info = provider_config.as_ref()
                 .map(|p| (p.provider_type.to_string(), p.effective_model().to_string()));
+
+            // 获取 max_tokens：优先使用请求参数，否则使用提供商配置
+            let max_tokens = request.max_tokens
+                .or(provider_config.as_ref().and_then(|p| p.max_tokens.map(|v| v as usize)));
 
             Ok(EnhancedPrompt {
                 original_goal: request.goal,
@@ -338,7 +343,7 @@ impl PromptGenerator {
                 enhanced_prompt,
                 token_stats: TokenStats {
                     total_tokens: compressed_tokens,
-                    max_tokens: request.max_tokens,
+                    max_tokens,
                 },
                 confidence: 1.0, // 当前会话置信度最高
                 llm_provider: provider_info.as_ref().map(|(p, _): &(String, String)| p.clone()),
@@ -468,9 +473,14 @@ impl PromptGenerator {
         }];
 
         // 5. 获取 LLM 提供商和模型信息
-        let provider_info = llm_manager.get_active_provider_config()
-            .ok()
+        let provider_config = llm_manager.get_active_provider_config()
+            .ok();
+        let provider_info = provider_config.as_ref()
             .map(|p| (p.provider_type.to_string(), p.effective_model().to_string()));
+
+        // 获取 max_tokens：使用提供商配置
+        let max_tokens = provider_config.as_ref()
+            .and_then(|p| p.max_tokens.map(|v| v as usize));
 
         Ok(EnhancedPrompt {
             original_goal: goal.to_string(),
@@ -478,7 +488,7 @@ impl PromptGenerator {
             enhanced_prompt,
             token_stats: TokenStats {
                 total_tokens: compressed_tokens,
-                max_tokens: None, // 对话开始时没有 max_tokens
+                max_tokens,
             },
             confidence: 0.7, // 对话开始的置信度（LLM 生成，置信度中等偏高）
             llm_provider: provider_info.as_ref().map(|(p, _): &(String, String)| p.clone()),
