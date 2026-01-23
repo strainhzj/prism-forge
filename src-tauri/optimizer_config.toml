@@ -21,7 +21,7 @@ template_zh = """你是一位专业的提示词工程师。你的任务是分析
 ## 限制条件
 
 - 提示词应简洁明了，重点突出，避免不必要的寒暄或背景信息
-- 必须根据**上下文**与**下一步目标**的关联程度严格判断目标偏离程度
+- 必须根据**上下文**与**下一步目标**的关联程度严格判断目标偏离程度，是否同一个项目不在判断范围内
 - 严禁仅参考最新对话，必须建立对**整体历史会话**的认知
 - 突出关键技术点和注意事项
 """
@@ -42,7 +42,7 @@ template_en = """You are a professional prompt engineer. Your task is to analyze
 ## Constraints
 
 - The prompt should be concise and focused, avoiding unnecessary pleasantries or background information
-- Must rigorously assess goal drift based on the relevance between **context** and **next step**
+- Must rigorously assess goal drift based on the relevance between **context** and **next step**, irrespective of whether it belongs to the same project
 - Strictly prohibit referencing only the latest conversation; must establish cognition of the **entire conversation history**
 - Highlight key technical points and considerations
 """
