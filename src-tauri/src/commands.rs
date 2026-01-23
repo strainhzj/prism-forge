@@ -1942,11 +1942,14 @@ pub async fn optimize_prompt(
         eprintln!("[optimize_prompt] 收到请求:");
         eprintln!("  goal: {}", request.goal);
         // 生产环境脱敏路径：仅显示文件名
-        let path_hint = request.current_session_file_path
-            .as_ref()
-            .and_then(|p| p.file_name())
-            .and_then(|n| n.to_str())
-            .unwrap_or("<无文件>");
+        let path_hint = if let Some(ref path_str) = request.current_session_file_path {
+            let path = std::path::Path::new(path_str);
+            path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("<无文件>")
+        } else {
+            "<无文件>"
+        };
         eprintln!("  current_session_file_path: {}", path_hint);
         eprintln!("  language: {}", language);
     }
