@@ -2,7 +2,7 @@
 //!
 //! 测试应用启动和会话扫描的性能指标
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use std::fs;
 use std::path::PathBuf;
 use anyhow::Result;

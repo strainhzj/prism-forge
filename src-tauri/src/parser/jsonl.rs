@@ -150,7 +150,7 @@ impl JsonlParser {
     ///
     /// # 返回
     /// 返回解析结果或错误
-    pub fn parse_stream<F>(&mut self, mut callback: F) -> Result<()>
+    pub fn parse_stream<F>(&mut self, callback: F) -> Result<()>
     where
         F: FnMut(&JsonlEntry),
     {

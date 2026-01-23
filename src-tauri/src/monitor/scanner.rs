@@ -364,7 +364,7 @@ pub fn scan_sessions_with_timeout(timeout: Duration) -> Result<Vec<SessionMetada
     let (tx, rx) = std::sync::mpsc::channel();
 
     // 在后台线程执行扫描
-    let handle = std::thread::spawn(move || {
+    let _handle = std::thread::spawn(move || {
         let result = scan_session_files();
         // 发送结果，忽略发送错误（接收端可能已超时关闭）
         let _ = tx.send(result);

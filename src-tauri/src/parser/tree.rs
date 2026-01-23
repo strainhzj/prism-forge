@@ -151,7 +151,7 @@ impl MessageNode {
     ///
     /// 参照 optimizer 模块的 parse_session_file 逻辑处理
     fn extract_message_content(message_data: &Value, role: Option<&str>) -> (Option<String>, Option<String>) {
-        let role = role.unwrap_or("unknown");
+        let _role = role.unwrap_or("unknown");
 
         // 处理 content 字段（可能是字符串或数组）
         if let Some(content) = message_data.get("content") {
@@ -411,7 +411,7 @@ impl MessageTreeBuilder {
         for root_id in &builder.root_ids {
             if let Some(root_node) = builder.node_map.get(root_id) {
                 // 克隆根节点（因为我们需要修改它）
-                let mut built_root = builder.build_tree_iterative(root_node)?;
+                let built_root = builder.build_tree_iterative(root_node)?;
 
                 // 只保留 User 消息作为根节点（过滤掉其他类型的根节点）
                 if built_root.is_user_message() {

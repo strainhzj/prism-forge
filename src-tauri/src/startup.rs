@@ -12,7 +12,7 @@ use crate::command_registry::{
     CommandRegistry, CommandInfo,
     ModuleInitializer, Module, InitState,
     DiagnosticTool, DiagnosticReport,
-    EnhancedErrorHandler, DefaultLogger,
+    EnhancedErrorHandler,
 };
 use crate::command_registry::errors::{ModuleError, ModuleErrorType};
 

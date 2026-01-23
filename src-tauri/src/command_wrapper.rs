@@ -7,7 +7,7 @@
 //! **Validates: Requirements 2.1**
 
 use std::sync::{Arc, RwLock};
-use crate::command_registry::{CommandRegistry, CommandInfo, CommandStatus};
+use crate::command_registry::{CommandRegistry, CommandStatus};
 use crate::startup::StartupManager;
 
 /// Command execution tracker

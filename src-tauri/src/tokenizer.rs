@@ -2,7 +2,7 @@
 //!
 //! 使用 tiktoken-rs 提供准确的 Token 计数功能，支持多种 LLM 模型的编码方式
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 /// 支持的 Token 编码类型
 ///

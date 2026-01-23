@@ -918,7 +918,7 @@ impl From<BenchmarkResult> for BenchmarkResultResponse {
 }
 
 impl From<BenchmarkReport> for BenchmarkReportResponse {
-    fn from(mut report: BenchmarkReport) -> Self {
+    fn from(report: BenchmarkReport) -> Self {
         // 先生成 markdown 报告，避免所有权移动
         let markdown = report.to_markdown();
         Self {
@@ -2018,8 +2018,8 @@ pub fn update_meta_template(
 /// 从 optimizer_config.toml 重新加载配置文件，支持运行时热更新
 #[tauri::command]
 pub fn reload_optimizer_config() -> Result<String, CommandError> {
-    use crate::optimizer::prompt_generator::PromptGenerator;
-    use std::path::PathBuf;
+    
+    
 
     // 创建临时生成器来重新加载配置
     let config_path = std::env::current_dir()
@@ -2475,7 +2475,7 @@ pub async fn find_similar_sessions(
     session_id: String,
     top_k: Option<usize>,
     min_similarity: Option<f64>,
-    manager: State<'_, LLMClientManager>,
+    _manager: State<'_, LLMClientManager>,
 ) -> Result<Vec<SemanticSearchResult>, String> {
     use crate::database::get_connection_shared;
 

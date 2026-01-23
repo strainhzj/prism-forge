@@ -675,7 +675,7 @@ impl ExtractionEngine {
     }
 
     /// 仅提示词渲染节点（L3）
-    fn render_prompt_only_node(node: &MessageNode, depth: usize, output: &mut String) {
+    fn render_prompt_only_node(node: &MessageNode, _depth: usize, output: &mut String) {
         let role = node.role().unwrap_or_else(|| "unknown".to_string());
 
         if role == "user" {

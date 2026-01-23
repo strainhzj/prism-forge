@@ -2,7 +2,7 @@
 //!
 //! 负责将会话内容转换为向量并存储到数据库
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use tokio::sync::RwLock;
 use std::sync::Arc;
 use std::time::Duration;

@@ -5,7 +5,7 @@
 //! **注意**: 由于 fastembed 的依赖库 ort 在 Windows 上存在编译问题，
 //! 当前在 Windows 平台使用占位符实现。将来上游修复后会自动启用真实实现。
 
-use anyhow::{Result, Context};
+use anyhow::Result;
 
 #[cfg(not(target_os = "windows"))]
 use fastembed::{EmbeddingModel, InitOptions, ModelType};

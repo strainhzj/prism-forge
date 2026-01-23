@@ -305,7 +305,7 @@ impl PromptGenerator {
 
             // 8. 计算 Token 统计
             let compressed_tokens = self.token_counter.count_tokens(&enhanced_prompt)?;
-            let savings_percentage = if original_tokens > 0 && compressed_tokens <= original_tokens {
+            let _savings_percentage = if original_tokens > 0 && compressed_tokens <= original_tokens {
                 ((original_tokens - compressed_tokens) as f64 / original_tokens as f64) * 100.0
             } else if original_tokens > 0 {
                 -(((compressed_tokens - original_tokens) as f64 / original_tokens as f64) * 100.0)
@@ -362,7 +362,7 @@ impl PromptGenerator {
 
     /// 将问答对转换为 JSON 格式的会话消息列表
     fn format_qa_pairs_to_conversation(&self, qa_pairs: &[QAPair]) -> Result<(usize, String)> {
-        use crate::database::models::Message;
+        
 
         // 构建 SessionMessage 列表（时间正序）
         let session_messages: Vec<SessionMessage> = qa_pairs.iter().flat_map(|pair| {
@@ -429,7 +429,7 @@ impl PromptGenerator {
     async fn generate_conversation_starter_with_llm(
         &self,
         goal: &str,
-        session_file_path: &str,
+        _session_file_path: &str,
         session_id: &str,
         llm_manager: &LLMClientManager,
         language: &str,
@@ -455,8 +455,8 @@ impl PromptGenerator {
         // 3. 计算 Token 统计
         let compressed_tokens = self.token_counter.count_tokens(&enhanced_prompt)?;
         // 对话开始没有原始上下文，所以 original_tokens 设为 0
-        let original_tokens = 0;
-        let savings_percentage = 0.0;
+        let _original_tokens = 0;
+        let _savings_percentage = 0.0;
 
         // 4. 构建引用会话信息
         let (project_name, summary) = if language == "en" {

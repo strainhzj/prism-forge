@@ -217,7 +217,7 @@ impl SessionParserService {
         entry: &crate::parser::jsonl::JsonlEntry,
         session_id: &str,
     ) -> Option<Message> {
-        use crate::parser::jsonl::JsonlEntry;
+        
 
         // 🔧 修复：优先使用 type 字段，如果不存在或无效则尝试使用 role 字段
         // Claude Code 会话文件的 type 字段直接是角色名称 (user/assistant/system)
