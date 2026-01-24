@@ -38,6 +38,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "optimizer_config.toml"
+    ],
     "publisher": "PrismForge Team",
     "copyright": "Copyright © 2025 PrismForge Team",
     "category": "Developer Tool",
