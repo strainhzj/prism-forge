@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 16;
+const CURRENT_DB_VERSION: i32 = 17;
 
 /// 初始化数据库
 ///
@@ -85,6 +85,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             14 => migrate_v14(conn)?,
             15 => migrate_v15(conn)?,
             16 => migrate_v16(conn)?,
+            17 => migrate_v17(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -876,6 +877,143 @@ fn migrate_v16_impl(conn: &mut Connection) -> Result<()> {
     )?;
 
     log::info!("✅ 已创建 prompt_generation_history 表");
+
+    Ok(())
+}
+
+/// 迁移到版本 17: 创建 prompts 表
+///
+/// # 功能
+/// - 创建提示词管理表
+/// - 支持系统级和用户自定义提示词
+/// - 自动插入默认提示词
+#[cfg(test)]
+pub fn migrate_v17(conn: &mut Connection) -> Result<()> {
+    migrate_v17_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v17(conn: &mut Connection) -> Result<()> {
+    migrate_v17_impl(conn)
+}
+
+fn migrate_v17_impl(conn: &mut Connection) -> Result<()> {
+    // 1. 创建 prompts 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS prompts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            content TEXT NOT NULL,
+            description TEXT,
+            scenario TEXT NOT NULL DEFAULT 'session_analysis',
+            category TEXT DEFAULT 'general',
+            is_default INTEGER NOT NULL DEFAULT 0,
+            is_system INTEGER NOT NULL DEFAULT 0,
+            language TEXT NOT NULL DEFAULT 'zh',
+            version INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );",
+        [],
+    )?;
+
+    // 2. 创建索引
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prompts_scenario
+         ON prompts(scenario);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prompts_language
+         ON prompts(language);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prompts_is_default
+         ON prompts(is_default);",
+        [],
+    )?;
+
+    // 3. 插入默认提示词
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // 中文默认提示词
+    let default_prompt_zh = r#"你是一个 Claude Code 结对编程助手。请分析下方的会话日志（包含用户指令、Claude 的操作、以及工具返回的文件内容/报错）。
+
+任务：
+1. **判断焦点 (Focus Check)**：Claude 是否陷入了死循环？是否在反复读取无关文件？是否无视了报错？
+2. **生成提示词 (Prompt Generation)**：为用户写一段可以直接发送给 Claude 的**中文指令**。
+   - 如果 Claude 走偏了：写一段严厉的纠正指令。
+   - 如果 Claude 做得对：写一段推进下一步的指令，并引用刚才读取到的文件上下文（例如："基于刚才读取的 main.py..."）。
+
+输出格式：
+---
+【状态】: [正常 / 迷失 / 报错循环]
+【分析】: (简短分析当前情况)
+【建议提示词】:
+(你的 Prompt 内容)
+---
+"#;
+
+    conn.execute(
+        "INSERT OR IGNORE INTO prompts (
+            name, content, description, scenario, is_default, is_system, language,
+            version, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![
+            "session_analysis_zh",
+            default_prompt_zh,
+            "会话分析提示词（中文）",
+            "session_analysis",
+            1i32,  // is_default
+            1i32,  // is_system
+            "zh",
+            1i32,  // version
+            now.clone(),
+            now.clone()
+        ],
+    )?;
+
+    // 英文默认提示词
+    let default_prompt_en = r#"You are a Claude Code pair programming assistant. Please analyze the conversation log below (including user instructions, Claude's operations, and tool-returned file contents/errors).
+
+Tasks:
+1. **Focus Check**: Has Claude fallen into an infinite loop? Is it repeatedly reading irrelevant files? Is it ignoring errors?
+2. **Prompt Generation**: Write a **Chinese instruction** that the user can send directly to Claude.
+   - If Claude is off track: Write a stern corrective instruction.
+   - If Claude is doing well: Write an instruction to advance to the next step, referencing the file context just read (e.g., "Based on main.py just read...").
+
+Output Format:
+---
+[Status]: [Normal / Lost / Error Loop]
+[Analysis]: (Brief analysis of current situation)
+[Suggested Prompt]:
+(Your prompt content)
+---
+"#;
+
+    conn.execute(
+        "INSERT OR IGNORE INTO prompts (
+            name, content, description, scenario, is_default, is_system, language,
+            version, created_at, updated_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        params![
+            "session_analysis_en",
+            default_prompt_en,
+            "Session analysis prompt (English)",
+            "session_analysis",
+            1i32,  // is_default
+            1i32,  // is_system
+            "en",
+            1i32,  // version
+            now.clone(),
+            now.clone()
+        ],
+    )?;
+
+    log::info!("✅ 已创建 prompts 表并插入默认提示词");
 
     Ok(())
 }

@@ -1088,3 +1088,129 @@ pub struct PromptGenerationHistory {
     /// 是否收藏
     pub is_favorite: bool,
 }
+
+// ============================================================================
+// 提示词管理模型 (Prompt Management)
+// ============================================================================
+
+/// 提示词管理模型
+///
+/// 用于管理系统级和用户自定义提示词
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct Prompt {
+    /// 主键 ID
+    pub id: Option<i64>,
+
+    /// 提示词名称（唯一标识）
+    pub name: String,
+
+    /// 提示词内容
+    pub content: String,
+
+    /// 提示词描述
+    pub description: Option<String>,
+
+    /// 应用场景（session_analysis/code_review/code_generation/...）
+    pub scenario: String,
+
+    /// 分类（analysis/generation/review/general）
+    pub category: Option<String>,
+
+    /// 是否为默认提示词
+    #[serde(rename = "isDefault")]
+    pub is_default: bool,
+
+    /// 是否为系统内置（不可删除）
+    #[serde(rename = "isSystem")]
+    pub is_system: bool,
+
+    /// 语言标记（zh/en）
+    pub language: String,
+
+    /// 版本号（预留）
+    pub version: i32,
+
+    /// 创建时间（RFC3339）
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+
+    /// 最后更新时间（RFC3339）
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+impl Prompt {
+    /// 创建新的提示词
+    pub fn new(
+        name: String,
+        content: String,
+        scenario: String,
+        language: String,
+    ) -> Self {
+        let now = chrono::Utc::now().to_rfc3339();
+        Self {
+            id: None,
+            name,
+            content,
+            description: None,
+            scenario,
+            category: None,
+            is_default: false,
+            is_system: false,
+            language,
+            version: 1,
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+
+    /// 设置描述
+    pub fn with_description(mut self, description: String) -> Self {
+        self.description = Some(description);
+        self
+    }
+
+    /// 设置分类
+    pub fn with_category(mut self, category: String) -> Self {
+        self.category = Some(category);
+        self
+    }
+
+    /// 标记为默认提示词
+    pub fn with_default(mut self, is_default: bool) -> Self {
+        self.is_default = is_default;
+        self
+    }
+
+    /// 标记为系统内置
+    pub fn with_system(mut self, is_system: bool) -> Self {
+        self.is_system = is_system;
+        self
+    }
+
+    /// 验证提示词是否有效
+    pub fn validate(&self) -> Result<()> {
+        if self.name.trim().is_empty() {
+            return Err(anyhow::anyhow!("提示词名称不能为空"));
+        }
+
+        if self.content.trim().is_empty() {
+            return Err(anyhow::anyhow!("提示词内容不能为空"));
+        }
+
+        if !["session_analysis", "code_review", "code_generation", "general"].contains(&self.scenario.as_str()) {
+            return Err(anyhow::anyhow!(
+                "无效的 scenario: {}（必须是 session_analysis/code_review/code_generation/general 之一）",
+                self.scenario
+            ));
+        }
+
+        if !["zh", "en"].contains(&self.language.as_str()) {
+            return Err(anyhow::anyhow!("无效的 language: {}（必须是 zh 或 en）", self.language));
+        }
+
+        Ok(())
+    }
+}

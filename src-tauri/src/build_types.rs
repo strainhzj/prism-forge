@@ -20,7 +20,7 @@ use prism_forge::optimizer::prompt_generator::{
     ReferencedSession,
     SessionMessage,
 };
-use prism_forge::database::models::{PromptGenerationHistory, TokenStats};
+use prism_forge::database::models::{Prompt, PromptGenerationHistory, TokenStats};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
@@ -38,6 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     AdvancedConfig::export_to(output_dir.join("AdvancedConfig.ts"))?;
 
     // Database models
+    Prompt::export_to(output_dir.join("Prompt.ts"))?;
     PromptGenerationHistory::export_to(output_dir.join("PromptGenerationHistory.ts"))?;
     TokenStats::export_to(output_dir.join("TokenStats.ts"))?;
 
