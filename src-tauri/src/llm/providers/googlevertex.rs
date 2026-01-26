@@ -567,7 +567,8 @@ mod tests {
         let provider = GoogleVertexProvider::new(
             SecretString::new("test-key".to_string().into()),
             "https://aiplatform.googleapis.com".to_string(),
-        );
+        )
+        .expect("创建 GoogleVertexProvider 失败");
 
         let url = provider.get_endpoint_url("gemini-2.5-flash-lite", false);
         assert!(url.contains("aiplatform.googleapis.com"));
@@ -582,7 +583,8 @@ mod tests {
         let provider = GoogleVertexProvider::new(
             SecretString::new("test-key".to_string().into()),
             "https://aiplatform.googleapis.com".to_string(),
-        );
+        )
+        .expect("创建 GoogleVertexProvider 失败");
 
         let url = provider.get_endpoint_url("gemini-2.5-flash-lite", true);
         assert!(url.contains("streamGenerateContent"));

@@ -3113,6 +3113,7 @@ dependencies = [
  "once_cell",
  "open",
  "proptest",
+ "rand 0.8.5",
  "regex",
  "reqwest",
  "rusqlite",

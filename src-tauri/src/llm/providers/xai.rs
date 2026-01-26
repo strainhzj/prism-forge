@@ -456,7 +456,8 @@ mod property_tests {
             let provider = XAIProvider::new(
                 SecretString::new(api_key.clone().into()),
                 "https://api.x.ai/v1".to_string(),
-            );
+            )
+            .expect("创建 XAIProvider 失败");
 
             // Verify the API key is stored correctly
             prop_assert_eq!(provider.api_key.expose_secret(), &api_key);
@@ -474,7 +475,8 @@ mod property_tests {
             let provider = XAIProvider::new(
                 SecretString::new("test-key".to_string().into()),
                 "https://api.x.ai/v1".to_string(),
-            );
+            )
+            .expect("创建 XAIProvider 失败");
 
             let params = ModelParams::new(model.clone())
                 .with_temperature(temperature);
@@ -538,7 +540,8 @@ mod property_tests {
             let provider = XAIProvider::new(
                 SecretString::new("test-key".to_string().into()),
                 "https://api.x.ai/v1".to_string(),
-            );
+            )
+            .expect("创建 XAIProvider 失败");
 
             let params = ModelParams::new(model.clone())
                 .with_temperature(temperature);
@@ -567,7 +570,8 @@ mod property_tests {
             let provider = XAIProvider::new(
                 SecretString::new("test-key".to_string().into()),
                 "https://api.x.ai/v1".to_string(),
-            );
+            )
+            .expect("创建 XAIProvider 失败");
 
             let messages = vec![Message::user("test")];
             let params = ModelParams::new(model)
