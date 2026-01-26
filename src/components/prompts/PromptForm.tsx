@@ -297,12 +297,40 @@ export default function PromptForm({
               type="button"
               variant="secondary"
               onClick={() => onOpenChange(false)}
+              className="transition-all hover:scale-[1.02]"
+              style={{
+                border: '1px solid var(--color-border-light)',
+                backgroundColor: 'var(--color-bg-card)',
+                color: 'var(--color-text-primary)',
+                boxShadow: '0 0 0 var(--color-accent-warm-shadow)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.boxShadow = '0 0 8px var(--color-accent-warm-shadow)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 0 0 var(--color-accent-warm-shadow)';
+              }}
             >
               {t('cancel')}
             </Button>
             <Button
               type="submit"
               disabled={!isDirty || saveMutation.isPending}
+              className="transition-all hover:scale-[1.02]"
+              style={{
+                backgroundColor: 'var(--color-accent-warm)',
+                color: '#FFFFFF',
+                border: '1px solid var(--color-accent-warm)',
+                boxShadow: '0 0 10px var(--color-accent-warm-shadow)',
+                opacity: !isDirty || saveMutation.isPending ? 0.7 : 1,
+              }}
+              onMouseEnter={(e) => {
+                if (!isDirty || saveMutation.isPending) return;
+                e.currentTarget.style.boxShadow = '0 0 14px var(--color-accent-warm-shadow)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.boxShadow = '0 0 10px var(--color-accent-warm-shadow)';
+              }}
             >
               {saveMutation.isPending ? t('saving') : t('save')}
             </Button>

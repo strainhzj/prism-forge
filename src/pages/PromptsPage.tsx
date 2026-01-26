@@ -221,7 +221,7 @@ export default function PromptsPage() {
           onMouseEnter={(e) => {
             e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent-warm) 15%, var(--color-bg-card))';
             e.currentTarget.style.transform = 'translateY(-1px)';
-            e.currentTarget.style.boxShadow = '0 2px 8px color-mix(in srgb, var(--color-accent-warm) 25%, transparent)';
+            e.currentTarget.style.boxShadow = '0 0 10px var(--color-accent-warm-shadow)';
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = 'var(--color-bg-card)';
@@ -316,7 +316,22 @@ export default function PromptsPage() {
         </div>
 
         {/* 右侧：新建按钮 */}
-        <Button onClick={handleNew}>
+        <Button
+          onClick={handleNew}
+          className="transition-all hover:scale-[1.02]"
+          style={{
+            boxShadow: '0 0 0 var(--color-accent-warm-shadow)',
+            border: '1px solid var(--color-accent-warm)',
+            backgroundColor: 'var(--color-bg-card)',
+            color: 'var(--color-accent-warm)',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.boxShadow = '0 0 12px var(--color-accent-warm-shadow)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.boxShadow = '0 0 0 var(--color-accent-warm-shadow)';
+          }}
+        >
           + {t('newPrompt')}
         </Button>
       </div>

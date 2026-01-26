@@ -118,12 +118,46 @@ const PromptCard = memo(function PromptCard({
 
       {/* 操作按钮 */}
       <div className="flex gap-2">
-        <Button onClick={onEdit} variant="secondary" size="sm">
+        <Button
+          onClick={onEdit}
+          variant="secondary"
+          size="sm"
+          className="transition-all hover:scale-[1.02]"
+          style={{
+            boxShadow: '0 0 0 var(--color-accent-warm-shadow)',
+            border: '1px solid var(--color-app-primary-blue)',
+            backgroundColor: 'var(--color-bg-card)',
+            color: 'var(--color-app-primary-blue)',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.boxShadow = '0 0 10px var(--color-accent-warm-shadow)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.boxShadow = '0 0 0 var(--color-accent-warm-shadow)';
+          }}
+        >
           {t('edit')}
         </Button>
 
         {prompt.isSystem ? (
-          <Button onClick={onReset} variant="outline" size="sm">
+          <Button
+            onClick={onReset}
+            variant="outline"
+            size="sm"
+            className="transition-all hover:scale-[1.02]"
+            style={{
+              boxShadow: '0 0 0 var(--color-accent-warm-shadow)',
+              border: '1px solid var(--color-accent-warm)',
+              backgroundColor: 'var(--color-bg-card)',
+              color: 'var(--color-accent-warm)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = '0 0 10px var(--color-accent-warm-shadow)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = '0 0 0 var(--color-accent-warm-shadow)';
+            }}
+          >
             {t('resetToDefault')}
           </Button>
         ) : (
