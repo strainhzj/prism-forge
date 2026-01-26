@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -23,6 +23,16 @@ import {
 } from '@/components/ui/alert-dialog';
 
 /**
+ * 对话框类型常量
+ */
+const DIALOG_TYPE = {
+  DELETE: 'delete',
+  RESET: 'reset',
+} as const;
+
+type DialogType = typeof DIALOG_TYPE[keyof typeof DIALOG_TYPE];
+
+/**
  * 提示词管理页面
  *
  * 功能：
@@ -45,11 +55,11 @@ export default function PromptsPage() {
   // 确认对话框状态
   const [confirmDialog, setConfirmDialog] = useState<{
     show: boolean;
-    type: 'delete' | 'reset';
+    type: DialogType;
     data: number | string | null;
   }>({
     show: false,
-    type: 'delete',
+    type: DIALOG_TYPE.DELETE,
     data: null,
   });
 
@@ -64,13 +74,21 @@ export default function PromptsPage() {
     message: '',
   });
 
-  // 显示 Alert
-  const showAlert = (type: 'success' | 'error', message: string) => {
+  // 显示 Alert（使用 useCallback 避免不必要的重渲染）
+  const showAlert = useCallback((type: 'success' | 'error', message: string) => {
     setAlert({ show: true, type, message });
-    setTimeout(() => {
+  }, []);
+
+  // 自动隐藏 Alert（带清理）
+  useEffect(() => {
+    if (!alert.show) return;
+
+    const timer = setTimeout(() => {
       setAlert(prev => ({ ...prev, show: false }));
     }, 3000);
-  };
+
+    return () => clearTimeout(timer);
+  }, [alert.show]);
 
   // 搜索防抖（300ms 延迟）
   const debouncedSearch = useDebounce(searchQuery, 300);
@@ -130,7 +148,7 @@ export default function PromptsPage() {
   const handleDelete = (id: number | bigint) => {
     setConfirmDialog({
       show: true,
-      type: 'delete',
+      type: DIALOG_TYPE.DELETE,
       data: Number(id),
     });
   };
@@ -139,24 +157,30 @@ export default function PromptsPage() {
   const handleReset = (name: string) => {
     setConfirmDialog({
       show: true,
-      type: 'reset',
+      type: DIALOG_TYPE.RESET,
       data: name,
     });
   };
 
   // 确认操作
-  const handleConfirm = () => {
-    if (confirmDialog.type === 'delete' && typeof confirmDialog.data === 'number') {
-      deleteMutation.mutate(confirmDialog.data);
-    } else if (confirmDialog.type === 'reset' && typeof confirmDialog.data === 'string') {
-      resetMutation.mutate(confirmDialog.data);
+  const handleConfirm = async () => {
+    try {
+      if (confirmDialog.type === DIALOG_TYPE.DELETE && typeof confirmDialog.data === 'number') {
+        await deleteMutation.mutateAsync(confirmDialog.data);
+      } else if (confirmDialog.type === DIALOG_TYPE.RESET && typeof confirmDialog.data === 'string') {
+        await resetMutation.mutateAsync(confirmDialog.data);
+      }
+      // 只有 mutation 成功后才关闭对话框
+      setConfirmDialog({ show: false, type: DIALOG_TYPE.DELETE, data: null });
+    } catch (error) {
+      // 错误由 mutation 的 onError 处理，对话框保持打开
+      console.error('操作失败:', error);
     }
-    setConfirmDialog({ show: false, type: 'delete', data: null });
   };
 
   // 取消操作
   const handleCancelConfirm = () => {
-    setConfirmDialog({ show: false, type: 'delete', data: null });
+    setConfirmDialog({ show: false, type: DIALOG_TYPE.DELETE, data: null });
   };
 
   // 加载状态
@@ -385,10 +409,10 @@ export default function PromptsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5" style={{ color: 'var(--color-accent-warm)' }} />
-              {confirmDialog.type === 'delete' ? t('confirmDelete') : t('confirmReset')}
+              {confirmDialog.type === DIALOG_TYPE.DELETE ? t('confirmDelete') : t('confirmReset')}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {confirmDialog.type === 'delete'
+              {confirmDialog.type === DIALOG_TYPE.DELETE
                 ? t('confirmDeleteDescription')
                 : t('confirmResetDescription')}
             </AlertDialogDescription>
@@ -409,7 +433,7 @@ export default function PromptsPage() {
               onClick={handleConfirm}
               className="px-4 py-2 rounded-md transition-colors hover:opacity-90"
               style={
-                confirmDialog.type === 'delete'
+                confirmDialog.type === DIALOG_TYPE.DELETE
                   ? {
                       backgroundColor: 'var(--color-destructive)',
                       color: 'var(--color-destructive-foreground)',
@@ -419,8 +443,13 @@ export default function PromptsPage() {
                       color: '#FFFFFF',
                     }
               }
+              aria-label={
+                confirmDialog.type === DIALOG_TYPE.DELETE
+                  ? t('delete')
+                  : t('resetToDefault')
+              }
             >
-              {confirmDialog.type === 'delete' ? t('delete') : t('resetToDefault')}
+              {confirmDialog.type === DIALOG_TYPE.DELETE ? t('delete') : t('resetToDefault')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
