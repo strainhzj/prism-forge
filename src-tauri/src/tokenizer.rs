@@ -148,7 +148,9 @@ impl TokenCounter {
 
 impl Default for TokenCounter {
     fn default() -> Self {
-        Self::new().expect("无法创建默认 Token 计数器")
+        Self {
+            encoding_type: TokenEncodingType::Cl100kBase,
+        }
     }
 }
 

@@ -36,31 +36,31 @@ impl GoogleVertexProvider {
     /// # 参数
     /// - `api_key`: Google Cloud API Key
     /// - `base_url`: API 基础 URL
-    pub fn new(api_key: SecretString, base_url: String) -> Self {
+    pub fn new(api_key: SecretString, base_url: String) -> Result<Self> {
         let client = Client::builder()
             .build()
-            .expect("创建 HTTP 客户端失败");
+            .context("创建 HTTP 客户端失败")?;
 
-        Self {
+        Ok(Self {
             client,
             api_key,
             base_url,
             _api_key_ref: None,
-        }
+        })
     }
 
     /// 使用 API Key 引用创建提供商
-    pub fn with_ref(api_key: SecretString, base_url: String, api_key_ref: String) -> Self {
+    pub fn with_ref(api_key: SecretString, base_url: String, api_key_ref: String) -> Result<Self> {
         let client = Client::builder()
             .build()
-            .expect("创建 HTTP 客户端失败");
+            .context("创建 HTTP 客户端失败")?;
 
-        Self {
+        Ok(Self {
             client,
             api_key,
             base_url,
             _api_key_ref: Some(api_key_ref),
-        }
+        })
     }
 
     /// 将通用 Message 转换为 Google Vertex 格式

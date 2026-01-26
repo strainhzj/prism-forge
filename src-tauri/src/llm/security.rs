@@ -47,7 +47,7 @@ impl ApiKeyStorage {
     /// - **macOS**: 存储到 Keychain，需要用户授权
     /// - **Linux**: 存储到 Secret Service，依赖正在运行的密钥服务
     pub fn save_api_key(provider_id: i64, api_key: SecretString) -> Result<()> {
-        let entry = Self::get_entry(provider_id);
+        let entry = Self::get_entry(provider_id)?;
         
         #[cfg(debug_assertions)]
         eprintln!("[ApiKeyStorage] Saving API Key for provider_id={}", provider_id);
@@ -84,7 +84,7 @@ impl ApiKeyStorage {
     /// }
     /// ```
     pub fn get_api_key(provider_id: i64) -> Result<SecretString> {
-        let entry = Self::get_entry(provider_id);
+        let entry = Self::get_entry(provider_id)?;
 
         #[cfg(debug_assertions)]
         eprintln!("[ApiKeyStorage] Getting API Key for provider_id={}", provider_id);
@@ -107,7 +107,7 @@ impl ApiKeyStorage {
     /// # 返回
     /// 成功时返回 Ok(())，如果密钥不存在也返回 Ok(())
     pub fn delete_api_key(provider_id: i64) -> Result<()> {
-        let entry = Self::get_entry(provider_id);
+        let entry = Self::get_entry(provider_id)?;
 
         // 尝试删除，如果密钥不存在也不报错
         match entry.delete_credential() {
@@ -122,8 +122,10 @@ impl ApiKeyStorage {
     /// # 参数
     /// - `provider_id`: 提供商 ID
     pub fn has_api_key(provider_id: i64) -> bool {
-        let entry = Self::get_entry(provider_id);
-        entry.get_password().is_ok()
+        match Self::get_entry(provider_id) {
+            Ok(entry) => entry.get_password().is_ok(),
+            Err(_) => false,
+        }
     }
 
     /// 更新 API Key（如果已存在则覆盖）
@@ -158,12 +160,12 @@ impl ApiKeyStorage {
     /// # 格式
     /// - Service: `prism-forge-llm-provider-{id}`
     /// - Username: `provider-{id}`
-    fn get_entry(provider_id: i64) -> Entry {
+    fn get_entry(provider_id: i64) -> Result<Entry> {
         let service = format!("{}provider-{}", KEYRING_SERVICE_PREFIX, provider_id);
         let username = format!("provider-{}", provider_id);
 
         Entry::new(&service, &username)
-            .expect("创建 keyring Entry 失败")
+            .with_context(|| format!("创建 keyring Entry 失败 (provider_id={})", provider_id))
     }
 
     /// 获取密钥库类型信息（用于调试）
