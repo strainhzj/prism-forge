@@ -1,0 +1,64 @@
+{
+  "title": "提示词管理",
+  "description": "管理系统提示词和用户自定义提示词",
+  "loading": "加载中...",
+  "errorLoading": "加载失败",
+  "newPrompt": "新建提示词",
+  "editPrompt": "编辑提示词",
+  "save": "保存",
+  "saving": "保存中...",
+  "cancel": "取消",
+  "delete": "删除",
+  "edit": "编辑",
+  "resetToDefault": "重置为默认",
+  "confirmDelete": "确定要删除这个提示词吗？",
+  "confirmReset": "确定要重置为默认提示词吗？当前修改将丢失。",
+  "noPromptsFound": "未找到提示词",
+  "searchPlaceholder": "搜索提示词名称或描述...",
+  "default": "默认",
+  "system": "系统",
+  "scenario": "场景",
+  "version": "版本",
+  "lastUpdated": "最后更新",
+  "fields": {
+    "name": "提示词名称",
+    "content": "提示词内容",
+    "description": "描述",
+    "scenario": "应用场景",
+    "category": "分类",
+    "language": "语言"
+  },
+  "placeholders": {
+    "name": "例如: my_custom_prompt",
+    "content": "输入提示词内容...",
+    "description": "简要描述这个提示词的用途"
+  },
+  "errors": {
+    "nameRequired": "提示词名称不能为空",
+    "contentRequired": "提示词内容不能为空",
+    "scenarioRequired": "请选择应用场景",
+    "languageRequired": "请选择语言"
+  },
+  "filters": {
+    "allScenarios": "全部场景",
+    "allLanguages": "全部语言",
+    "zh": "中文",
+    "en": "English"
+  },
+  "scenarios": {
+    "session_analysis": "会话分析"
+  },
+  "success": {
+    "created": "提示词已创建",
+    "updated": "提示词已更新",
+    "deleted": "提示词已删除",
+    "reset": "提示词已重置为默认"
+  },
+  "error": {
+    "createFailed": "创建提示词失败",
+    "updateFailed": "更新提示词失败",
+    "deleteFailed": "删除提示词失败",
+    "resetFailed": "重置提示词失败",
+    "loadFailed": "加载提示词列表失败"
+  }
+}

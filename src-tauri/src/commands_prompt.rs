@@ -11,6 +11,7 @@ use crate::database::models::Prompt;
 pub async fn cmd_get_prompts(
     scenario: Option<String>,
     language: Option<String>,
+    search: Option<String>,
 ) -> Result<Vec<Prompt>, String> {
     let conn = get_connection_shared()
         .map_err(|e| format!("获取数据库连接失败: {}", e))?;
@@ -22,6 +23,7 @@ pub async fn cmd_get_prompts(
         &conn_guard,
         scenario.as_deref(),
         language.as_deref(),
+        search.as_deref(),
     )
     .map_err(|e| e.to_string())
 }

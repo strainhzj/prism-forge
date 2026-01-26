@@ -75,10 +75,17 @@ impl PromptRepository {
     }
 
     /// 获取所有提示词
+    ///
+    /// # 参数
+    /// - `conn`: 数据库连接
+    /// - `scenario`: 可选的场景过滤条件
+    /// - `language`: 可选的语言过滤条件
+    /// - `search`: 可选的搜索关键词（匹配名称或描述）
     pub fn list(
         conn: &Connection,
         scenario: Option<&str>,
         language: Option<&str>,
+        search: Option<&str>,
     ) -> Result<Vec<Prompt>> {
         let mut query = "SELECT id, name, content, description, scenario, category,
                             is_default, is_system, language, version, created_at, updated_at
@@ -95,6 +102,14 @@ impl PromptRepository {
         if let Some(language) = language {
             query.push_str(" AND language = ?");
             params.push(language.to_string());
+        }
+
+        if let Some(search_term) = search {
+            // 使用 LIKE 进行模糊搜索（名称或描述中包含关键词）
+            query.push_str(" AND (name LIKE ? OR description LIKE ?)");
+            let search_pattern = format!("%{}%", search_term);
+            params.push(search_pattern.clone());
+            params.push(search_pattern);
         }
 
         query.push_str(" ORDER BY is_default DESC, created_at DESC");
