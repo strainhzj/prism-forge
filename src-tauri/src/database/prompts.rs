@@ -183,8 +183,10 @@ impl PromptRepository {
         Ok(())
     }
 
-    /// 获取默认提示词内容（硬编码常量）
-    fn get_default_content(name: &str) -> Result<String> {
+    /// 获取默认提示词内容（硬编码常量）- 公共方法
+    ///
+    /// 此方法现在是公共的，可供其他模块（如 optimizer）使用
+    pub fn get_default_content(name: &str) -> Result<String> {
         match name {
             "session_analysis_zh" => {
                 Ok(r#"你是一个 Claude Code 结对编程助手。请分析下方的会话日志（包含用户指令、Claude 的操作、以及工具返回的文件内容/报错）。
@@ -223,6 +225,57 @@ Output Format:
 "#.to_string())
             }
             _ => Err(anyhow::anyhow!("未知的默认提示词名称: {}", name)),
+        }
+    }
+
+    /// 获取 Fallback 提示词内容（公共方法）
+    ///
+    /// 当数据库中没有提示词时，使用此方法获取硬编码的 fallback 内容
+    ///
+    /// # 参数
+    /// - `language`: 语言标识（"zh" 或 "en"）
+    ///
+    /// # 返回
+    /// 返回硬编码的提示词内容
+    pub fn get_fallback_prompt_content(language: &str) -> String {
+        match language {
+            "en" => {
+                r#"You are a Claude Code pair programming assistant. Please analyze the conversation log below (including user instructions, Claude's operations, and tool-returned file contents/errors).
+
+Tasks:
+1. **Focus Check**: Has Claude fallen into an infinite loop? Is it repeatedly reading irrelevant files? Is it ignoring errors?
+2. **Prompt Generation**: Write a **Chinese instruction** that the user can send directly to Claude.
+   - If Claude is off track: Write a stern corrective instruction.
+   - If Claude is doing well: Write an instruction to advance to the next step, referencing the file context just read (e.g., "Based on main.py just read...").
+
+Output Format:
+---
+[Status]: [Normal / Lost / Error Loop]
+[Analysis]: (Brief analysis of current situation)
+[Suggested Prompt]:
+(Your prompt content)
+---
+"#.to_string()
+            }
+            _ => {
+                // 默认中文
+                r#"你是一个 Claude Code 结对编程助手。请分析下方的会话日志（包含用户指令、Claude 的操作、以及工具返回的文件内容/报错）。
+
+任务：
+1. **判断焦点 (Focus Check)**：Claude 是否陷入了死循环？是否在反复读取无关文件？是否无视了报错？
+2. **生成提示词 (Prompt Generation)**：为用户写一段可以直接发送给 Claude 的**中文指令**。
+   - 如果 Claude 走偏了：写一段严厉的纠正指令。
+   - 如果 Claude 做得对：写一段推进下一步的指令，并引用刚才读取到的文件上下文（例如："基于刚才读取的 main.py..."）。
+
+输出格式：
+---
+【状态】: [正常 / 迷失 / 报错循环]
+【分析】: (简短分析当前情况)
+【建议提示词】:
+(你的 Prompt 内容）
+---
+"#.to_string()
+            }
         }
     }
 

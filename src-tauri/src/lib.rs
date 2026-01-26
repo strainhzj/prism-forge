@@ -4,6 +4,7 @@ pub mod perf;
 mod llm;
 pub mod database;
 mod commands;
+mod commands_prompt;
 mod tokenizer;
 mod monitor;
 mod parser;
@@ -164,6 +165,12 @@ pub fn run() {
             cmd_toggle_prompt_history_favorite,
             cmd_get_favorite_prompt_history,
             cmd_count_prompt_history,
+            // 提示词管理命令
+            commands_prompt::cmd_get_prompts,
+            commands_prompt::cmd_get_prompt,
+            commands_prompt::cmd_save_prompt,
+            commands_prompt::cmd_delete_prompt,
+            commands_prompt::cmd_reset_default_prompt,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

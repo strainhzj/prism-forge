@@ -7,6 +7,7 @@ export type { OptimizerConfig } from "./OptimizerConfig";
 export type { PromptStructureConfig } from "./PromptStructureConfig";
 export type { SessionContextConfig } from "./SessionContextConfig";
 export type { PromptGenerationHistory } from "./PromptGenerationHistory";
+export type { Prompt } from "./Prompt";
 
 // Prompt generator types
 export type { EnhancedPrompt } from "./EnhancedPrompt";

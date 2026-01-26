@@ -35,6 +35,7 @@ pub struct ParsedEvent {
 pub struct OptimizeRequest {
     pub session_file: String,
     pub goal: String,
+    pub language: String,
 }
 
 /// 优化结果
@@ -144,24 +145,14 @@ impl PromptOptimizer {
             format!("[{}] {}:\n{}", e.time, e.role.to_uppercase(), e.content)
         }).collect::<Vec<String>>().join("\n--------------------\n");
 
-        // 3. 构建系统提示词
-        let system_prompt = r#"
-你是一个 Claude Code 结对编程助手。请分析下方的会话日志（包含用户指令、Claude 的操作、以及工具返回的文件内容/报错）。
+        // 3. 构建系统提示词（从数据库加载）
+        let system_prompt = Self::load_system_prompt(&request.language)
+            .unwrap_or_else(|e| {
+                #[cfg(debug_assertions)]
+                eprintln!("⚠️  加载系统提示词失败: {}，使用 fallback 提示词", e);
 
-任务：
-1. **判断焦点 (Focus Check)**：Claude 是否陷入了死循环？是否在反复读取无关文件？是否无视了报错？
-2. **生成提示词 (Prompt Generation)**：为用户写一段可以直接发送给 Claude 的**中文指令**。
-   - 如果 Claude 走偏了：写一段严厉的纠正指令。
-   - 如果 Claude 做得对：写一段推进下一步的指令，并引用刚才读取到的文件上下文（例如："基于刚才读取的 main.py..."）。
-
-输出格式：
----
-【状态】: [正常 / 迷失 / 报错循环]
-【分析】: (简短分析当前情况)
-【建议提示词】:
-(你的 Prompt 内容)
----
-"#;
+                Self::get_fallback_prompt(&request.language)
+            });
 
         let full_text = format!(
             "{}\n\n== 会话日志 ==\n{}\n\n== 用户当前目标 ==\n{}",
@@ -406,6 +397,69 @@ impl PromptOptimizer {
             status,
             analysis,
             suggested_prompt,
+        }
+    }
+
+    /// 从数据库加载系统提示词
+    ///
+    /// 如果数据库中没有，使用硬编码的 fallback 提示词
+    fn load_system_prompt(language: &str) -> Result<String> {
+        use crate::database::get_connection_shared;
+        use crate::database::prompts::PromptRepository;
+
+        let conn = get_connection_shared()?;
+        let conn_guard = conn.lock()
+            .map_err(|e| anyhow::anyhow!("获取数据库锁失败: {}", e))?;
+
+        let prompt_name = format!("session_analysis_{}", language);
+
+        if let Some(prompt) = PromptRepository::get_by_name(&conn_guard, &prompt_name)? {
+            Ok(prompt.content)
+        } else {
+            // Fallback 到硬编码提示词
+            #[cfg(debug_assertions)]
+            eprintln!("⚠️  未找到默认提示词 {}，使用 fallback 提示词", prompt_name);
+
+            Ok(Self::get_fallback_prompt(language))
+        }
+    }
+
+    /// 获取硬编码的 fallback 提示词
+    fn get_fallback_prompt(language: &str) -> String {
+        if language == "en" {
+            r#"You are a Claude Code pair programming assistant. Please analyze the conversation log below (including user instructions, Claude's operations, and tool-returned file contents/errors).
+
+Tasks:
+1. **Focus Check**: Has Claude fallen into an infinite loop? Is it repeatedly reading irrelevant files? Is it ignoring errors?
+2. **Prompt Generation**: Write a **Chinese instruction** that the user can send directly to Claude.
+   - If Claude is off track: Write a stern corrective instruction.
+   - If Claude is doing well: Write an instruction to advance to the next step, referencing the file context just read (e.g., "Based on main.py just read...").
+
+Output Format:
+---
+[Status]: [Normal / Lost / Error Loop]
+[Analysis]: (Brief analysis of current situation)
+[Suggested Prompt]:
+(Your prompt content)
+---
+"#.to_string()
+        } else {
+            r#"你是一个 Claude Code 结对编程助手。请分析下方的会话日志（包含用户指令、Claude 的操作、以及工具返回的文件内容/报错）。
+
+任务：
+1. **判断焦点 (Focus Check)**：Claude 是否陷入了死循环？是否在反复读取无关文件？是否无视了报错？
+2. **生成提示词 (Prompt Generation)**：为用户写一段可以直接发送给 Claude 的**中文指令**。
+   - 如果 Claude 走偏了：写一段严厉的纠正指令。
+   - 如果 Claude 做得对：写一段推进下一步的指令，并引用刚才读取到的文件上下文（例如："基于刚才读取的 main.py..."）。
+
+输出格式：
+---
+【状态】: [正常 / 迷失 / 报错循环]
+【分析】: (简短分析当前情况)
+【建议提示词】:
+(你的 Prompt 内容)
+---
+"#.to_string()
         }
     }
 }
