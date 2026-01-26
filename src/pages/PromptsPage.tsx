@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
@@ -9,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loading } from '@/components/ui/loading';
-import { CheckCircle, AlertCircle } from 'lucide-react';
+import { CheckCircle, AlertCircle, Home } from 'lucide-react';
 
 /**
  * 提示词管理页面
@@ -21,6 +22,7 @@ import { CheckCircle, AlertCircle } from 'lucide-react';
  */
 export default function PromptsPage() {
   const { t } = useTranslation('prompts');
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   // 状态管理
@@ -156,20 +158,54 @@ export default function PromptsPage() {
         </div>
       )}
 
-      {/* 页面标题 */}
-      <div className="mb-6">
-        <h1
-          className="text-3xl font-bold"
-          style={{ color: 'var(--color-text-primary)' }}
+      {/* 页面标题 + 返回按钮 */}
+      <div className="mb-6 flex items-center gap-4">
+        <button
+          className="back-btn"
+          onClick={() => navigate('/')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 16px',
+            background: 'var(--color-bg-card)',
+            color: 'var(--color-accent-warm)',
+            border: '1px solid var(--color-accent-warm)',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '500',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            flexShrink: 0,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'color-mix(in srgb, var(--color-accent-warm) 15%, var(--color-bg-card))';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = '0 2px 8px color-mix(in srgb, var(--color-accent-warm) 25%, transparent)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'var(--color-bg-card)';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
         >
-          {t('title')}
-        </h1>
-        <p
-          className="mt-2"
-          style={{ color: 'var(--color-text-secondary)' }}
-        >
-          {t('description')}
-        </p>
+          <Home size={16} />
+          <span>{t('backToHome')}</span>
+        </button>
+        <div className="flex-1">
+          <h1
+            className="text-3xl font-bold"
+            style={{ color: 'var(--color-text-primary)' }}
+          >
+            {t('title')}
+          </h1>
+          <p
+            className="mt-2"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            {t('description')}
+          </p>
+        </div>
       </div>
 
       {/* 工具栏 */}

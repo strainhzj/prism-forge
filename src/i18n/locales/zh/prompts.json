@@ -1,6 +1,7 @@
 {
   "title": "提示词管理",
   "description": "管理系统提示词和用户自定义提示词",
+  "backToHome": "返回首页",
   "loading": "加载中...",
   "errorLoading": "加载失败",
   "newPrompt": "新建提示词",

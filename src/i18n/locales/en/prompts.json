@@ -1,6 +1,7 @@
 {
   "title": "Prompt Management",
   "description": "Manage system and custom prompts",
+  "backToHome": "Back to Home",
   "loading": "Loading...",
   "errorLoading": "Failed to load",
   "newPrompt": "New Prompt",
