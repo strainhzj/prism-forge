@@ -10,7 +10,17 @@ import { Button } from '@/components/ui/button';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loading } from '@/components/ui/loading';
-import { CheckCircle, AlertCircle, Home } from 'lucide-react';
+import { CheckCircle, AlertCircle, Home, AlertTriangle } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 /**
  * 提示词管理页面
@@ -31,6 +41,17 @@ export default function PromptsPage() {
   const [languageFilter, setLanguageFilter] = useState<string>('all');
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+
+  // 确认对话框状态
+  const [confirmDialog, setConfirmDialog] = useState<{
+    show: boolean;
+    type: 'delete' | 'reset';
+    data: number | string | null;
+  }>({
+    show: false,
+    type: 'delete',
+    data: null,
+  });
 
   // Alert 状态
   const [alert, setAlert] = useState<{
@@ -105,18 +126,37 @@ export default function PromptsPage() {
     setIsFormOpen(true);
   };
 
-  // 处理删除
+  // 处理删除 - 显示确认对话框
   const handleDelete = (id: number | bigint) => {
-    if (confirm(t('confirmDelete'))) {
-      deleteMutation.mutate(Number(id));
-    }
+    setConfirmDialog({
+      show: true,
+      type: 'delete',
+      data: Number(id),
+    });
   };
 
-  // 处理重置
+  // 处理重置 - 显示确认对话框
   const handleReset = (name: string) => {
-    if (confirm(t('confirmReset'))) {
-      resetMutation.mutate(name);
+    setConfirmDialog({
+      show: true,
+      type: 'reset',
+      data: name,
+    });
+  };
+
+  // 确认操作
+  const handleConfirm = () => {
+    if (confirmDialog.type === 'delete' && typeof confirmDialog.data === 'number') {
+      deleteMutation.mutate(confirmDialog.data);
+    } else if (confirmDialog.type === 'reset' && typeof confirmDialog.data === 'string') {
+      resetMutation.mutate(confirmDialog.data);
     }
+    setConfirmDialog({ show: false, type: 'delete', data: null });
+  };
+
+  // 取消操作
+  const handleCancelConfirm = () => {
+    setConfirmDialog({ show: false, type: 'delete', data: null });
   };
 
   // 加载状态
@@ -323,6 +363,53 @@ export default function PromptsPage() {
           showAlert('success', successMsg);
         }}
       />
+
+      {/* 确认对话框 */}
+      <AlertDialog open={confirmDialog.show} onOpenChange={(open) => !open && handleCancelConfirm()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" style={{ color: 'var(--color-accent-warm)' }} />
+              {confirmDialog.type === 'delete' ? t('confirmDelete') : t('confirmReset')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDialog.type === 'delete'
+                ? t('confirmDeleteDescription')
+                : t('confirmResetDescription')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={handleCancelConfirm}
+              className="px-4 py-2 rounded-md border transition-colors hover:opacity-80"
+              style={{
+                backgroundColor: 'var(--color-app-button-default)',
+                color: 'var(--color-text-primary)',
+                borderColor: 'var(--color-border-light)',
+              }}
+            >
+              {t('cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirm}
+              className="px-4 py-2 rounded-md transition-colors hover:opacity-90"
+              style={
+                confirmDialog.type === 'delete'
+                  ? {
+                      backgroundColor: 'var(--color-destructive)',
+                      color: 'var(--color-destructive-foreground)',
+                    }
+                  : {
+                      backgroundColor: 'var(--color-accent-blue)',
+                      color: '#FFFFFF',
+                    }
+              }
+            >
+              {confirmDialog.type === 'delete' ? t('delete') : t('resetToDefault')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
