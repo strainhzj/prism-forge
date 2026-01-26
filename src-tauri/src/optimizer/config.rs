@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockReadGuard};
 
 /// 优化器配置
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -269,6 +269,14 @@ pub struct ConfigManager {
 }
 
 impl ConfigManager {
+    fn read_config(&self) -> RwLockReadGuard<'_, OptimizerConfig> {
+        self.config.read().unwrap_or_else(|e| {
+            #[cfg(debug_assertions)]
+            eprintln!("[ConfigManager] 读取配置读锁失败: {}，忽略 poison 状态继续使用", e);
+            e.into_inner()
+        })
+    }
+
     /// 创建新的配置管理器
     pub fn new(config_path: PathBuf) -> Result<Self> {
         let manager = Self {
@@ -304,85 +312,91 @@ impl ConfigManager {
 
     /// 获取配置的克隆
     pub fn get_config(&self) -> OptimizerConfig {
-        self.config.read().unwrap().clone()
+        self.read_config().clone()
     }
 
     /// 获取 Meta-Prompt 模板（根据语言）
     pub fn get_meta_prompt(&self, language: &str) -> String {
+        let config = self.read_config();
         match language {
-            "zh" => self.config.read().unwrap().meta_prompt.template_zh.clone(),
-            _ => self.config.read().unwrap().meta_prompt.template_en.clone(),  // 默认英文
+            "zh" => config.meta_prompt.template_zh.clone(),
+            _ => config.meta_prompt.template_en.clone(),
         }
     }
 
     /// 获取提示词结构模板（根据语言）
     pub fn get_prompt_structure(&self, language: &str) -> String {
+        let config = self.read_config();
         match language {
-            "zh" => self.config.read().unwrap().prompt_structure.structure_zh.clone(),
-            _ => self.config.read().unwrap().prompt_structure.structure_en.clone(),  // 默认英文
+            "zh" => config.prompt_structure.structure_zh.clone(),
+            _ => config.prompt_structure.structure_en.clone(),
         }
     }
 
     /// 获取无会话回退模板（根据语言）
     pub fn get_no_sessions_template(&self, language: &str) -> String {
+        let config = self.read_config();
         match language {
-            "zh" => self.config.read().unwrap().fallback.no_sessions_template_zh.clone(),
-            _ => self.config.read().unwrap().fallback.no_sessions_template_en.clone(),  // 默认英文
+            "zh" => config.fallback.no_sessions_template_zh.clone(),
+            _ => config.fallback.no_sessions_template_en.clone(),
         }
     }
 
     /// 获取 LLM 错误回退模板（根据语言）
     pub fn get_llm_error_template(&self, language: &str) -> String {
+        let config = self.read_config();
         match language {
-            "zh" => self.config.read().unwrap().fallback.llm_error_template_zh.clone(),
-            _ => self.config.read().unwrap().fallback.llm_error_template_en.clone(),  // 默认英文
+            "zh" => config.fallback.llm_error_template_zh.clone(),
+            _ => config.fallback.llm_error_template_en.clone(),
         }
     }
 
     /// 获取对话开始模板（根据语言）
     pub fn get_conversation_starter_template(&self, language: &str) -> String {
+        let config = self.read_config();
         match language {
-            "zh" => self.config.read().unwrap().fallback.conversation_starter_template_zh.clone(),
-            _ => self.config.read().unwrap().fallback.conversation_starter_template_en.clone(),  // 默认英文
+            "zh" => config.fallback.conversation_starter_template_zh.clone(),
+            _ => config.fallback.conversation_starter_template_en.clone(),
         }
     }
 
     /// 获取会话格式化模板（根据语言）
     pub fn get_session_format(&self, language: &str) -> String {
+        let config = self.read_config();
         match language {
-            "zh" => self.config.read().unwrap().session_context.session_format_zh.clone(),
-            _ => self.config.read().unwrap().session_context.session_format_en.clone(),  // 默认英文
+            "zh" => config.session_context.session_format_zh.clone(),
+            _ => config.session_context.session_format_en.clone(),
         }
     }
 
     /// 获取会话上下文配置
     pub fn get_session_context_config(&self) -> SessionContextConfig {
-        self.config.read().unwrap().session_context.clone()
+        self.read_config().session_context.clone()
     }
 
     /// 获取 LLM 参数
     pub fn get_llm_params(&self) -> LLMParamsConfig {
-        self.config.read().unwrap().llm_params.clone()
+        self.read_config().llm_params.clone()
     }
 
     /// 获取最大摘要长度
     pub fn get_max_summary_length(&self) -> usize {
-        self.config.read().unwrap().session_context.max_summary_length
+        self.read_config().session_context.max_summary_length
     }
 
     /// 是否包含评分
     pub fn include_rating(&self) -> bool {
-        self.config.read().unwrap().session_context.include_rating
+        self.read_config().session_context.include_rating
     }
 
     /// 是否包含项目名
     pub fn include_project(&self) -> bool {
-        self.config.read().unwrap().session_context.include_project
+        self.read_config().session_context.include_project
     }
 
     /// 是否启用调试模式
     pub fn is_debug(&self) -> bool {
-        self.config.read().unwrap().advanced.debug
+        self.read_config().advanced.debug
     }
 }
 
