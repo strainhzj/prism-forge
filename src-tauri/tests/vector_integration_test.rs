@@ -20,13 +20,13 @@ mod integration_tests {
         conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
 
         // 执行迁移
-        crate::database::migrations::migrate_v6_impl(&mut conn).unwrap();
+        prism_forge::database::migrations::migrate_v6_impl(&mut conn).unwrap();
 
         let shared_conn = Arc::new(Mutex::new(conn));
-        let repo = crate::database::vector_repository::VectorRepository::with_conn(shared_conn);
+        let repo = prism_forge::database::vector_repository::VectorRepository::with_conn(shared_conn);
 
         // 测试：保存向量
-        let embedding = crate::database::models::SessionEmbedding::new(
+        let embedding = prism_forge::database::models::SessionEmbedding::new(
             "test-session-1".to_string(),
             vec![0.1, 0.2, 0.3, 0.4, 0.5],
             "测试会话摘要".to_string(),
@@ -55,22 +55,38 @@ mod integration_tests {
     /// 测试余弦相似度计算
     #[test]
     fn test_cosine_similarity() {
+        fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
+            if a.len() != b.len() {
+                return 0.0;
+            }
+
+            let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+            let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+            let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+            if norm_a == 0.0 || norm_b == 0.0 {
+                return 0.0;
+            }
+
+            (dot_product / (norm_a * norm_b)) as f64
+        }
+
         // 相同向量：相似度 = 1.0
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![1.0, 2.0, 3.0];
-        let sim = crate::database::vector_repository::cosine_similarity(&a, &b);
+        let sim = cosine_similarity(&a, &b);
         assert!((sim - 1.0).abs() < 0.001, "相同向量相似度应该为 1.0，实际: {}", sim);
 
         // 正交向量：相似度 = 0.0
         let c = vec![1.0, 0.0, 0.0];
         let d = vec![0.0, 1.0, 0.0];
-        let sim2 = crate::database::vector_repository::cosine_similarity(&c, &d);
+        let sim2 = cosine_similarity(&c, &d);
         assert!((sim2 - 0.0).abs() < 0.001, "正交向量相似度应该为 0.0，实际: {}", sim2);
 
         // 相反向量：相似度 = -1.0
         let e = vec![1.0, 2.0, 3.0];
         let f = vec![-1.0, -2.0, -3.0];
-        let sim3 = crate::database::vector_repository::cosine_similarity(&e, &f);
+        let sim3 = cosine_similarity(&e, &f);
         assert!((sim3 - (-1.0)).abs() < 0.001, "相反向量相似度应该为 -1.0，实际: {}", sim3);
 
         println!("✅ 余弦相似度计算测试通过");
@@ -80,26 +96,26 @@ mod integration_tests {
     #[test]
     fn test_vector_search() {
         // 创建内存数据库
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
         conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
-        crate::database::migrations::migrate_v6_impl(&mut conn).unwrap();
+        prism_forge::database::migrations::migrate_v6_impl(&mut conn).unwrap();
 
         let shared_conn = Arc::new(Mutex::new(conn));
-        let repo = crate::database::vector_repository::VectorRepository::with_conn(shared_conn);
+        let repo = prism_forge::database::vector_repository::VectorRepository::with_conn(shared_conn);
 
         // 插入测试向量
         let embeddings = vec![
-            crate::database::models::SessionEmbedding::new(
+            prism_forge::database::models::SessionEmbedding::new(
                 "session-1".to_string(),
                 vec![1.0, 0.0, 0.0], // 方向 [1,0,0]
                 "数据库优化".to_string(),
             ),
-            crate::database::models::SessionEmbedding::new(
+            prism_forge::database::models::SessionEmbedding::new(
                 "session-2".to_string(),
                 vec![0.0, 1.0, 0.0], // 方向 [0,1,0]
                 "前端开发".to_string(),
             ),
-            crate::database::models::SessionEmbedding::new(
+            prism_forge::database::models::SessionEmbedding::new(
                 "session-3".to_string(),
                 vec![0.9, 0.1, 0.0], // 接近 [1,0,0]
                 "SQL 性能调优".to_string(),
@@ -137,7 +153,7 @@ mod integration_tests {
     /// 测试 Settings 模型
     #[test]
     fn test_settings_model() {
-        use crate::database::models::Settings;
+        use prism_forge::database::models::Settings;
 
         // 测试默认设置
         let settings = Settings::default();
@@ -164,7 +180,7 @@ mod integration_tests {
     /// 测试 EmbeddingProvider 枚举
     #[test]
     fn test_embedding_provider() {
-        use crate::embedding::EmbeddingProvider;
+        use prism_forge::embedding::EmbeddingProvider;
 
         // 测试解析
         let openai = EmbeddingProvider::from_str("openai").unwrap();
@@ -185,7 +201,7 @@ mod integration_tests {
     /// 测试 SessionEmbedding 模型
     #[test]
     fn test_session_embedding_model() {
-        use crate::database::models::SessionEmbedding;
+        use prism_forge::database::models::SessionEmbedding;
 
         // 测试创建
         let embedding = SessionEmbedding::new(
@@ -219,12 +235,12 @@ mod performance_tests {
         use std::time::Instant;
 
         // 创建内存数据库
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let mut conn = rusqlite::Connection::open_in_memory().unwrap();
         conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
-        crate::database::migrations::migrate_v6_impl(&mut conn).unwrap();
+        prism_forge::database::migrations::migrate_v6_impl(&mut conn).unwrap();
 
         let shared_conn = Arc::new(Mutex::new(conn));
-        let repo = crate::database::vector_repository::VectorRepository::with_conn(shared_conn);
+        let repo = prism_forge::database::vector_repository::VectorRepository::with_conn(shared_conn);
 
         // 生成 100 个随机向量
         let count = 100;
@@ -235,7 +251,7 @@ mod performance_tests {
                 .map(|_| rand::random::<f32>())
                 .collect();
 
-            let embedding = crate::database::models::SessionEmbedding::new(
+            let embedding = prism_forge::database::models::SessionEmbedding::new(
                 format!("session-{}", i),
                 vector,
                 format!("测试会话 {}", i),
@@ -245,7 +261,7 @@ mod performance_tests {
         }
 
         // 测试搜索性能
-        let query: Vec<f32> = (0..1536).map(|_| rand::random()).collect();
+        let query: Vec<f32> = (0..1536).map(|_| rand::random::<f32>()).collect();
 
         let start = Instant::now();
         let results = repo.vector_search_sessions(&query, 10, 0.0).unwrap();

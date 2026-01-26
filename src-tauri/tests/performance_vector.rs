@@ -82,7 +82,7 @@ impl PerfTestReport {
 /// 在临时目录创建包含指定数量会话的测试数据库
 pub fn setup_test_database(session_count: usize) -> Result<PathBuf, Box<dyn std::error::Error>> {
     use std::env;
-    use crate::database::migrations::get_db_path;
+    use prism_forge::database::migrations::get_db_path;
 
     // 注意：这个测试使用现有数据库，仅用于演示
     // 实际生产环境应在隔离的测试数据库中运行
@@ -96,18 +96,18 @@ pub fn setup_test_database(session_count: usize) -> Result<PathBuf, Box<dyn std:
 
 /// 执行向量检索性能测试
 pub fn run_vector_search_perf_test() -> Result<PerfTestReport, Box<dyn std::error::Error>> {
-    use crate::database::repository::SessionRepository;
-    use crate::embedding::generator::EmbeddingGenerator;
+    use prism_forge::database::repository::SessionRepository;
+    use prism_forge::embedding::EmbeddingGenerator;
 
     let mut results = Vec::new();
 
     // 初始化组件
-    let repo = SessionRepository::new()?;
+    let repo = SessionRepository::from_default_db()?;
     let embedding_gen = EmbeddingGenerator::new()?;
 
     // 测试查询向量
     let test_query = "fix authentication bug in user login";
-    let query_embedding = embedding_gen.generate_embedding(test_query)?;
+    let query_embedding = embedding_gen.generate_for_message(test_query)?;
 
     // 定义测试场景
     let test_scenarios = vec![
@@ -124,6 +124,7 @@ pub fn run_vector_search_perf_test() -> Result<PerfTestReport, Box<dyn std::erro
         // 执行向量检索
         match repo.vector_search_sessions(&query_embedding, limit) {
             Ok(search_results) => {
+                let search_results: Vec<prism_forge::database::models::VectorSearchResult> = search_results;
                 let duration = start.elapsed().as_secs_f64() * 1000.0;
                 let passed = duration < threshold;
 
