@@ -34,11 +34,14 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PromptCard } from '@/components/PromptCard';
+import { useCurrentLanguage } from '@/stores/useLanguageStore';
+import { useInvokeWithRetry } from '@/hooks/useInvokeWithRetry';
 import type {
   PromptLibraryItem,
   PromptCategory,
   PromptLibraryFilters
 } from '@/types/promptLibrary';
+import type { Prompt } from '@/types/generated';
 
 export interface PromptLibraryProps {
   /**
@@ -86,6 +89,18 @@ export function PromptLibrary({
     content: ''
   });
 
+  // P0-3: 获取当前语言
+  const currentLanguage = useCurrentLanguage();
+
+  // P2-4: 使用重试机制
+  const { invokeWithRetry } = useInvokeWithRetry({
+    maxRetries: 2,
+    retryDelay: 1000,
+    onRetry: (attempt, error) => {
+      console.warn(`[PromptLibrary] 加载失败，第 ${attempt} 次重试:`, error);
+    }
+  });
+
   /**
    * 加载提示词列表
    */
@@ -94,9 +109,54 @@ export function PromptLibrary({
     setError(null);
 
     try {
-      // TODO: 调用后端 API 获取提示词列表
-      // 暂时使用空数组，等后端 API 实现后再调用
-      setItems([]);
+      // P2-4: 使用带重试机制的 invoke
+      const scenarioMap: Record<PromptCategory, string> = {
+        next_goals: 'next_goals',
+        ai_analysis: 'session_analysis',
+        meta_template: 'meta_template'
+      };
+
+      const prompts = await invokeWithRetry<Prompt[]>('cmd_get_prompts', {
+        scenario: scenarioMap[activeTab],
+        language: currentLanguage, // P0-3: 使用动态语言
+        search: filters.search || undefined
+      });
+
+      // P1-2: 验证并转换 Prompt 为 PromptLibraryItem 格式
+      const validCategories = Object.keys(scenarioMap);
+      const libraryItems: PromptLibraryItem[] = prompts.map(p => {
+        // 处理 category 可能为 null 的情况
+        const category = p.category && validCategories.includes(p.category)
+          ? (p.category as PromptCategory)
+          : 'meta_template';
+
+        // 如果是 meta_template，返回 MetaTemplate 类型
+        if (category === 'meta_template') {
+          return {
+            id: p.id !== null ? Number(p.id) : undefined,
+            key: p.name,
+            name: p.name,
+            content: p.content,
+            description: p.description ?? undefined, // 处理 null
+            is_active: true, // 默认启用
+            created_at: p.createdAt ?? undefined,
+            updated_at: p.updatedAt ?? undefined,
+          } as const;
+        }
+
+        // 否则返回 SavedPrompt 类型
+        return {
+          id: p.id !== null ? Number(p.id) : undefined,
+          category: category,
+          title: p.name,
+          content: p.content,
+          rating: (p as any).rating,
+          usage_count: (p as any).usage_count || 0,
+          created_at: p.createdAt ?? new Date().toISOString(),
+        } as const;
+      });
+
+      setItems(libraryItems);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '加载失败';
       setError(errorMessage);
@@ -104,7 +164,7 @@ export function PromptLibrary({
     } finally {
       setLoading(false);
     }
-  }, [activeTab]);
+  }, [activeTab, filters.search, currentLanguage, invokeWithRetry]); // 添加 invokeWithRetry 依赖
 
   /**
    * 初始化加载
