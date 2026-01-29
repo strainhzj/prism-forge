@@ -1101,6 +1101,7 @@ pub struct PromptGenerationHistory {
 #[ts(rename_all = "camelCase")]
 pub struct Prompt {
     /// 主键 ID
+    #[ts(type = "number | null")]
     pub id: Option<i64>,
 
     /// 提示词名称（唯一标识）

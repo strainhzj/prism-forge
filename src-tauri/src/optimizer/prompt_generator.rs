@@ -701,7 +701,59 @@ Please generate a conversation-starting prompt based on the above information."#
 
         let messages = vec![Message::user(prompt)];
 
+        // Debug: 打印发送给 LLM 的完整提示词
+        // 安全保证：
+        // 1. .lines() 不会 Panic（空字符串返回空迭代器）
+        // 2. eprintln! 可以安全处理任何 UTF-8 字符串
+        // 3. 不使用 .unwrap() 或索引访问
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("╔═══════════════════════════════════════════════════════════════════════════════");
+            eprintln!("║ [PromptGenerator] 发送给 LLM 的完整提示词:");
+            eprintln!("╠═══════════════════════════════════════════════════════════════════════════════");
+            eprintln!("║ 模型: {}", model);
+            eprintln!("║ 温度: {}", llm_params.temperature);
+            eprintln!("║ 最大 Token: {}", llm_params.max_tokens);
+            eprintln!("╠═══════════════════════════════════════════════════════════════════════════════");
+            eprintln!("║ 提示词内容:");
+            eprintln!("╟───────────────────────────────────────────────────────────────────────────────");
+
+            // 安全遍历：.lines() 迭代器保证不会 Panic
+            // 即使 prompt 为空字符串，也只会跳过循环
+            if prompt.is_empty() {
+                eprintln!("║ <空提示词>");
+            } else {
+                for line in prompt.lines() {
+                    // line 是 &str 切片，保证有效 UTF-8
+                    // eprintln! 可以安全处理任何字符串内容
+                    eprintln!("║ {}", line);
+                }
+            }
+            eprintln!("╚═══════════════════════════════════════════════════════════════════════════════");
+        }
+
         let response = client.chat_completion(messages, params).await?;
+
+        // Debug: 打印 LLM 返回的结果
+        // 安全保证同上
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("╔═══════════════════════════════════════════════════════════════════════════════");
+            eprintln!("║ [PromptGenerator] LLM 返回结果:");
+            eprintln!("╠═══════════════════════════════════════════════════════════════════════════════");
+            eprintln!("║ 内容长度: {} 字符", response.content.len());
+            eprintln!("╟───────────────────────────────────────────────────────────────────────────────");
+
+            // 安全遍历，同上
+            if response.content.is_empty() {
+                eprintln!("║ <空响应>");
+            } else {
+                for line in response.content.lines() {
+                    eprintln!("║ {}", line);
+                }
+            }
+            eprintln!("╚═══════════════════════════════════════════════════════════════════════════════");
+        }
 
         Ok(response.content)
     }

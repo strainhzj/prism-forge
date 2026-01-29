@@ -100,9 +100,23 @@ export default function PromptForm({
 
   // 表单提交
   const onSubmit = handleSubmit((data) => {
+    // 对于系统提示词，name 字段可能因为 disabled 而未包含在 data 中
+    // 需要从原始 prompt 对象中获取
+    const name = data.name || prompt?.name || '';
+
+    if (!name) {
+      alert(t('errors.nameRequired'));
+      return;
+    }
+
     const promptData: Prompt = {
       id: prompt?.id ?? null,
-      ...data,
+      name,
+      content: data.content,
+      description: data.description || null,
+      scenario: data.scenario,
+      category: data.category || null,
+      language: data.language,
       isDefault: prompt?.isDefault ?? false,
       isSystem: prompt?.isSystem ?? false,
       version: prompt?.version ?? 1,
