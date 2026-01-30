@@ -169,147 +169,42 @@ pub async fn cmd_get_prompt_version_changes(
         .map_err(|e| e.to_string())
 }
 
-/// 初始化提示词模板（从现有的 Prompts 表创建）
+/// 统一的提示词列表查询接口（从版本管理系统读取）
 ///
-/// 这个命令会从 prompts 表中读取提示词内容，并在 prompt_templates 表中创建对应的模板和初始版本
+/// 这个命令用于替代旧的 cmd_get_prompts，从 prompt_templates 和 prompt_versions
+/// 读取数据并扁平化输出，支持多语言版本的展示
+///
+/// # 参数
+/// - `scenario`: 可选的场景过滤（如 "session_analysis"）
+/// - `language`: 可选的语言过滤（如 "zh"、"en"）
+/// - `search`: 可选的搜索关键词（匹配 name、description、content）
+///
+/// # 返回
+/// 返回一个扁平化的提示词列表，每个元素包含：
+/// - id: 版本 ID（兼容旧的前端代码）
+/// - template_id: 模板 ID
+/// - name: 模板名称
+/// - content: 版本内容
+/// - description: 模板描述
+/// - scenario: 场景
+/// - language: 从 metadata 中提取的语言
+/// - is_system: 是否系统级
+/// - is_active: 版本是否激活
+/// - version_number: 版本号
+/// - created_at: 创建时间
 #[tauri::command]
-pub async fn cmd_initialize_prompt_template_from_prompt(
-    prompt_name: String,
-) -> Result<PromptTemplate, String> {
-    use crate::database::prompts::PromptRepository;
+pub async fn cmd_get_prompts_unified(
+    scenario: Option<String>,
+    language: Option<String>,
+    search: Option<String>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let repo = PromptVersionRepository::from_default_db()
+        .map_err(|e| format!("创建版本仓库失败: {}", e))?;
 
-    // 创建仓库实例（不使用 with_conn_inner，因为它不是公共方法）
-    let conn_shared = crate::database::init::get_connection_shared()
-        .map_err(|e| format!("获取数据库连接失败: {}", e))?;
-
-    // 使用 try_lock 并带超时机制，防止 Mutex 毒化导致 Panic
-    use std::time::{Duration, Instant};
-
-    const LOCK_TIMEOUT: Duration = Duration::from_secs(5);
-    let start = Instant::now();
-
-    let conn_guard = loop {
-        match conn_shared.try_lock() {
-            Ok(guard) => break guard,
-            Err(e) => {
-                if start.elapsed() > LOCK_TIMEOUT {
-                    let is_poisoned = matches!(e, std::sync::TryLockError::Poisoned(_));
-                    return Err(format!(
-                        "获取数据库连接超时（5秒），可能原因：{}。建议重启应用",
-                        if is_poisoned { "Mutex 已被毒化" } else { "锁竞争激烈" }
-                    ));
-                }
-                // 短暂休眠后重试
-                std::thread::sleep(Duration::from_millis(50));
-            }
-        }
-    };
-
-    // try_lock 返回的 MutexGuard 已经处理了毒化情况，直接使用
-    let conn = &*conn_guard;
-
-    // 执行数据库操作
-    (|conn: &rusqlite::Connection| -> Result<PromptTemplate, String> {
-        // 从 prompts 表读取提示词
-        let prompt = PromptRepository::get_by_name(conn, &prompt_name)
-            .map_err(|e| format!("查询提示词失败: {}", e))?
-            .ok_or_else(|| format!("提示词不存在: {}", prompt_name))?;
-
-        conn.execute("BEGIN TRANSACTION", [])
-            .map_err(|e| format!("开始事务失败: {}", e))?;
-
-        // 检查模板是否已存在
-        let existing_template = conn.query_row(
-            "SELECT id FROM prompt_templates WHERE name = ?1",
-            params![&prompt_name],
-            |row| row.get::<_, i64>(0),
-        );
-
-        let template_id = if let Ok(id) = existing_template {
-            // 模板已存在，跳过创建
-            id
-        } else {
-            // 创建模板（tags 使用空字符串，因为 Prompt 没有 tags 字段）
-            let now = chrono::Utc::now().to_rfc3339();
-            conn.execute(
-                "INSERT INTO prompt_templates (name, description, scenario, tags, language, is_system, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![
-                    &prompt_name,
-                    &prompt.description,
-                    &prompt.scenario,
-                    "", // tags 使用空字符串
-                    &prompt.language,
-                    prompt.is_system as i32,
-                    &now,
-                    &now,
-                ],
-            ).map_err(|e| format!("创建模板失败: {}", e))?;
-            conn.last_insert_rowid()
-        };
-
-        // 检查是否已有版本
-        let version_count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM prompt_versions WHERE template_id = ?1",
-            params![template_id],
-            |row| row.get(0),
-        ).map_err(|e| {
-            #[cfg(debug_assertions)]
-            log::error!("查询版本数量失败: {}", e);
-            format!("查询版本数量失败: {}", e)
-        })?;
-
-        #[cfg(debug_assertions)]
-        log::debug!("模板 {} 的版本数量: {}", template_id, version_count);
-
-        if version_count == 0 {
-            // 创建初始版本 (v1)，created_by 使用 "system"
-            let now = chrono::Utc::now().to_rfc3339();
-            conn.execute(
-                "INSERT INTO prompt_versions (template_id, version_number, is_active, content, created_by, created_at)
-                 VALUES (?1, 1, 1, ?2, ?3, ?4)",
-                params![
-                    template_id,
-                    &prompt.content,
-                    "system", // created_by 固定使用 "system"
-                    &now,
-                ],
-            ).map_err(|e| format!("创建版本失败: {}", e))?;
-        }
-
-        // 提交事务
-        conn.execute("COMMIT", [])
-            .map_err(|e| format!("提交事务失败: {}", e))?;
-
-        // 读取并返回模板
-        let template = conn.query_row(
-            "SELECT id, name, description, scenario, tags, language, is_system, created_at, updated_at
-             FROM prompt_templates WHERE id = ?1",
-            params![template_id],
-            |row| Ok(PromptTemplate {
-                id: Some(row.get(0)?),
-                name: row.get(1)?,
-                description: row.get(2)?,
-                scenario: row.get(3)?,
-                tags: row.get(4)?,
-                language: row.get(5)?,
-                is_system: row.get::<_, i32>(6)? == 1,
-                created_at: row.get(7)?,
-                updated_at: row.get(8)?,
-            }),
-        ).map_err(|e| format!("读取模板失败: {}", e))?;
-
-        Ok(template)
-    })(&*conn)
-}
-
-/// 初始化提示词模板（从 TOML 导入版本 1）
-#[tauri::command]
-pub async fn cmd_initialize_prompt_template_from_toml(
-    _template_name: String,
-    _toml_path: String,
-) -> Result<PromptTemplate, String> {
-    // TODO: 实现 TOML 解析和初始化逻辑
-    // 这将在下一步实现
-    Err("尚未实现 TOML 初始化逻辑".to_string())
+    repo.list_prompts_unified(
+        scenario.as_deref(),
+        language.as_deref(),
+        search.as_deref(),
+    )
+    .map_err(|e| e.to_string())
 }

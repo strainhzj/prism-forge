@@ -404,24 +404,39 @@ impl PromptOptimizer {
     ///
     /// 如果数据库中没有，使用硬编码的 fallback 提示词
     fn load_system_prompt(language: &str) -> Result<String> {
-        use crate::database::get_connection_shared;
-        use crate::database::prompts::PromptRepository;
+        use crate::database::prompt_versions::PromptVersionRepository;
 
-        let conn = get_connection_shared()?;
-        let conn_guard = conn.lock()
-            .map_err(|e| anyhow::anyhow!("获取数据库锁失败: {}", e))?;
+        // 从新的版本管理系统读取提示词
+        let repo = PromptVersionRepository::from_default_db()
+            .map_err(|e| anyhow::anyhow!("创建版本仓库失败: {}", e))?;
 
-        let prompt_name = format!("session_analysis_{}", language);
+        // 查询指定语言的活跃版本
+        let templates = repo.list_templates()
+            .map_err(|e| anyhow::anyhow!("查询模板失败: {}", e))?;
 
-        if let Some(prompt) = PromptRepository::get_by_name(&conn_guard, &prompt_name)? {
-            Ok(prompt.content)
-        } else {
-            // Fallback 到硬编码提示词
-            #[cfg(debug_assertions)]
-            eprintln!("⚠️  未找到默认提示词 {}，使用 fallback 提示词", prompt_name);
-
-            Ok(Self::get_fallback_prompt(language))
+        for template in templates {
+            if template.scenario == "session_analysis" {
+                // 获取该模板的所有版本
+                if let Ok(versions) = repo.list_versions(template.id.ok_or_else(|| anyhow::anyhow!("模板 ID 无效"))?) {
+                    // 查找匹配语言的活跃版本
+                    for version in versions {
+                        if version.is_active {
+                            if let Some(metadata) = &version.metadata {
+                                if metadata.contains(&format!(r#""language":"{}""#, language)) {
+                                    return Ok(version.content);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
+
+        // Fallback 到硬编码提示词
+        #[cfg(debug_assertions)]
+        eprintln!("⚠️  未找到默认提示词 session_analysis_{}，使用 fallback 提示词", language);
+
+        Ok(Self::get_fallback_prompt(language))
     }
 
     /// 获取硬编码的 fallback 提示词

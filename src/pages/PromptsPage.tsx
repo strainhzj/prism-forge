@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { invoke } from '@tauri-apps/api/core';
 import type { Prompt } from '@/types/generated';
 import PromptCard from '@/components/prompts/PromptCard';
@@ -24,6 +24,30 @@ import {
 } from '@/components/ui/alert-dialog';
 
 /**
+ * 将统一接口返回的数据转换为 Prompt 类型
+ *
+ * 统一接口返回 camelCase 字段（如 isSystem, templateId），
+ * 而 Prompt 类型使用 snake_case（如 is_system, template_id）。
+ * 需要进行字段映射转换。
+ */
+function convertToPrompt(data: any): Prompt {
+  return {
+    id: data.id,
+    name: data.name,
+    content: data.content,
+    description: data.description || null,
+    scenario: data.scenario,
+    category: 'general', // 默认值
+    isDefault: data.isSystem || false, // 从 isSystem 映射
+    isSystem: data.isSystem || false,
+    language: data.language || 'zh',
+    version: data.versionNumber || 1, // 从 versionNumber 映射
+    createdAt: data.createdAt || new Date().toISOString(),
+    updatedAt: data.createdAt || new Date().toISOString(), // 使用相同的时间
+  };
+}
+
+/**
  * 对话框类型常量
  */
 const DIALOG_TYPE = {
@@ -44,7 +68,6 @@ type DialogType = typeof DIALOG_TYPE[keyof typeof DIALOG_TYPE];
 export default function PromptsPage() {
   const { t } = useTranslation('prompts');
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   // 状态管理
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,44 +120,26 @@ export default function PromptsPage() {
   // 搜索防抖（300ms 延迟）
   const debouncedSearch = useDebounce(searchQuery, 300);
 
-  // 获取提示词列表
+  // 获取提示词列表（使用统一的版本管理接口）
   const {
     data: prompts = [],
     isLoading,
     error,
   } = useQuery({
     queryKey: ['prompts', scenarioFilter, languageFilter, debouncedSearch],
-    queryFn: () =>
-      invoke<Prompt[]>('cmd_get_prompts', {
+    queryFn: async () => {
+      const data = await invoke<any[]>('cmd_get_prompts_unified', {
         scenario: scenarioFilter === 'all' ? null : scenarioFilter,
         language: languageFilter === 'all' ? null : languageFilter,
         search: debouncedSearch.trim() || null,
-      }),
-  });
-
-  // 删除提示词
-  const deleteMutation = useMutation({
-    mutationFn: (id: number) => invoke('cmd_delete_prompt', { id }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prompts'] });
-      showAlert('success', t('success.deleted'));
-    },
-    onError: (error) => {
-      showAlert('error', `${t('error.deleteFailed')}: ${error}`);
+      });
+      // 将统一接口返回的数据转换为 Prompt 类型
+      return data.map(convertToPrompt);
     },
   });
 
-  // 重置默认提示词
-  const resetMutation = useMutation({
-    mutationFn: (name: string) => invoke('cmd_reset_default_prompt', { name }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prompts'] });
-      showAlert('success', t('success.reset'));
-    },
-    onError: (error) => {
-      showAlert('error', `${t('error.resetFailed')}: ${error}`);
-    },
-  });
+  // 注意：删除和重置功能暂时禁用，需要适配版本管理系统
+  // TODO: 实现版本管理系统的删除和重置功能
 
   // 处理新建
   const handleNew = () => {
@@ -148,38 +153,20 @@ export default function PromptsPage() {
     setIsFormOpen(true);
   };
 
-  // 处理删除 - 显示确认对话框
-  const handleDelete = (id: number | bigint) => {
-    setConfirmDialog({
-      show: true,
-      type: DIALOG_TYPE.DELETE,
-      data: Number(id),
-    });
+  // 处理删除 - 暂时禁用
+  const handleDelete = (_id: number | bigint) => {
+    showAlert('error', '删除功能暂时禁用，请使用版本管理界面');
   };
 
-  // 处理重置 - 显示确认对话框
-  const handleReset = (name: string) => {
-    setConfirmDialog({
-      show: true,
-      type: DIALOG_TYPE.RESET,
-      data: name,
-    });
+  // 处理重置 - 暂时禁用
+  const handleReset = (_name: string) => {
+    showAlert('error', '重置功能暂时禁用，请使用版本管理界面');
   };
 
-  // 确认操作
+  // 确认操作 - 暂时禁用
   const handleConfirm = async () => {
-    try {
-      if (confirmDialog.type === DIALOG_TYPE.DELETE && typeof confirmDialog.data === 'number') {
-        await deleteMutation.mutateAsync(confirmDialog.data);
-      } else if (confirmDialog.type === DIALOG_TYPE.RESET && typeof confirmDialog.data === 'string') {
-        await resetMutation.mutateAsync(confirmDialog.data);
-      }
-      // 只有 mutation 成功后才关闭对话框
-      setConfirmDialog({ show: false, type: DIALOG_TYPE.DELETE, data: null });
-    } catch (error) {
-      // 错误由 mutation 的 onError 处理，对话框保持打开
-      console.error('操作失败:', error);
-    }
+    showAlert('error', '此功能暂时禁用，请使用版本管理界面');
+    setConfirmDialog({ show: false, type: DIALOG_TYPE.DELETE, data: null });
   };
 
   // 取消操作
@@ -389,12 +376,8 @@ export default function PromptsPage() {
                 handleDelete(id);
               }}
               onReset={() => handleReset(prompt.name)}
-              // 为 session_analysis_zh 添加版本历史按钮（这是优化器的提示词）
-              onViewVersions={
-                prompt.name === 'session_analysis_zh' || prompt.name === 'session_analysis_en'
-                  ? () => setVersionsDrawerOpen(true)
-                  : undefined
-              }
+              // 新架构：所有提示词都支持版本历史
+              onViewVersions={() => setVersionsDrawerOpen(true)}
             />
           ))
         )}

@@ -7,7 +7,6 @@ pub mod migrations;
 pub mod repository;
 pub mod init;
 pub mod vector_repository;
-pub mod prompts;
 pub mod prompt_versions;
 
 pub use models::{
@@ -25,6 +24,5 @@ pub use models::{
 pub use migrations::{get_db_path, initialize_database, get_connection};
 pub use repository::{ApiProviderRepository, PromptHistoryRepository};
 pub use vector_repository::VectorRepository;
-pub use prompts::PromptRepository;
 pub use prompt_versions::PromptVersionRepository;
 pub use init::{get_connection_shared, get_db_path as get_db_path_init};

@@ -4,7 +4,6 @@ pub mod perf;
 mod llm;
 pub mod database;
 mod commands;
-mod commands_prompt;
 mod commands_prompt_versions;
 mod tokenizer;
 mod monitor;
@@ -179,13 +178,8 @@ pub fn run() {
             cmd_toggle_prompt_history_favorite,
             cmd_get_favorite_prompt_history,
             cmd_count_prompt_history,
-            // 提示词管理命令
-            commands_prompt::cmd_get_prompts,
-            commands_prompt::cmd_get_prompt,
-            commands_prompt::cmd_save_prompt,
-            commands_prompt::cmd_delete_prompt,
-            commands_prompt::cmd_reset_default_prompt,
-            // 提示词版本管理命令
+            // 提示词版本管理命令（统一接口）
+            commands_prompt_versions::cmd_get_prompts_unified,
             commands_prompt_versions::cmd_get_prompt_templates,
             commands_prompt_versions::cmd_get_prompt_template_by_name,
             commands_prompt_versions::cmd_get_prompt_template_by_scenario,
@@ -199,8 +193,7 @@ pub fn run() {
             commands_prompt_versions::cmd_get_prompt_components,
             commands_prompt_versions::cmd_get_prompt_parameters,
             commands_prompt_versions::cmd_get_prompt_version_changes,
-            commands_prompt_versions::cmd_initialize_prompt_template_from_prompt,
-            commands_prompt_versions::cmd_initialize_prompt_template_from_toml,
+            commands_prompt_versions::cmd_get_prompts_unified,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| {

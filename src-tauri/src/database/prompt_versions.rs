@@ -1034,4 +1034,107 @@ impl PromptVersionRepository {
             changed_at: row.get(10).unwrap_or_else(|_| chrono::Utc::now().to_rfc3339()),
         }
     }
+
+    // ============================================================================
+    // 统一查询接口（用于替代旧的 prompts 表查询）
+    // ============================================================================
+
+    /// 统一的提示词列表查询接口
+    ///
+    /// 从 prompt_templates 和 prompt_versions 读取数据并扁平化输出
+    /// 支持场景、语言、搜索关键词过滤
+    ///
+    /// # 参数
+    /// - `scenario`: 可选的场景过滤
+    /// - `language`: 可选的语言过滤（从 metadata 中提取）
+    /// - `search`: 可选的搜索关键词
+    ///
+    /// # 返回
+    /// 返回 JSON 数组，每个元素包含扁平化的提示词信息
+    pub fn list_prompts_unified(
+        &self,
+        scenario: Option<&str>,
+        language: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<Vec<serde_json::Value>> {
+        self.with_conn_inner(|conn| {
+            // 构建查询条件
+            let mut where_clauses = vec!["1=1".to_string()];
+            let mut params: Vec<String> = vec![];
+
+            if let Some(sc) = scenario {
+                where_clauses.push("pt.scenario = ?".to_string());
+                params.push(sc.to_string());
+            }
+
+            if let Some(lang) = language {
+                where_clauses.push("json_extract(pv.metadata, '$.language') = ?".to_string());
+                params.push(lang.to_string());
+            }
+
+            if let Some(keyword) = search {
+                where_clauses.push("(pt.name LIKE ? OR pt.description LIKE ? OR pv.content LIKE ?)".to_string());
+                let search_pattern = format!("%{}%", keyword);
+                params.push(search_pattern.clone());
+                params.push(search_pattern.clone());
+                params.push(search_pattern);
+            }
+
+            let where_clause = where_clauses.join(" AND ");
+
+            let query = format!(
+                "SELECT
+                    pv.id as id,
+                    pv.template_id as template_id,
+                    pt.name as name,
+                    pv.content as content,
+                    pt.description as description,
+                    pt.scenario as scenario,
+                    json_extract(pv.metadata, '$.language') as language,
+                    pt.is_system as is_system,
+                    pv.is_active as is_active,
+                    pv.version_number as version_number,
+                    pv.created_at as created_at
+                FROM prompt_versions pv
+                INNER JOIN prompt_templates pt ON pv.template_id = pt.id
+                WHERE {}
+                ORDER BY pt.scenario, pv.version_number",
+                where_clause
+            );
+
+            let mut stmt = conn.prepare(&query)?;
+
+            // 将参数转换为 rusqlite 支持的类型
+            let params_ref: Vec<&dyn rusqlite::ToSql> =
+                params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
+
+            let rows = stmt.query_map(params_ref.as_slice(), |row| {
+                let language: Option<String> = row.get(6)?;
+                let language_value = language.unwrap_or_else(|| "unknown".to_string());
+
+                // 构建扁平化的 JSON 对象
+                let mut map = serde_json::Map::new();
+                map.insert("id".to_string(), serde_json::json!(row.get::<_, i64>(0)?));
+                map.insert("templateId".to_string(), serde_json::json!(row.get::<_, i64>(1)?));
+                map.insert("name".to_string(), serde_json::json!(row.get::<_, String>(2)?));
+                map.insert("content".to_string(), serde_json::json!(row.get::<_, String>(3)?));
+                map.insert("description".to_string(), serde_json::json!(row.get::<_, Option<String>>(4)?));
+                map.insert("scenario".to_string(), serde_json::json!(row.get::<_, String>(5)?));
+                map.insert("language".to_string(), serde_json::json!(language_value));
+                map.insert("isSystem".to_string(), serde_json::json!(row.get::<_, i32>(7)? == 1));
+                map.insert("isActive".to_string(), serde_json::json!(row.get::<_, i32>(8)? == 1));
+                map.insert("versionNumber".to_string(), serde_json::json!(row.get::<_, i32>(9)?));
+                map.insert("createdAt".to_string(), serde_json::json!(row.get::<_, String>(10)?));
+
+                Ok(serde_json::Value::Object(map))
+            })?;
+
+            let mut results = Vec::new();
+            for row in rows {
+                results.push(row?);
+            }
+
+            Ok(results)
+        })
+    }
 }

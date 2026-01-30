@@ -5,9 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Loading } from '@/components/ui/loading';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { CheckCircle, AlertCircle, Database } from 'lucide-react';
-import { useDebounce } from '@/hooks/useDebounce';
+import { CheckCircle, AlertCircle } from 'lucide-react';
 import type { PromptVersion, PromptVersionDiff, PromptComponent, PromptParameter, PromptChange } from '@/types/generated';
 import { VersionListTable } from './VersionListTable';
 import { VersionDetailPanel } from './VersionDetailPanel';
@@ -15,11 +13,8 @@ import { VersionComparePanel } from './VersionComparePanel';
 import { ChangeHistoryPanel } from './ChangeHistoryPanel';
 import { RollbackDialog } from './RollbackDialog';
 
-// 需要初始化为模板的提示词名称
-const PROMPT_NAMES_TO_INIT = ['session_analysis_zh', 'session_analysis_en'];
-
-// 固定的 Optimizer 模板名称（对应初始化后的 prompt_templates 表）
-const OPTIMIZER_TEMPLATE_NAME = 'session_analysis_zh';
+// 新架构：模板名称（迁移后的多语言模板）
+const OPTIMIZER_TEMPLATE_NAME = 'session_analysis_multilingual';
 
 type TabType = 'detail' | 'compare' | 'history';
 
@@ -137,19 +132,6 @@ export function PromptVersionsDrawer({ open, onOpenChange }: PromptVersionsDrawe
     enabled: open && !!template?.id && compareTo !== null,
   });
 
-  // 初始化模板 mutation
-  const initializeMutation = useMutation({
-    mutationFn: (promptName: string) =>
-      invoke('cmd_initialize_prompt_template_from_prompt', { promptName }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['prompt-template'] });
-      showAlert('success', '模板初始化成功');
-    },
-    onError: (error) => {
-      showAlert('error', `初始化失败: ${error}`);
-    },
-  });
-
   // 软回滚
   const activateMutation = useMutation({
     mutationFn: (versionNumber: number) =>
@@ -238,36 +220,16 @@ export function PromptVersionsDrawer({ open, onOpenChange }: PromptVersionsDrawe
           </SheetHeader>
           <div className="flex flex-col items-center justify-center h-full gap-6">
             <div className="text-center">
-              <Database className="h-16 w-16 mx-auto mb-4" style={{ color: 'var(--color-text-secondary)' }} />
+              <AlertCircle className="h-16 w-16 mx-auto mb-4" style={{ color: 'var(--color-text-secondary)' }} />
               <h3 className="text-lg font-medium mb-2" style={{ color: 'var(--color-text-primary)' }}>
-                提示词版本管理未初始化
+                未找到版本管理模板
               </h3>
               <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
-                首次使用需要从现有提示词初始化版本管理模板
+                模板名称: {OPTIMIZER_TEMPLATE_NAME}
               </p>
-              <div className="flex gap-3 justify-center">
-                <Button
-                  onClick={() => initializeMutation.mutate('session_analysis_zh')}
-                  disabled={initializeMutation.isPending}
-                  style={{
-                    backgroundColor: 'var(--color-accent-blue)',
-                    color: 'white',
-                  }}
-                >
-                  {initializeMutation.isPending ? '初始化中...' : '初始化中文模板'}
-                </Button>
-                <Button
-                  onClick={() => initializeMutation.mutate('session_analysis_en')}
-                  disabled={initializeMutation.isPending}
-                  variant="outline"
-                  style={{
-                    border: '1px solid var(--color-border-light)',
-                    color: 'var(--color-text-primary)',
-                  }}
-                >
-                  {initializeMutation.isPending ? '初始化中...' : '初始化英文模板'}
-                </Button>
-              </div>
+              <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                请检查数据库中是否存在该模板
+              </p>
             </div>
           </div>
         </SheetContent>

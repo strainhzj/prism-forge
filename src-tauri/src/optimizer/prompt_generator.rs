@@ -416,54 +416,59 @@ impl PromptGenerator {
         conversation: &str,
         language: &str,
     ) -> String {
-        use crate::database::prompts::PromptRepository;
-        use crate::database::get_connection_shared;
-
-        // P1-4: 提取常量，避免硬编码
-        const DEFAULT_SESSION_ANALYSIS_PREFIX: &str = "session_analysis";
-        let prompt_name = format!("{}_{}", DEFAULT_SESSION_ANALYSIS_PREFIX, language);
+        use crate::database::prompt_versions::PromptVersionRepository;
 
         // P2-1: 添加性能监控
         #[cfg(debug_assertions)]
         let perf_start = std::time::Instant::now();
 
-        // P0-2: 使用 PromptRepository 替代直接 SQL 查询
-        let meta_prompt = if let Ok(conn) = get_connection_shared() {
-            if let Ok(guard) = conn.lock() {
-                // P1-1: 优化查询条件，移除 is_default = 1 限制
-                match PromptRepository::get_by_name(&guard, &prompt_name) {
-                    Ok(Some(prompt)) => {
-                        // 数据库中有提示词（无论是否为默认）
-                        #[cfg(debug_assertions)] {
-                            let elapsed = perf_start.elapsed();
-                            if elapsed.as_millis() > 100 {
-                                eprintln!("[PromptGenerator] 警告: 数据库查询耗时 {:?}", elapsed);
+        // 从新的版本管理系统读取提示词
+        let meta_prompt = if let Ok(repo) = PromptVersionRepository::from_default_db() {
+            if let Ok(templates) = repo.list_templates() {
+                // 查找 session_analysis 模板
+                let mut found_prompt = None;
+                for template in templates {
+                    if template.scenario == "session_analysis" {
+                        // 获取该模板的所有版本
+                        if let Ok(versions) = repo.list_versions(template.id.unwrap_or(0)) {
+                            // 查找匹配语言的活跃版本
+                            for version in versions {
+                                if version.is_active {
+                                    if let Some(metadata) = &version.metadata {
+                                        if metadata.contains(&format!(r#""language":"{}""#, language)) {
+                                            found_prompt = Some(version.content);
+                                            break;
+                                        }
+                                    }
+                                }
                             }
-                            eprintln!("[PromptGenerator] 使用数据库中的提示词: {}", prompt_name);
+                            if found_prompt.is_some() {
+                                break;
+                            }
                         }
-
-                        prompt.content
                     }
-                    Ok(None) => {
-                        // 数据库中没有该提示词
-                        #[cfg(debug_assertions)]
-                        eprintln!("[PromptGenerator] 数据库中未找到提示词 {}，使用配置文件", prompt_name);
-
-                        self.config_manager.get_meta_prompt(language)
-                    }
-                    Err(e) => {
-                        // 查询出错，回退到配置文件
-                        #[cfg(debug_assertions)]
-                        eprintln!("[PromptGenerator] 查询提示词失败: {}，使用配置文件", e);
-
-                        self.config_manager.get_meta_prompt(language)
+                    if found_prompt.is_some() {
+                        break;
                     }
                 }
-            } else {
-                // 获取数据库锁失败，使用配置文件
-                #[cfg(debug_assertions)]
-                eprintln!("[PromptGenerator] 获取数据库锁失败，使用配置文件");
 
+                if let Some(prompt) = found_prompt {
+                    #[cfg(debug_assertions)] {
+                        let elapsed = perf_start.elapsed();
+                        if elapsed.as_millis() > 100 {
+                            eprintln!("[PromptGenerator] 警告: 数据库查询耗时 {:?}", elapsed);
+                        }
+                        eprintln!("[PromptGenerator] 使用版本管理系统中的提示词: session_analysis_{}", language);
+                    }
+                    prompt
+                } else {
+                    #[cfg(debug_assertions)]
+                    eprintln!("[PromptGenerator] 数据库中未找到提示词 session_analysis_{}，使用配置文件", language);
+                    self.config_manager.get_meta_prompt(language)
+                }
+            } else {
+                #[cfg(debug_assertions)]
+                eprintln!("[PromptGenerator] 查询模板失败，使用配置文件");
                 self.config_manager.get_meta_prompt(language)
             }
         } else {
