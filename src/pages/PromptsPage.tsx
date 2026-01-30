@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type { Prompt } from '@/types/generated';
 import PromptCard from '@/components/prompts/PromptCard';
 import PromptForm from '@/components/prompts/PromptForm';
+import { PromptVersionsDrawer } from '@/components/prompt-versions';
 import { Button } from '@/components/ui/button';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -51,6 +52,9 @@ export default function PromptsPage() {
   const [languageFilter, setLanguageFilter] = useState<string>('all');
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+
+  // 版本管理抽屉状态
+  const [versionsDrawerOpen, setVersionsDrawerOpen] = useState(false);
 
   // 确认对话框状态
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -385,6 +389,12 @@ export default function PromptsPage() {
                 handleDelete(id);
               }}
               onReset={() => handleReset(prompt.name)}
+              // 为 session_analysis_zh 添加版本历史按钮（这是优化器的提示词）
+              onViewVersions={
+                prompt.name === 'session_analysis_zh' || prompt.name === 'session_analysis_en'
+                  ? () => setVersionsDrawerOpen(true)
+                  : undefined
+              }
             />
           ))
         )}
@@ -454,6 +464,12 @@ export default function PromptsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 版本管理抽屉 */}
+      <PromptVersionsDrawer
+        open={versionsDrawerOpen}
+        onOpenChange={setVersionsDrawerOpen}
+      />
     </div>
   );
 }

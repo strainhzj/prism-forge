@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 17;
+const CURRENT_DB_VERSION: i32 = 18;
 
 /// 初始化数据库
 ///
@@ -86,6 +86,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             15 => migrate_v15(conn)?,
             16 => migrate_v16(conn)?,
             17 => migrate_v17(conn)?,
+            18 => migrate_v18(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -1014,6 +1015,172 @@ Output Format:
     )?;
 
     log::info!("✅ 已创建 prompts 表并插入默认提示词");
+
+    Ok(())
+}
+
+/// 迁移到版本 18: 创建提示词版本管理表
+///
+/// # 功能
+/// - 创建 prompt_templates 表（模板定义）
+/// - 创建 prompt_versions 表（版本管理）
+/// - 创建 prompt_components 表（组件存储）
+/// - 创建 prompt_parameters 表（参数配置）
+/// - 创建 prompt_changes 表（变更追踪）
+/// - 触发器：确保 is_active 唯一性
+#[cfg(test)]
+pub fn migrate_v18(conn: &mut Connection) -> Result<()> {
+    migrate_v18_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v18(conn: &mut Connection) -> Result<()> {
+    migrate_v18_impl(conn)
+}
+
+fn migrate_v18_impl(conn: &mut Connection) -> Result<()> {
+    // 1. 创建 prompt_templates 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS prompt_templates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT,
+            scenario TEXT NOT NULL DEFAULT 'optimizer',
+            tags TEXT,
+            language TEXT NOT NULL DEFAULT 'zh',
+            is_system INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );",
+        [],
+    )?;
+
+    // 2. 创建 prompt_versions 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS prompt_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_id INTEGER NOT NULL,
+            version_number INTEGER NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 0,
+            content TEXT NOT NULL,
+            metadata TEXT,
+            created_by TEXT NOT NULL DEFAULT 'user',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (template_id) REFERENCES prompt_templates(id) ON DELETE CASCADE,
+            UNIQUE(template_id, version_number)
+        );",
+        [],
+    )?;
+
+    // 3. 创建 prompt_components 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS prompt_components (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            version_id INTEGER NOT NULL,
+            component_type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            content TEXT NOT NULL,
+            variables TEXT,
+            language TEXT NOT NULL DEFAULT 'zh',
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (version_id) REFERENCES prompt_versions(id) ON DELETE CASCADE
+        );",
+        [],
+    )?;
+
+    // 4. 创建 prompt_parameters 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS prompt_parameters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            version_id INTEGER NOT NULL,
+            key TEXT NOT NULL,
+            value TEXT NOT NULL,
+            parameter_type TEXT NOT NULL DEFAULT 'llm',
+            description TEXT,
+            FOREIGN KEY (version_id) REFERENCES prompt_versions(id) ON DELETE CASCADE,
+            UNIQUE(version_id, key, parameter_type)
+        );",
+        [],
+    )?;
+
+    // 5. 创建 prompt_changes 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS prompt_changes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            template_id INTEGER NOT NULL,
+            from_version_id INTEGER,
+            to_version_id INTEGER NOT NULL,
+            component_id INTEGER,
+            change_type TEXT NOT NULL,
+            field_name TEXT NOT NULL,
+            old_value TEXT,
+            new_value TEXT,
+            line_number INTEGER,
+            change_summary TEXT,
+            changed_at TEXT NOT NULL,
+            FOREIGN KEY (template_id) REFERENCES prompt_templates(id) ON DELETE CASCADE,
+            FOREIGN KEY (from_version_id) REFERENCES prompt_versions(id) ON DELETE SET NULL,
+            FOREIGN KEY (to_version_id) REFERENCES prompt_versions(id) ON DELETE CASCADE,
+            FOREIGN KEY (component_id) REFERENCES prompt_components(id) ON DELETE SET NULL
+        );",
+        [],
+    )?;
+
+    // 6. 创建索引
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prompt_versions_template_active
+         ON prompt_versions(template_id, is_active);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prompt_components_version
+         ON prompt_components(version_id);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prompt_parameters_version
+         ON prompt_parameters(version_id);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prompt_changes_template
+         ON prompt_changes(template_id);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prompt_changes_to_version
+         ON prompt_changes(to_version_id);",
+        [],
+    )?;
+
+    // 7. 创建触发器：确保每个模板只有一个激活版本
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS ensure_single_active_prompt_version
+         BEFORE UPDATE OF is_active ON prompt_versions
+         WHEN NEW.is_active = 1
+         BEGIN
+             UPDATE prompt_versions SET is_active = 0
+             WHERE template_id = NEW.template_id AND is_active = 1 AND id != NEW.id;
+         END;",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS ensure_single_active_prompt_version_insert
+         BEFORE INSERT ON prompt_versions
+         WHEN NEW.is_active = 1
+         BEGIN
+             UPDATE prompt_versions SET is_active = 0
+             WHERE template_id = NEW.template_id AND is_active = 1;
+         END;",
+        [],
+    )?;
+
+    log::info!("✅ 已创建提示词版本管理表（v18）");
 
     Ok(())
 }

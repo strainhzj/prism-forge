@@ -5,6 +5,7 @@ mod llm;
 pub mod database;
 mod commands;
 mod commands_prompt;
+mod commands_prompt_versions;
 mod tokenizer;
 mod monitor;
 mod parser;
@@ -171,6 +172,22 @@ pub fn run() {
             commands_prompt::cmd_save_prompt,
             commands_prompt::cmd_delete_prompt,
             commands_prompt::cmd_reset_default_prompt,
+            // 提示词版本管理命令
+            commands_prompt_versions::cmd_get_prompt_templates,
+            commands_prompt_versions::cmd_get_prompt_template_by_name,
+            commands_prompt_versions::cmd_get_prompt_template_by_scenario,
+            commands_prompt_versions::cmd_get_prompt_versions,
+            commands_prompt_versions::cmd_get_active_prompt_version,
+            commands_prompt_versions::cmd_get_prompt_version_by_number,
+            commands_prompt_versions::cmd_activate_prompt_version,
+            commands_prompt_versions::cmd_rollback_prompt_version_hard,
+            commands_prompt_versions::cmd_save_prompt_version,
+            commands_prompt_versions::cmd_compare_prompt_versions,
+            commands_prompt_versions::cmd_get_prompt_components,
+            commands_prompt_versions::cmd_get_prompt_parameters,
+            commands_prompt_versions::cmd_get_prompt_version_changes,
+            commands_prompt_versions::cmd_initialize_prompt_template_from_prompt,
+            commands_prompt_versions::cmd_initialize_prompt_template_from_toml,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

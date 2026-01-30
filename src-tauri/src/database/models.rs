@@ -1215,3 +1215,390 @@ impl Prompt {
         Ok(())
     }
 }
+
+// ============================================================================
+// 提示词版本管理模型 (Prompt Version Management)
+// ============================================================================
+
+/// 提示词模板
+///
+/// 可复用的提示词模板定义
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PromptTemplate {
+    /// 主键 ID
+    #[ts(type = "number | null")]
+    pub id: Option<i64>,
+
+    /// 模板名称（唯一标识）
+    pub name: String,
+
+    /// 模板描述
+    pub description: Option<String>,
+
+    /// 应用场景（optimizer/agent/chat/...）
+    pub scenario: String,
+
+    /// 标签（JSON 数组格式）
+    pub tags: Option<String>,
+
+    /// 默认语言（zh/en）
+    pub language: String,
+
+    /// 是否为系统内置（不可删除）
+    #[serde(rename = "isSystem")]
+    pub is_system: bool,
+
+    /// 创建时间（RFC3339）
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+
+    /// 最后更新时间（RFC3339）
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
+}
+
+/// 提示词版本
+///
+/// 一个模板的特定版本
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PromptVersion {
+    /// 主键 ID
+    #[ts(type = "number | null")]
+    pub id: Option<i64>,
+
+    /// 关联的模板 ID
+    #[ts(type = "number")]
+    pub template_id: i64,
+
+    /// 版本号（每个模板独立递增）
+    pub version_number: i32,
+
+    /// 是否为当前激活版本
+    #[serde(rename = "isActive")]
+    pub is_active: bool,
+
+    /// 完整的提示词内容（组合后）
+    pub content: String,
+
+    /// 版本元数据（JSON 格式）
+    pub metadata: Option<String>,
+
+    /// 创建者（system/user）
+    pub created_by: String,
+
+    /// 创建时间（RFC3339）
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+/// 提示词组件
+///
+/// 组成提示词的可复用组件
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PromptComponent {
+    /// 主键 ID
+    #[ts(type = "number | null")]
+    pub id: Option<i64>,
+
+    /// 关联的版本 ID
+    #[ts(type = "number")]
+    pub version_id: i64,
+
+    /// 组件类型
+    pub component_type: PromptComponentType,
+
+    /// 组件名称
+    pub name: String,
+
+    /// 组件内容
+    pub content: String,
+
+    /// 使用的变量列表（JSON 数组格式）
+    pub variables: Option<String>,
+
+    /// 组件语言（zh/en）
+    pub language: String,
+
+    /// 排序（用于组合顺序）
+    pub sort_order: i32,
+}
+
+/// 组件类型枚举
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS, Hash, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum PromptComponentType {
+    /// 元提示词
+    MetaPrompt,
+    /// 结构模板
+    PromptStructure,
+    /// 回退模板
+    FallbackTemplate,
+    /// 系统消息
+    SystemMessage,
+    /// 用户消息
+    UserMessage,
+    /// 示例
+    Examples,
+    /// 输出格式
+    OutputFormat,
+    /// 自定义组件
+    Custom,
+}
+
+/// 提示词参数
+///
+/// 提示词使用的参数（LLM 参数、模板变量等）
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PromptParameter {
+    /// 主键 ID
+    #[ts(type = "number | null")]
+    pub id: Option<i64>,
+
+    /// 关联的版本 ID
+    #[ts(type = "number")]
+    pub version_id: i64,
+
+    /// 参数名
+    pub key: String,
+
+    /// 参数值（JSON 序列化）
+    pub value: String,
+
+    /// 参数类型
+    pub parameter_type: PromptParameterType,
+
+    /// 参数描述
+    pub description: Option<String>,
+}
+
+/// 参数类型枚举
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS, Hash, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum PromptParameterType {
+    /// LLM 参数（temperature, max_tokens 等）
+    LLM,
+    /// 模板变量
+    Template,
+    /// 自定义参数
+    Custom,
+}
+
+/// 版本变更记录
+///
+/// 记录版本之间的字段级变更
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PromptChange {
+    /// 主键 ID
+    #[ts(type = "number")]
+    pub id: i64,
+
+    /// 关联的模板 ID
+    #[ts(type = "number")]
+    pub template_id: i64,
+
+    /// 源版本 ID（NULL 表示初始版本）
+    #[ts(type = "number | null")]
+    pub from_version_id: Option<i64>,
+
+    /// 目标版本 ID
+    #[ts(type = "number")]
+    pub to_version_id: i64,
+
+    /// 变更的组件 ID（NULL 表示整体变更）
+    #[ts(type = "number | null")]
+    pub component_id: Option<i64>,
+
+    /// 变更类型
+    pub change_type: ChangeType,
+
+    /// 变更的字段名
+    pub field_name: String,
+
+    /// 旧值
+    pub old_value: Option<String>,
+
+    /// 新值
+    pub new_value: Option<String>,
+
+    /// 行号（对于内容变更）
+    pub line_number: Option<i32>,
+
+    /// 变更摘要（diff 结果）
+    pub change_summary: Option<String>,
+
+    /// 变更时间（RFC3339）
+    #[serde(rename = "changedAt")]
+    pub changed_at: String,
+}
+
+/// 变更类型枚举
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum ChangeType {
+    /// 创建
+    Created,
+    /// 更新
+    Updated,
+    /// 删除
+    Deleted,
+}
+
+/// 版本对比结果
+///
+/// 两个版本之间的完整差异
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct PromptVersionDiff {
+    /// 源版本
+    pub from_version: PromptVersion,
+
+    /// 目标版本
+    pub to_version: PromptVersion,
+
+    /// 组件变更列表
+    pub component_changes: Vec<ComponentDiff>,
+
+    /// 参数变更列表
+    pub parameter_changes: Vec<ParameterDiff>,
+
+    /// 元数据变更
+    pub metadata_changes: Option<MetadataDiff>,
+}
+
+/// 组件变更
+///
+/// 单个组件的变更详情
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ComponentDiff {
+    /// 组件类型
+    pub component_type: PromptComponentType,
+
+    /// 组件名称
+    pub component_name: String,
+
+    /// 变更类型
+    pub change_type: ChangeType,
+
+    /// 行级差异列表
+    pub line_diffs: Vec<LineDiff>,
+}
+
+/// 行级差异
+///
+/// 单行内容的变更
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct LineDiff {
+    /// 行号
+    pub line_number: i32,
+
+    /// 变更类型
+    pub change_type: LineChangeType,
+
+    /// 旧内容
+    pub old_content: Option<String>,
+
+    /// 新内容
+    pub new_content: Option<String>,
+}
+
+/// 行变更类型
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub enum LineChangeType {
+    /// 添加
+    Added,
+    /// 删除
+    Removed,
+    /// 修改
+    Modified,
+    /// 未变更
+    Unchanged,
+}
+
+/// 参数变更
+///
+/// 单个参数的变更
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct ParameterDiff {
+    /// 参数名
+    pub key: String,
+
+    /// 参数类型
+    pub parameter_type: PromptParameterType,
+
+    /// 旧值（JSON）
+    pub old_value: Option<String>,
+
+    /// 新值（JSON）
+    pub new_value: Option<String>,
+}
+
+/// 元数据变更
+///
+/// 元数据字段的变更
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct MetadataDiff {
+    /// 字段名
+    pub field_name: String,
+
+    /// 旧值（JSON）
+    pub old_value: Option<String>,
+
+    /// 新值（JSON）
+    pub new_value: Option<String>,
+}
+
+/// 回滚记录
+///
+/// 版本回滚操作的历史记录
+#[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(rename_all = "camelCase")]
+pub struct RollbackRecord {
+    /// 主键 ID
+    #[ts(type = "number")]
+    pub id: i64,
+
+    /// 模板 ID
+    #[ts(type = "number")]
+    pub template_id: i64,
+
+    /// 源版本号
+    pub from_version_number: i32,
+
+    /// 目标版本号
+    pub to_version_number: i32,
+
+    /// 回滚备注
+    pub comment: Option<String>,
+
+    /// 回滚时间（RFC3339）
+    #[serde(rename = "rolledBackAt")]
+    pub rolled_back_at: String,
+
+    /// 回滚操作者
+    pub rolled_back_by: String,
+}

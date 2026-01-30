@@ -1,0 +1,81 @@
+{
+  "title": "Prompt Version Manager",
+  "description": "Optimizer Prompt Template - Version History & Comparison",
+  "versionList": "Version List",
+  "activeVersion": "Active Version",
+  "versions": "versions",
+  "detail": "Version Detail",
+  "compare": "Version Compare",
+  "history": "Change History",
+  "active": "Active",
+  "view": "View",
+  "compareWith": "Compare",
+  "rollback": "Rollback",
+  "createdBy": "Created By",
+  "components": "Components",
+  "componentsUnit": "components",
+  "contentPreview": "Content Preview",
+  "componentList": "Component List",
+  "fromVersion": "From Version",
+  "toVersion": "To Version",
+  "added": "Added",
+  "removed": "Removed",
+  "modified": "Modified",
+  "componentChanges": "Component Changes",
+  "parameterChanges": "Parameter Changes",
+  "changeHistory": "Change History",
+  "confirmRollback": "Confirm Rollback",
+  "rollbackWarning": "This will switch to the selected version. Current active version will be deactivated.",
+  "rollbackStrategy": "Rollback Strategy",
+  "softRollback": "Soft Rollback",
+  "softRollbackDesc": "Toggle active flag directly, keep version number",
+  "hardRollback": "Hard Rollback",
+  "hardRollbackDesc": "Create new version with copied content, preserve history",
+  "comment": "Comment",
+  "commentPlaceholder": "Optional: Add rollback description",
+  "cancel": "Cancel",
+  "confirmRollbackBtn": "Confirm Rollback",
+  "success": {
+    "activated": "Version activated",
+    "rolledBackSoft": "Rolled back to version v{version}",
+    "rolledBackHard": "Created new version and rolled back to v{targetVersion} content"
+  },
+  "error": {
+    "loadFailed": "Failed to load version list",
+    "activateFailed": "Failed to activate version",
+    "rollbackFailed": "Failed to rollback version",
+    "compareFailed": "Failed to compare versions",
+    "loadComponentsFailed": "Failed to load components",
+    "loadParametersFailed": "Failed to load parameters"
+  },
+  "componentType": {
+    "MetaPrompt": "Meta Prompt",
+    "PromptStructure": "Prompt Structure",
+    "FallbackTemplate": "Fallback Template",
+    "SystemMessage": "System Message",
+    "UserMessage": "User Message",
+    "Examples": "Examples",
+    "OutputFormat": "Output Format",
+    "Custom": "Custom"
+  },
+  "parameterType": {
+    "LLM": "LLM Parameter",
+    "Template": "Template Variable",
+    "Custom": "Custom Parameter"
+  },
+  "changeType": {
+    "Created": "Created",
+    "Updated": "Updated",
+    "Deleted": "Deleted"
+  },
+  "lineChangeType": {
+    "Added": "Added",
+    "Removed": "Removed",
+    "Modified": "Modified",
+    "Unchanged": "Unchanged"
+  },
+  "noChanges": "No changes",
+  "noComponents": "No components",
+  "noParameters": "No parameters",
+  "noHistory": "No change history"
+}

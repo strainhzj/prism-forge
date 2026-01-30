@@ -2,12 +2,14 @@ import { useTranslation } from 'react-i18next';
 import type { Prompt } from '@/types/generated';
 import { Button } from '@/components/ui/button';
 import { memo } from 'react';
+import { History } from 'lucide-react';
 
 interface PromptCardProps {
   prompt: Prompt;
   onEdit: () => void;
   onDelete: () => void;
   onReset: () => void;
+  onViewVersions?: () => void;
 }
 
 /**
@@ -20,6 +22,7 @@ const PromptCard = memo(function PromptCard({
   onEdit,
   onDelete,
   onReset,
+  onViewVersions,
 }: PromptCardProps) {
   const { t } = useTranslation('prompts');
 
@@ -117,7 +120,7 @@ const PromptCard = memo(function PromptCard({
       </div>
 
       {/* 操作按钮 */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <Button
           onClick={onEdit}
           variant="secondary"
@@ -138,6 +141,31 @@ const PromptCard = memo(function PromptCard({
         >
           {t('edit')}
         </Button>
+
+        {/* 为 optimizer_prompt_template 添加版本历史按钮 */}
+        {onViewVersions && (
+          <Button
+            onClick={onViewVersions}
+            variant="secondary"
+            size="sm"
+            className="transition-all hover:scale-[1.02] flex items-center gap-1"
+            style={{
+              boxShadow: '0 0 0 var(--color-accent-warm-shadow)',
+              border: '1px solid var(--color-accent-blue)',
+              backgroundColor: 'var(--color-bg-card)',
+              color: 'var(--color-accent-blue)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.boxShadow = '0 0 10px var(--color-accent-warm-shadow)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.boxShadow = '0 0 0 var(--color-accent-warm-shadow)';
+            }}
+          >
+            <History className="h-4 w-4" />
+            版本历史
+          </Button>
+        )}
 
         {prompt.isSystem ? (
           <Button

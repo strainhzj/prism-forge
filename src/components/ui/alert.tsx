@@ -31,6 +31,14 @@ const Alert = React.forwardRef<
     ref={ref}
     role="alert"
     className={cn(alertVariants({ variant }), className)}
+    style={{
+      backgroundColor: 'var(--color-bg-card)',
+      borderColor: variant === 'success' ? 'var(--color-accent-green)' :
+                    variant === 'destructive' ? 'var(--color-accent-red)' :
+                    variant === 'warning' ? 'var(--color-accent-warm)' :
+                    'var(--color-border-light)',
+      color: 'var(--color-text-primary)',
+    }}
     {...props}
   />
 ))
@@ -43,6 +51,7 @@ const AlertTitle = React.forwardRef<
   <h5
     ref={ref}
     className={cn("mb-1 font-medium leading-none tracking-tight", className)}
+    style={{ color: 'var(--color-text-primary)' }}
     {...props}
   />
 ))
@@ -55,6 +64,7 @@ const AlertDescription = React.forwardRef<
   <div
     ref={ref}
     className={cn("text-sm [&_p]:leading-relaxed", className)}
+    style={{ color: 'var(--color-text-primary)' }}
     {...props}
   />
 ))
