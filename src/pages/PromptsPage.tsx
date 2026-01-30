@@ -29,21 +29,43 @@ import {
  * 统一接口返回 camelCase 字段（如 isSystem, templateId），
  * 而 Prompt 类型使用 snake_case（如 is_system, template_id）。
  * 需要进行字段映射转换。
+ *
+ * 防御性编程：处理 Rust i64 → bigint 的类型转换问题
  */
 function convertToPrompt(data: any): Prompt {
+  // 防御性：验证必需字段
+  if (!data || typeof data !== 'object') {
+    throw new Error('无效的提示词数据');
+  }
+
+  // 防御性：处理 i64 → bigint 的类型转换
+  const id = typeof data.id === 'bigint' ? Number(data.id) : data.id;
+
+  // 防御性：确保版本号是数字
+  const versionNumber = typeof data.versionNumber === 'number'
+    ? data.versionNumber
+    : (typeof data.versionNumber === 'bigint' ? Number(data.versionNumber) : 1);
+
+  // 防御性：确保布尔值正确
+  const isSystem = Boolean(data.isSystem);
+  const isActive = Boolean(data.isActive);
+
+  // 防御性：确保时间戳存在
+  const createdAt = data.createdAt || new Date().toISOString();
+
   return {
-    id: data.id,
-    name: data.name,
-    content: data.content,
-    description: data.description || null,
-    scenario: data.scenario,
+    id,
+    name: String(data.name || ''),
+    content: String(data.content || ''),
+    description: data.description ? String(data.description) : null,
+    scenario: String(data.scenario || 'general'),
     category: 'general', // 默认值
-    isDefault: data.isSystem || false, // 从 isSystem 映射
-    isSystem: data.isSystem || false,
-    language: data.language || 'zh',
-    version: data.versionNumber || 1, // 从 versionNumber 映射
-    createdAt: data.createdAt || new Date().toISOString(),
-    updatedAt: data.createdAt || new Date().toISOString(), // 使用相同的时间
+    isDefault: isSystem,
+    isSystem,
+    language: String(data.language || 'zh'),
+    version: versionNumber,
+    createdAt,
+    updatedAt: createdAt, // 使用相同的时间
   };
 }
 

@@ -1109,22 +1109,43 @@ impl PromptVersionRepository {
                 params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
 
             let rows = stmt.query_map(params_ref.as_slice(), |row| {
+                // 防御性：验证语言字段是否存在
                 let language: Option<String> = row.get(6)?;
-                let language_value = language.unwrap_or_else(|| "unknown".to_string());
+                let language_value = match language {
+                    Some(lang) if !lang.is_empty() => lang,
+                    _ => {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[PromptVersionRepository] 警告: 版本 ID {} 缺少 language metadata，使用默认值 'unknown'",
+                                 row.get::<_, i64>(0).unwrap_or(0));
+                        "unknown".to_string()
+                    }
+                };
+
+                // 防御性：安全获取各个字段，使用 ? 传播错误而非 unwrap
+                let id: i64 = row.get(0)?;
+                let template_id: i64 = row.get(1)?;
+                let name: String = row.get(2)?;
+                let content: String = row.get(3)?;
+                let description: Option<String> = row.get(4)?;
+                let scenario: String = row.get(5)?;
+                let is_system: i32 = row.get(7)?;
+                let is_active: i32 = row.get(8)?;
+                let version_number: i32 = row.get(9)?;
+                let created_at: String = row.get(10)?;
 
                 // 构建扁平化的 JSON 对象
                 let mut map = serde_json::Map::new();
-                map.insert("id".to_string(), serde_json::json!(row.get::<_, i64>(0)?));
-                map.insert("templateId".to_string(), serde_json::json!(row.get::<_, i64>(1)?));
-                map.insert("name".to_string(), serde_json::json!(row.get::<_, String>(2)?));
-                map.insert("content".to_string(), serde_json::json!(row.get::<_, String>(3)?));
-                map.insert("description".to_string(), serde_json::json!(row.get::<_, Option<String>>(4)?));
-                map.insert("scenario".to_string(), serde_json::json!(row.get::<_, String>(5)?));
+                map.insert("id".to_string(), serde_json::json!(id));
+                map.insert("templateId".to_string(), serde_json::json!(template_id));
+                map.insert("name".to_string(), serde_json::json!(name));
+                map.insert("content".to_string(), serde_json::json!(content));
+                map.insert("description".to_string(), serde_json::json!(description));
+                map.insert("scenario".to_string(), serde_json::json!(scenario));
                 map.insert("language".to_string(), serde_json::json!(language_value));
-                map.insert("isSystem".to_string(), serde_json::json!(row.get::<_, i32>(7)? == 1));
-                map.insert("isActive".to_string(), serde_json::json!(row.get::<_, i32>(8)? == 1));
-                map.insert("versionNumber".to_string(), serde_json::json!(row.get::<_, i32>(9)?));
-                map.insert("createdAt".to_string(), serde_json::json!(row.get::<_, String>(10)?));
+                map.insert("isSystem".to_string(), serde_json::json!(is_system == 1));
+                map.insert("isActive".to_string(), serde_json::json!(is_active == 1));
+                map.insert("versionNumber".to_string(), serde_json::json!(version_number));
+                map.insert("createdAt".to_string(), serde_json::json!(created_at));
 
                 Ok(serde_json::Value::Object(map))
             })?;

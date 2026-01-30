@@ -429,24 +429,54 @@ impl PromptGenerator {
                 let mut found_prompt = None;
                 for template in templates {
                     if template.scenario == "session_analysis" {
+                        // 防御性：安全获取模板 ID
+                        let template_id = match template.id {
+                            Some(id) if id > 0 => id,
+                            _ => {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[PromptGenerator] 警告: 模板 '{}' ID 无效或为 0，跳过", template.name);
+                                continue;
+                            }
+                        };
+
                         // 获取该模板的所有版本
-                        if let Ok(versions) = repo.list_versions(template.id.unwrap_or(0)) {
-                            // 查找匹配语言的活跃版本
-                            for version in versions {
-                                if version.is_active {
-                                    if let Some(metadata) = &version.metadata {
-                                        if metadata.contains(&format!(r#""language":"{}""#, language)) {
+                        let versions = match repo.list_versions(template_id) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                #[cfg(debug_assertions)]
+                                eprintln!("[PromptGenerator] 警告: 查询模板 {} 版本失败: {}，跳过", template_id, e);
+                                continue;
+                            }
+                        };
+
+                        // 查找匹配语言的活跃版本
+                        for version in versions {
+                            if !version.is_active {
+                                continue;
+                            }
+
+                            // 防御性：使用 JSON 解析而非字符串包含判断
+                            if let Some(metadata) = &version.metadata {
+                                if let Ok(metadata_json) = serde_json::from_str::<serde_json::Value>(metadata) {
+                                    if let Some(lang_value) = metadata_json.get("language").and_then(|v| v.as_str()) {
+                                        if lang_value == language {
                                             found_prompt = Some(version.content);
                                             break;
                                         }
                                     }
+                                } else {
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("[PromptGenerator] 警告: 版本 {} metadata JSON 解析失败",
+                                             version.id.unwrap_or(0));
                                 }
                             }
-                            if found_prompt.is_some() {
-                                break;
-                            }
+                        }
+
+                        if found_prompt.is_some() {
+                            break;
                         }
                     }
+
                     if found_prompt.is_some() {
                         break;
                     }
