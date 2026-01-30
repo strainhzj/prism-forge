@@ -234,8 +234,12 @@ pub async fn cmd_get_prompt_components(
         .map_err(|e| format!("获取模板失败: {}", e))?
         .ok_or_else(|| format!("模板 '{}' 不存在", template_name))?;
 
+    // 安全地提取模板 ID
+    let template_id = template.id
+        .ok_or_else(|| format!("模板 '{}' 缺少有效的 ID", template_name))?;
+
     // 获取激活版本
-    let version = repo.get_active_version(template.id.unwrap())
+    let version = repo.get_active_version(template_id)
         .map_err(|e| format!("获取激活版本失败: {}", e))?
         .ok_or_else(|| format!("模板 '{}' 没有激活版本", template_name))?;
 
@@ -275,7 +279,9 @@ pub async fn cmd_update_prompt_components(
         .map_err(|e| format!("获取模板失败: {}", e))?
         .ok_or_else(|| format!("模板 '{}' 不存在", template_name))?;
 
-    let template_id = template.id.unwrap();
+    // 安全地提取模板 ID
+    let template_id = template.id
+        .ok_or_else(|| format!("模板 '{}' 缺少有效的 ID", template_name))?;
 
     // 获取当前激活版本
     let current_version = repo.get_active_version(template_id)
@@ -301,13 +307,14 @@ pub async fn cmd_update_prompt_components(
     let merged_content = serde_json::to_string_pretty(&merged_data)
         .map_err(|e| format!("序列化组件数据失败: {}", e))?;
 
-    // 获取下一个版本号
+    // 获取下一个版本号（防止溢出）
     let versions = repo.list_versions(template_id)
         .map_err(|e| format!("获取版本列表失败: {}", e))?;
     let next_version = versions.iter()
         .map(|v| v.version_number)
         .max()
-        .unwrap_or(0) + 1;
+        .and_then(|v| v.checked_add(1))
+        .ok_or_else(|| "版本号已达上限（i32::MAX），无法创建新版本".to_string())?;
 
     // 创建新版本
     let now = chrono::Utc::now().to_rfc3339();
@@ -402,7 +409,11 @@ pub async fn cmd_check_config_updated(
         .map_err(|e| format!("获取模板失败: {}", e))?
         .ok_or_else(|| format!("模板 '{}' 不存在", template_name))?;
 
-    let v1_version = repo.get_version_by_number(template.id.unwrap(), 1)
+    // 安全地提取模板 ID
+    let template_id = template.id
+        .ok_or_else(|| format!("模板 '{}' 缺少有效的 ID", template_name))?;
+
+    let v1_version = repo.get_version_by_number(template_id, 1)
         .map_err(|e| format!("获取 v1 版本失败: {}", e))?
         .ok_or_else(|| format!("v1 版本不存在"))?;
 

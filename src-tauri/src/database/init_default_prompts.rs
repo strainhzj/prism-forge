@@ -49,7 +49,11 @@ pub fn resolve_config_path() -> Result<PathBuf> {
     let exe_dir = exe_path
         .parent()
         .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
+        .unwrap_or_else(|| {
+            #[cfg(debug_assertions)]
+            log::warn!("[InitDefaultPrompts] 可执行文件路径没有父目录，使用当前目录作为回退");
+            PathBuf::from(".")
+        });
 
     #[cfg(debug_assertions)]
     {
@@ -72,6 +76,8 @@ pub fn resolve_config_path() -> Result<PathBuf> {
         }
 
         if !current_dir.pop() {
+            #[cfg(debug_assertions)]
+            log::debug!("[InitDefaultPrompts] 已到达文件系统根目录，停止向上查找");
             break;
         }
     }
@@ -98,13 +104,25 @@ pub fn resolve_config_path() -> Result<PathBuf> {
         }
     }
 
-    // 所有策略都失败
+    // 所有策略都失败，返回详细错误信息
+    #[cfg(debug_assertions)]
+    log::error!("[InitDefaultPrompts] 所有策略都失败，无法找到配置文件");
+
     Err(anyhow::anyhow!(
         "无法找到配置文件 optimizer_config.toml\n\
-         可执行文件目录: {:?}\n\
-         尝试的生产路径: {:?}\n\
-         尝试的开发路径: {:?}",
-        exe_dir, prod_path, cwd_path
+         \n\
+         尝试的路径:\n\
+         - 可执行文件目录: {:?}\n\
+         - 生产环境路径: {:?}\n\
+         - 开发环境路径（向上查找 {} 层）: {:?}\n\
+         \n\
+         请确保配置文件存在于以下位置之一:\n\
+         1. 可执行文件同目录: optimizer_config.toml\n\
+         2. 项目根目录的 src-tauri/: optimizer_config.toml",
+        exe_dir,
+        prod_path,
+        max_depth,
+        cwd_path
     ))
 }
 
