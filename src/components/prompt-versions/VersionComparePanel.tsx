@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
-import type { PromptVersion, PromptVersionDiff, LineDiff, ComponentDiff, ParameterDiff } from '@/types/generated';
+import type { PromptVersion, PromptVersionDiff, LineDiff } from '@/types/generated';
+// import type { ComponentDiff, ParameterDiff } from '@/types/generated';
 
 interface VersionComparePanelProps {
   versions: PromptVersion[];
@@ -26,13 +27,13 @@ export function VersionComparePanel({
 
   // 计算变更统计
   const addedCount = comparison.componentChanges.filter(
-    (c) => c.changeType === 'Created' || (c.lineDiffs?.some((l) => l.changeType === 'Added') ?? false)
+    (c) => c.changeType === 'created' || (c.lineDiffs?.some((l) => l.changeType === 'added') ?? false)
   ).length;
   const removedCount = comparison.componentChanges.filter(
-    (c) => c.changeType === 'Deleted' || (c.lineDiffs?.some((l) => l.changeType === 'Removed') ?? false)
+    (c) => c.changeType === 'deleted' || (c.lineDiffs?.some((l) => l.changeType === 'removed') ?? false)
   ).length;
   const modifiedCount = comparison.componentChanges.filter(
-    (c) => c.changeType === 'Updated'
+    (c) => c.changeType === 'updated'
   ).length;
 
   // 获取变更类型标签
@@ -43,19 +44,19 @@ export function VersionComparePanel({
   // 获取行变更类型样式
   const getLineDiffStyle = (changeType: string) => {
     switch (changeType) {
-      case 'Added':
+      case 'added':
         return {
           backgroundColor: 'rgba(76, 175, 80, 0.15)',
           borderLeft: '3px solid var(--color-accent-green)',
         };
-      case 'Removed':
+      case 'removed':
         return {
           backgroundColor: 'rgba(239, 68, 68, 0.15)',
           borderLeft: '3px solid var(--color-accent-red)',
           textDecoration: 'line-through' as const,
           opacity: 0.7,
         };
-      case 'Modified':
+      case 'modified':
         return {
           backgroundColor: 'rgba(245, 158, 11, 0.15)',
           borderLeft: '3px solid var(--color-accent-warm)',
@@ -83,12 +84,12 @@ export function VersionComparePanel({
               {diff.lineNumber || '-'}
             </span>
             <span
-              className={diff.changeType === 'Removed' ? 'line-through' : ''}
+              className={diff.changeType === 'removed' ? 'line-through' : ''}
               style={{ color: 'var(--color-text-primary)' }}
             >
-              {diff.changeType === 'Added'
+              {diff.changeType === 'added'
                 ? diff.newContent || ''
-                : diff.changeType === 'Removed'
+                : diff.changeType === 'removed'
                 ? diff.oldContent || ''
                 : diff.oldContent || diff.newContent || ''}
             </span>
@@ -128,9 +129,9 @@ export function VersionComparePanel({
           </div>
           <span
             className={`text-xs ${
-              change.changeType === 'Updated'
+              change.changeType === 'updated'
                 ? 'text-yellow-500'
-                : change.changeType === 'Created'
+                : change.changeType === 'created'
                 ? 'text-green-500'
                 : 'text-red-500'
             }`}

@@ -7,11 +7,13 @@ use ts_rs::TS;
 use prism_forge::optimizer::config::{
     AdvancedConfig,
     CompressionConfig,
-    FallbackConfig,
+    ComponentsConfig,
+    ComponentContent,
+    LanguageComponent,
+    LanguageComponentWithMeta,
     LLMParamsConfig,
-    MetaPromptConfig,
     OptimizerConfig,
-    PromptStructureConfig,
+    PromptComponentData,
     SessionContextConfig,
 };
 use prism_forge::optimizer::prompt_generator::{
@@ -35,10 +37,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Optimizer config types
     OptimizerConfig::export_to(output_dir.join("OptimizerConfig.ts"))?;
-    MetaPromptConfig::export_to(output_dir.join("MetaPromptConfig.ts"))?;
+    ComponentsConfig::export_to(output_dir.join("ComponentsConfig.ts"))?;
+    LanguageComponent::export_to(output_dir.join("LanguageComponent.ts"))?;
+    LanguageComponentWithMeta::export_to(output_dir.join("LanguageComponentWithMeta.ts"))?;
+    ComponentContent::export_to(output_dir.join("ComponentContent.ts"))?;
+    PromptComponentData::export_to(output_dir.join("PromptComponentData.ts"))?;
     LLMParamsConfig::export_to(output_dir.join("LLMParamsConfig.ts"))?;
-    PromptStructureConfig::export_to(output_dir.join("PromptStructureConfig.ts"))?;
-    FallbackConfig::export_to(output_dir.join("FallbackConfig.ts"))?;
     SessionContextConfig::export_to(output_dir.join("SessionContextConfig.ts"))?;
     CompressionConfig::export_to(output_dir.join("CompressionConfig.ts"))?;
     AdvancedConfig::export_to(output_dir.join("AdvancedConfig.ts"))?;

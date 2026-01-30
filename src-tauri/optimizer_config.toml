@@ -1,12 +1,17 @@
 # PrismForge 优化器配置文件
 # 此文件控制 "Analyze & Generate Prompt" 功能的提示词生成行为
+#
+# 组件化结构说明：
+# - components.meta_prompt: 可编辑的 Meta-Prompt 组件
+# - components.input_template: 只读的输入信息模板
+# - components.output_template: 只读的输出格式模板
 
-# ==================== Meta-Prompt 模板 ====================
-[meta_prompt]
-# 通用方法论模板，用于指导 LLM 生成优化后的提示词
-# 此模板不包含具体变量，保持独立性和可复用性
+# ==================== 会话分析场景 - 组件化提示词 ====================
+[components.meta_prompt]
+# 可编辑组件：Meta-Prompt（分析方法步骤 + 限制条件）
+# 用户可以编辑此组件来调整提示词生成逻辑
 # 中文版本
-template_zh = """你是一位专业的提示词工程师。你的任务是分析用户目标和会话历史，生成一个结构化、高信噪比的提示词，以指导 AI 编程助手高效地完成任务。
+zh = """你是一位专业的提示词工程师。你的任务是分析用户目标和会话历史，生成一个结构化、高信噪比的提示词，以指导 AI 编程助手高效地完成任务。
 
 ## 你的分析与构建步骤
 
@@ -27,7 +32,7 @@ template_zh = """你是一位专业的提示词工程师。你的任务是分析
 """
 
 # 英文版本
-template_en = """You are a professional prompt engineer. Your task is to analyze user goals and conversation history to generate a structured, high signal-to-noise ratio prompt that will guide an AI programming assistant to efficiently complete tasks.
+en = """You are a professional prompt engineer. Your task is to analyze user goals and conversation history to generate a structured, high signal-to-noise ratio prompt that will guide an AI programming assistant to efficiently complete tasks.
 
 ## Your Analysis and Construction Steps
 
@@ -45,6 +50,78 @@ template_en = """You are a professional prompt engineer. Your task is to analyze
 - Must rigorously assess goal drift based on the relevance between **context** and **next step**, irrespective of whether it belongs to the same project
 - Strictly prohibit referencing only the latest conversation; must establish cognition of the **entire conversation history**
 - Highlight key technical points and considerations
+"""
+
+[components.input_template]
+# 只读组件：输入信息模板
+# 包含占位符：{{goal}} (用户目标), {{sessions}} (会话历史)
+# 中文版本
+zh = """## 输入信息
+
+- **下一步目标**: {{goal}}
+- **相关历史会话**:
+{{sessions}}"""
+
+# 英文版本
+en = """## Input Information
+
+- **Next Goal**: {{goal}}
+- **Related Conversation History**:
+{{sessions}}"""
+
+[components.output_template]
+# 只读组件：输出格式模板
+# 定义生成的提示词应包含的结构
+# 中文版本
+zh = """## 输出格式
+
+请严格按照以下结构生成提示词，并用 Markdown 标题标识：
+
+### **目标偏离程度**
+
+判断**下一步目标**与**相关历史会话**的偏离程度，给出你的建议（例如：可以继续会话、建议用户开启新的会话、如偏离程度高则截断回答直接建议用户开启新会话）
+
+### **任务目标**
+
+简要描述要完成的任务和目标。
+
+### **具体步骤**
+
+提供清晰、可执行的步骤列表，指导 AI 如何完成任务。
+
+### **预期输出**
+
+描述期望的最终产出物是什么，并说明其关键要求。
+
+---
+
+请基于上述信息，生成一个优化的提示词。
+"""
+
+# 英文版本
+en = """## Output Format
+
+Please strictly follow the structure below to generate a prompt, using Markdown headings:
+
+### **Goal Drift Level**
+
+Assess the degree of drift between the **next goal** and **related conversation history**, and provide your recommendation (e.g., can continue conversation, suggest user start a new conversation, if drift is high then truncate response and directly suggest user start a new conversation)
+
+### **Task Objective**
+
+Briefly describe the task and objectives to be completed.
+
+### **Specific Steps**
+
+Provide clear, actionable step-by-step instructions to guide the AI in completing the task.
+
+### **Expected Output**
+
+Describe what the final deliverable should be and specify its key requirements.
+
+---
+
+Please generate an optimized prompt based on the information above.
 """
 
 # ==================== LLM 调用参数 ====================
@@ -75,111 +152,6 @@ frequency_penalty = 0.0
 # - 0.0: 不惩罚
 # - 0.5-1.0: 中等惩罚，鼓励多样性
 presence_penalty = 0.0
-
-# ==================== 提示词结构模板 ====================
-[prompt_structure]
-# 完整提示词的组装结构
-# 可用变量:
-#   {{meta_prompt}}: Meta-Prompt 模板内容
-#   {{goal}}: 用户输入的目标
-#   {{sessions}}: 格式化的会话上下文
-
-# 中文版本
-structure_zh = """{{meta_prompt}}
-
-## 输入信息
-
-- **下一步目标**: {{goal}}
-- **相关历史会话**:
-{{sessions}}
-
-## 输出格式
-
-请严格按照以下结构生成提示词，并用 Markdown 标题标识：
-
-### **目标偏离程度**
-
-判断**下一步目标**与**相关历史会话**的偏离程度，给出你的建议（例如：可以继续会话、建议用户开启新的会话、如偏离程度高则截断回答直接建议用户开启新会话）
-
-### **任务目标**
-
-简要描述要完成的任务和目标。
-
-### **具体步骤**
-
-提供清晰、可执行的步骤列表，指导 AI 如何完成任务。
-
-### **预期输出**
-
-描述期望的最终产出物是什么，并说明其关键要求。
-
----
-
-请基于上述信息，生成一个优化的提示词。
-"""
-
-# 英文版本
-structure_en = """{{meta_prompt}}
-
-## Input Information
-
-- **Next Goal**: {{goal}}
-- **Related Conversation History**:
-{{sessions}}
-
-## Output Format
-
-Please strictly follow the structure below to generate a prompt, using Markdown headings:
-
-### **Goal Drift Level**
-
-Assess the degree of drift between the **next goal** and **related conversation history**, and provide your recommendation (e.g., can continue conversation, suggest user start a new conversation, if drift is high then truncate response and directly suggest user start a new conversation)
-
-### **Task Objective**
-
-Briefly describe the task and objectives to be completed.
-
-### **Specific Steps**
-
-Provide clear, actionable step-by-step instructions to guide the AI in completing the task.
-
-### **Expected Output**
-
-Describe what the final deliverable should be and specify its key requirements.
-
----
-
-Please generate an optimized prompt based on the information above.
-"""
-
-# ==================== 回退模板 ====================
-[fallback]
-# 当没有相关会话时使用的简单模板
-# 可用变量: {{goal}}
-
-# 中文版本
-no_sessions_template_zh = "请帮我完成以下编程任务：\n\n{{goal}}\n\n请提供详细的实现方案和代码示例。"
-
-# 英文版本
-no_sessions_template_en = "Please help me complete the following programming task:\n\n{{goal}}\n\nPlease provide a detailed implementation plan and code examples."
-
-# LLM 调用失败时使用的模板
-# 可用变量: {{goal}}, {{best_session_summary}}, {{best_session_rating}}
-
-# 中文版本
-llm_error_template_zh = '请帮我完成以下编程任务：\n\n{{goal}}\n\n{{#if best_session_summary}}## 参考\n相关会话: (评分: {{best_session_rating}})\n{{best_session_summary}}{{/if}}\n\n请提供详细的实现方案和代码示例。'
-
-# 英文版本
-llm_error_template_en = 'Please help me complete the following programming task:\n\n{{goal}}\n\n{{#if best_session_summary}}## Reference\nRelated session: (Rating: {{best_session_rating}})\n{{best_session_summary}}{{/if}}\n\nPlease provide a detailed implementation plan and code examples.'
-
-# 对话开始模板（当会话消息为空时使用）
-# 可用变量: {{goal}}
-
-# 中文版本
-conversation_starter_template_zh = "你是一个专业的提示词专家。用户想要在ai coding agent开始一个新的对话，请生成一段信噪比的提示词来帮助用户开始对话。\n\n## 用户目标\n{{goal}}\n\n## 要求\n1. 理解用户的目标\n2. 补充用户目标中可能缺失的部分\n3. 提供明确的方向\n4. 保持简洁明了（控制在 200 字以内）\n\n请生成一个对话开始的提示词。"
-
-# 英文版本
-conversation_starter_template_en = "You are a professional prompt expert. The user wants to start a new conversation in an AI coding agent. Please generate a high signal-to-noise ratio prompt to help the user begin the conversation.\n\n## User Goal\n{{goal}}\n\n## Requirements\n1. Understand the user's goal\n2. Supplement any potentially missing parts of the user's goal\n3. Provide clear direction\n4. Keep it concise and clear (within 200 words)\n\nPlease generate a conversation-starting prompt."
 
 # ==================== 会话上下文配置 ====================
 [session_context]

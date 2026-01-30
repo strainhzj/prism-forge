@@ -35,10 +35,20 @@
   "commentPlaceholder": "Optional: Add rollback description",
   "cancel": "Cancel",
   "confirmRollbackBtn": "Confirm Rollback",
+  "edit": "Edit",
+  "save": "Save",
+  "saving": "Saving...",
+  "loading": "Loading...",
+  "language": "Language",
+  "metaPrompt": "Meta-Prompt",
+  "configUpdatedWarning": "Config file updated, read-only components synchronized. Please check if Meta-Prompt needs adjustment.",
+  "languageNotModifiedWarning": "Other language versions not yet modified, content still in initial version",
+  "close": "Close",
   "success": {
     "activated": "Version activated",
     "rolledBackSoft": "Rolled back to version v{version}",
-    "rolledBackHard": "Created new version and rolled back to v{targetVersion} content"
+    "rolledBackHard": "Created new version and rolled back to v{targetVersion} content",
+    "saved": "Saved successfully"
   },
   "error": {
     "loadFailed": "Failed to load version list",
@@ -46,7 +56,9 @@
     "rollbackFailed": "Failed to rollback version",
     "compareFailed": "Failed to compare versions",
     "loadComponentsFailed": "Failed to load components",
-    "loadParametersFailed": "Failed to load parameters"
+    "loadParametersFailed": "Failed to load parameters",
+    "loadFailed": "Failed to load",
+    "saveFailed": "Failed to save"
   },
   "componentType": {
     "MetaPrompt": "Meta Prompt",
@@ -64,15 +76,15 @@
     "Custom": "Custom Parameter"
   },
   "changeType": {
-    "Created": "Created",
-    "Updated": "Updated",
-    "Deleted": "Deleted"
+    "created": "Created",
+    "updated": "Updated",
+    "deleted": "Deleted"
   },
   "lineChangeType": {
-    "Added": "Added",
-    "Removed": "Removed",
-    "Modified": "Modified",
-    "Unchanged": "Unchanged"
+    "added": "Added",
+    "removed": "Removed",
+    "modified": "Modified",
+    "unchanged": "Unchanged"
   },
   "noChanges": "No changes",
   "noComponents": "No components",

@@ -35,10 +35,20 @@
   "commentPlaceholder": "可选：添加回滚说明",
   "cancel": "取消",
   "confirmRollbackBtn": "确认回滚",
+  "edit": "编辑",
+  "save": "保存",
+  "saving": "保存中...",
+  "loading": "加载中...",
+  "language": "语言",
+  "metaPrompt": "Meta-Prompt",
+  "configUpdatedWarning": "配置文件已更新，只读组件已同步，请检查 Meta-Prompt 是否需要调整",
+  "languageNotModifiedWarning": "其他语言版本尚未修改，内容仍为初始版本",
+  "close": "关闭",
   "success": {
     "activated": "版本已激活",
     "rolledBackSoft": "已回滚到版本 v{version}",
-    "rolledBackHard": "已创建新版本并回滚到 v{targetVersion} 的内容"
+    "rolledBackHard": "已创建新版本并回滚到 v{targetVersion} 的内容",
+    "saved": "保存成功"
   },
   "error": {
     "loadFailed": "加载版本列表失败",
@@ -46,7 +56,9 @@
     "rollbackFailed": "回滚版本失败",
     "compareFailed": "版本对比失败",
     "loadComponentsFailed": "加载组件失败",
-    "loadParametersFailed": "加载参数失败"
+    "loadParametersFailed": "加载参数失败",
+    "loadFailed": "加载失败",
+    "saveFailed": "保存失败"
   },
   "componentType": {
     "MetaPrompt": "元提示词",
@@ -64,15 +76,15 @@
     "Custom": "自定义参数"
   },
   "changeType": {
-    "Created": "创建",
-    "Updated": "更新",
-    "Deleted": "删除"
+    "created": "创建",
+    "updated": "更新",
+    "deleted": "删除"
   },
   "lineChangeType": {
-    "Added": "添加",
-    "Removed": "删除",
-    "Modified": "修改",
-    "Unchanged": "未变更"
+    "added": "添加",
+    "removed": "删除",
+    "modified": "修改",
+    "unchanged": "未变更"
   },
   "noChanges": "无变更",
   "noComponents": "无组件",

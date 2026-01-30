@@ -190,10 +190,14 @@ pub fn run() {
             commands_prompt_versions::cmd_rollback_prompt_version_hard,
             commands_prompt_versions::cmd_save_prompt_version,
             commands_prompt_versions::cmd_compare_prompt_versions,
-            commands_prompt_versions::cmd_get_prompt_components,
+            commands_prompt_versions::cmd_get_prompt_components_by_id,
             commands_prompt_versions::cmd_get_prompt_parameters,
             commands_prompt_versions::cmd_get_prompt_version_changes,
-            commands_prompt_versions::cmd_get_prompts_unified,
+            // 组件化提示词管理命令
+            commands_prompt_versions::cmd_get_prompt_components,
+            commands_prompt_versions::cmd_update_prompt_components,
+            commands_prompt_versions::cmd_check_config_updated,
+            commands_prompt_versions::cmd_cleanup_legacy_templates,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| {

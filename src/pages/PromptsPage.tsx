@@ -1,240 +1,42 @@
-import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { Home, Trash2 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import type { Prompt } from '@/types/generated';
-import PromptCard from '@/components/prompts/PromptCard';
-import PromptForm from '@/components/prompts/PromptForm';
-import { PromptVersionsDrawer } from '@/components/prompt-versions';
-import { Button } from '@/components/ui/button';
-import { useDebounce } from '@/hooks/useDebounce';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loading } from '@/components/ui/loading';
-import { CheckCircle, AlertCircle, Home, AlertTriangle } from 'lucide-react';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { ScenarioTemplateList } from '@/components/prompt-versions';
 
 /**
- * 将统一接口返回的数据转换为 Prompt 类型
+ * 提示词模板管理页面
  *
- * 统一接口返回 camelCase 字段（如 isSystem, templateId），
- * 而 Prompt 类型使用 snake_case（如 is_system, template_id）。
- * 需要进行字段映射转换。
- *
- * 防御性编程：处理 Rust i64 → bigint 的类型转换问题
- */
-function convertToPrompt(data: any): Prompt {
-  // 防御性：验证必需字段
-  if (!data || typeof data !== 'object') {
-    throw new Error('无效的提示词数据');
-  }
-
-  // 防御性：处理 i64 → bigint 的类型转换
-  const id = typeof data.id === 'bigint' ? Number(data.id) : data.id;
-
-  // 防御性：确保版本号是数字
-  const versionNumber = typeof data.versionNumber === 'number'
-    ? data.versionNumber
-    : (typeof data.versionNumber === 'bigint' ? Number(data.versionNumber) : 1);
-
-  // 防御性：确保布尔值正确
-  const isSystem = Boolean(data.isSystem);
-  const isActive = Boolean(data.isActive);
-
-  // 防御性：确保时间戳存在
-  const createdAt = data.createdAt || new Date().toISOString();
-
-  return {
-    id,
-    name: String(data.name || ''),
-    content: String(data.content || ''),
-    description: data.description ? String(data.description) : null,
-    scenario: String(data.scenario || 'general'),
-    category: 'general', // 默认值
-    isDefault: isSystem,
-    isSystem,
-    language: String(data.language || 'zh'),
-    version: versionNumber,
-    createdAt,
-    updatedAt: createdAt, // 使用相同的时间
-  };
-}
-
-/**
- * 对话框类型常量
- */
-const DIALOG_TYPE = {
-  DELETE: 'delete',
-  RESET: 'reset',
-} as const;
-
-type DialogType = typeof DIALOG_TYPE[keyof typeof DIALOG_TYPE];
-
-/**
- * 提示词管理页面
- *
- * 功能：
- * - 展示提示词列表
- * - 提供搜索和过滤功能
- * - 创建、编辑、删除提示词
+ * 显示场景级别的模板（如"会话分析"），支持编辑
  */
 export default function PromptsPage() {
   const { t } = useTranslation('prompts');
   const navigate = useNavigate();
+  const [cleaning, setCleaning] = useState(false);
 
-  // 状态管理
-  const [searchQuery, setSearchQuery] = useState('');
-  const [scenarioFilter, setScenarioFilter] = useState<string>('all');
-  const [languageFilter, setLanguageFilter] = useState<string>('all');
-  const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
-  const [isFormOpen, setIsFormOpen] = useState(false);
+  // 清理历史数据
+  const handleCleanup = async () => {
+    if (!confirm('确定要清理所有非"会话分析"的模板吗？此操作不可撤销。')) {
+      return;
+    }
 
-  // 版本管理抽屉状态
-  const [versionsDrawerOpen, setVersionsDrawerOpen] = useState(false);
-
-  // 确认对话框状态
-  const [confirmDialog, setConfirmDialog] = useState<{
-    show: boolean;
-    type: DialogType;
-    data: number | string | null;
-  }>({
-    show: false,
-    type: DIALOG_TYPE.DELETE,
-    data: null,
-  });
-
-  // Alert 状态
-  const [alert, setAlert] = useState<{
-    show: boolean;
-    type: 'success' | 'error';
-    message: string;
-  }>({
-    show: false,
-    type: 'success',
-    message: '',
-  });
-
-  // 显示 Alert（使用 useCallback 避免不必要的重渲染）
-  const showAlert = useCallback((type: 'success' | 'error', message: string) => {
-    setAlert({ show: true, type, message });
-  }, []);
-
-  // 自动隐藏 Alert（带清理）
-  useEffect(() => {
-    if (!alert.show) return;
-
-    const timer = setTimeout(() => {
-      setAlert(prev => ({ ...prev, show: false }));
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, [alert.show]);
-
-  // 搜索防抖（300ms 延迟）
-  const debouncedSearch = useDebounce(searchQuery, 300);
-
-  // 获取提示词列表（使用统一的版本管理接口）
-  const {
-    data: prompts = [],
-    isLoading,
-    error,
-  } = useQuery({
-    queryKey: ['prompts', scenarioFilter, languageFilter, debouncedSearch],
-    queryFn: async () => {
-      const data = await invoke<any[]>('cmd_get_prompts_unified', {
-        scenario: scenarioFilter === 'all' ? null : scenarioFilter,
-        language: languageFilter === 'all' ? null : languageFilter,
-        search: debouncedSearch.trim() || null,
-      });
-      // 将统一接口返回的数据转换为 Prompt 类型
-      return data.map(convertToPrompt);
-    },
-  });
-
-  // 注意：删除和重置功能暂时禁用，需要适配版本管理系统
-  // TODO: 实现版本管理系统的删除和重置功能
-
-  // 处理新建
-  const handleNew = () => {
-    setEditingPrompt(null);
-    setIsFormOpen(true);
+    setCleaning(true);
+    try {
+      const deleted = await invoke<number>('cmd_cleanup_legacy_templates');
+      alert(`成功清理 ${deleted} 个历史模板`);
+      // 刷新页面
+      window.location.reload();
+    } catch (error) {
+      console.error('清理失败:', error);
+      alert('清理失败：' + error);
+    } finally {
+      setCleaning(false);
+    }
   };
-
-  // 处理编辑
-  const handleEdit = (prompt: Prompt) => {
-    setEditingPrompt(prompt);
-    setIsFormOpen(true);
-  };
-
-  // 处理删除 - 暂时禁用
-  const handleDelete = (_id: number | bigint) => {
-    showAlert('error', '删除功能暂时禁用，请使用版本管理界面');
-  };
-
-  // 处理重置 - 暂时禁用
-  const handleReset = (_name: string) => {
-    showAlert('error', '重置功能暂时禁用，请使用版本管理界面');
-  };
-
-  // 确认操作 - 暂时禁用
-  const handleConfirm = async () => {
-    showAlert('error', '此功能暂时禁用，请使用版本管理界面');
-    setConfirmDialog({ show: false, type: DIALOG_TYPE.DELETE, data: null });
-  };
-
-  // 取消操作
-  const handleCancelConfirm = () => {
-    setConfirmDialog({ show: false, type: DIALOG_TYPE.DELETE, data: null });
-  };
-
-  // 加载状态
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loading text={t('loading')} />
-      </div>
-    );
-  }
-
-  // 错误状态
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div
-          className="text-center"
-          style={{ color: '#ef4444' }}
-        >
-          {t('errorLoading')}: {error.message}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="container mx-auto px-4 py-8">
-      {/* 全局 Alert */}
-      {alert.show && (
-        <div className="mb-4">
-          <Alert variant={alert.type === 'success' ? 'success' : 'destructive'}>
-            {alert.type === 'success' ? (
-              <CheckCircle className="h-4 w-4" />
-            ) : (
-              <AlertCircle className="h-4 w-4" />
-            )}
-            <AlertDescription>{alert.message}</AlertDescription>
-          </Alert>
-        </div>
-      )}
-
       {/* 页面标题 + 返回按钮 */}
       <div className="mb-6 flex items-center gap-4">
         <button
@@ -280,201 +82,38 @@ export default function PromptsPage() {
             className="mt-2"
             style={{ color: 'var(--color-text-secondary)' }}
           >
-            {t('description')}
+            管理提示词模板，编辑 Meta-Prompt 组件
           </p>
         </div>
       </div>
 
-      {/* 工具栏 */}
-      <div
-        className="mb-6 flex flex-wrap gap-4 items-center justify-between p-4 rounded-lg border"
-        style={{
-          backgroundColor: 'var(--color-bg-card)',
-          borderColor: 'var(--color-border-light)',
-        }}
-      >
-        {/* 左侧：搜索框和过滤器 */}
-        <div className="flex flex-wrap gap-4 items-center flex-1">
-          {/* 搜索框 */}
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('searchPlaceholder')}
-            className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 min-w-[200px] flex-1"
+      {/* 场景模板列表 */}
+      <div className="rounded-lg border p-6" style={{
+        backgroundColor: 'var(--color-bg-card)',
+        borderColor: 'var(--color-border-light)',
+      }}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+            提示词模板
+          </h2>
+          <button
+            onClick={handleCleanup}
+            disabled={cleaning}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors disabled:opacity-50"
             style={{
               backgroundColor: 'var(--color-bg-primary)',
-              borderColor: 'var(--color-border-light)',
-              color: 'var(--color-text-primary)',
-              // @ts-ignore - CSS custom properties
-              '--tw-ring-color': 'var(--color-accent-warm)',
+              color: 'var(--color-accent-red)',
+              border: '1px solid var(--color-accent-red)',
             }}
-          />
-
-          {/* 过滤器 */}
-          <div className="flex gap-4">
-            {/* 场景过滤 */}
-            <select
-              value={scenarioFilter}
-              onChange={(e) => setScenarioFilter(e.target.value)}
-              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2"
-              style={{
-                backgroundColor: 'var(--color-bg-primary)',
-                borderColor: 'var(--color-border-light)',
-                color: 'var(--color-text-primary)',
-                // @ts-ignore - CSS custom properties
-                '--tw-ring-color': 'var(--color-accent-warm)',
-              }}
-            >
-              <option value="all">{t('filters.allScenarios')}</option>
-              <option value="session_analysis">
-                {t('scenarios.session_analysis')}
-              </option>
-            </select>
-
-            {/* 语言过滤 */}
-            <select
-              value={languageFilter}
-              onChange={(e) => setLanguageFilter(e.target.value)}
-              className="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2"
-              style={{
-                backgroundColor: 'var(--color-bg-primary)',
-                borderColor: 'var(--color-border-light)',
-                color: 'var(--color-text-primary)',
-                // @ts-ignore - CSS custom properties
-                '--tw-ring-color': 'var(--color-accent-warm)',
-              }}
-            >
-              <option value="all">{t('filters.allLanguages')}</option>
-              <option value="zh">{t('filters.zh')}</option>
-              <option value="en">{t('filters.en')}</option>
-            </select>
-          </div>
-        </div>
-
-        {/* 右侧：新建按钮 */}
-        <Button
-          onClick={handleNew}
-          className="transition-all hover:scale-[1.02]"
-          style={{
-            boxShadow: '0 0 0 var(--color-accent-warm-shadow)',
-            border: '1px solid var(--color-accent-warm)',
-            backgroundColor: 'var(--color-bg-card)',
-            color: 'var(--color-accent-warm)',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.boxShadow = '0 0 12px var(--color-accent-warm-shadow)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.boxShadow = '0 0 0 var(--color-accent-warm-shadow)';
-          }}
-        >
-          + {t('newPrompt')}
-        </Button>
-      </div>
-
-      {/* 提示词列表 */}
-      <div className="space-y-4">
-        {prompts.length === 0 ? (
-          <div
-            className="text-center py-12 rounded-lg border"
-            style={{
-              color: 'var(--color-text-secondary)',
-              backgroundColor: 'var(--color-bg-card)',
-              borderColor: 'var(--color-border-light)',
-            }}
+            title="清理所有非会话分析的历史模板"
           >
-            {t('noPromptsFound')}
-          </div>
-        ) : (
-          prompts.map((prompt) => (
-            <PromptCard
-              key={prompt.id}
-              prompt={prompt}
-              onEdit={() => handleEdit(prompt)}
-              onDelete={() => {
-                const id = prompt.id;
-                if (id === null || id === undefined) return;
-                handleDelete(id);
-              }}
-              onReset={() => handleReset(prompt.name)}
-              // 新架构：所有提示词都支持版本历史
-              onViewVersions={() => setVersionsDrawerOpen(true)}
-            />
-          ))
-        )}
+            <Trash2 className="w-4 h-4" />
+            <span>{cleaning ? '清理中...' : '清理历史数据'}</span>
+          </button>
+        </div>
+        {/* 不传递 onEditTemplate，让组件自己管理编辑状态 */}
+        <ScenarioTemplateList />
       </div>
-
-      {/* 表单对话框 */}
-      <PromptForm
-        prompt={editingPrompt}
-        open={isFormOpen}
-        onOpenChange={setIsFormOpen}
-        onSuccess={() => {
-          const successMsg = editingPrompt
-            ? t('success.updated')
-            : t('success.created');
-          showAlert('success', successMsg);
-        }}
-      />
-
-      {/* 确认对话框 */}
-      <AlertDialog open={confirmDialog.show} onOpenChange={(open) => !open && handleCancelConfirm()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5" style={{ color: 'var(--color-accent-warm)' }} />
-              {confirmDialog.type === DIALOG_TYPE.DELETE ? t('confirmDelete') : t('confirmReset')}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {confirmDialog.type === DIALOG_TYPE.DELETE
-                ? t('confirmDeleteDescription')
-                : t('confirmResetDescription')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={handleCancelConfirm}
-              className="px-4 py-2 rounded-md border transition-colors hover:opacity-80"
-              style={{
-                backgroundColor: 'var(--color-app-button-default)',
-                color: 'var(--color-text-primary)',
-                borderColor: 'var(--color-border-light)',
-              }}
-            >
-              {t('cancel')}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirm}
-              className="px-4 py-2 rounded-md transition-colors hover:opacity-90"
-              style={
-                confirmDialog.type === DIALOG_TYPE.DELETE
-                  ? {
-                      backgroundColor: 'var(--color-destructive)',
-                      color: 'var(--color-destructive-foreground)',
-                    }
-                  : {
-                      backgroundColor: 'var(--color-accent-blue)',
-                      color: '#FFFFFF',
-                    }
-              }
-              aria-label={
-                confirmDialog.type === DIALOG_TYPE.DELETE
-                  ? t('delete')
-                  : t('resetToDefault')
-              }
-            >
-              {confirmDialog.type === DIALOG_TYPE.DELETE ? t('delete') : t('resetToDefault')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* 版本管理抽屉 */}
-      <PromptVersionsDrawer
-        open={versionsDrawerOpen}
-        onOpenChange={setVersionsDrawerOpen}
-      />
     </div>
   );
 }

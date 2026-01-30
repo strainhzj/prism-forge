@@ -65,6 +65,14 @@ fn initialize_connection() -> Result<Arc<Mutex<Connection>>> {
     crate::database::migrations::run_migrations(&mut conn)?;
     log::info!("数据库迁移完成");
 
+    // 导入默认提示词（如果数据库为空或更新模板）
+    if let Err(e) = crate::database::init_default_prompts::import_default_prompts(&mut conn) {
+        log::warn!("导入默认提示词失败（不影响启动）: {}", e);
+        // 不中断应用启动，仅记录警告
+    } else {
+        log::info!("默认提示词导入成功");
+    }
+
     // 包装在 Arc<Mutex<>> 中返回
     Ok(Arc::new(Mutex::new(conn)))
 }

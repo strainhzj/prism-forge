@@ -8,6 +8,7 @@ pub mod repository;
 pub mod init;
 pub mod vector_repository;
 pub mod prompt_versions;
+pub mod init_default_prompts;
 
 pub use models::{
     ApiProvider, ApiProviderType,
