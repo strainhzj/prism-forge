@@ -179,11 +179,34 @@ pub async fn cmd_initialize_prompt_template_from_prompt(
     use crate::database::prompts::PromptRepository;
 
     // 创建仓库实例（不使用 with_conn_inner，因为它不是公共方法）
-    let conn = crate::database::init::get_connection_shared()
+    let conn_shared = crate::database::init::get_connection_shared()
         .map_err(|e| format!("获取数据库连接失败: {}", e))?;
 
-    // 使用 lock() 获取连接锁
-    let conn = conn.lock().unwrap();
+    // 使用 try_lock 并带超时机制，防止 Mutex 毒化导致 Panic
+    use std::time::{Duration, Instant};
+
+    const LOCK_TIMEOUT: Duration = Duration::from_secs(5);
+    let start = Instant::now();
+
+    let conn_guard = loop {
+        match conn_shared.try_lock() {
+            Ok(guard) => break guard,
+            Err(e) => {
+                if start.elapsed() > LOCK_TIMEOUT {
+                    let is_poisoned = matches!(e, std::sync::TryLockError::Poisoned(_));
+                    return Err(format!(
+                        "获取数据库连接超时（5秒），可能原因：{}。建议重启应用",
+                        if is_poisoned { "Mutex 已被毒化" } else { "锁竞争激烈" }
+                    ));
+                }
+                // 短暂休眠后重试
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
+    };
+
+    // try_lock 返回的 MutexGuard 已经处理了毒化情况，直接使用
+    let conn = &*conn_guard;
 
     // 执行数据库操作
     (|conn: &rusqlite::Connection| -> Result<PromptTemplate, String> {
@@ -230,7 +253,14 @@ pub async fn cmd_initialize_prompt_template_from_prompt(
             "SELECT COUNT(*) FROM prompt_versions WHERE template_id = ?1",
             params![template_id],
             |row| row.get(0),
-        ).unwrap_or(0);
+        ).map_err(|e| {
+            #[cfg(debug_assertions)]
+            log::error!("查询版本数量失败: {}", e);
+            format!("查询版本数量失败: {}", e)
+        })?;
+
+        #[cfg(debug_assertions)]
+        log::debug!("模板 {} 的版本数量: {}", template_id, version_count);
 
         if version_count == 0 {
             // 创建初始版本 (v1)，created_by 使用 "system"

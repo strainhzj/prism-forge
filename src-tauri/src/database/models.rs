@@ -1602,3 +1602,65 @@ pub struct RollbackRecord {
     /// 回滚操作者
     pub rolled_back_by: String,
 }
+
+// ============================================================================
+// FromStr trait 实现（用于数据库字符串解析）
+// ============================================================================
+
+impl std::str::FromStr for PromptComponentType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "MetaPrompt" => Ok(Self::MetaPrompt),
+            "PromptStructure" => Ok(Self::PromptStructure),
+            "FallbackTemplate" => Ok(Self::FallbackTemplate),
+            "SystemMessage" => Ok(Self::SystemMessage),
+            "UserMessage" => Ok(Self::UserMessage),
+            "Examples" => Ok(Self::Examples),
+            "OutputFormat" => Ok(Self::OutputFormat),
+            "Custom" => Ok(Self::Custom),
+            _ => Err(anyhow::anyhow!("未知的 PromptComponentType: {}", s)),
+        }
+    }
+}
+
+impl std::str::FromStr for PromptParameterType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "LLM" => Ok(Self::LLM),
+            "Template" => Ok(Self::Template),
+            "Custom" => Ok(Self::Custom),
+            _ => Err(anyhow::anyhow!("未知的 PromptParameterType: {}", s)),
+        }
+    }
+}
+
+impl std::str::FromStr for ChangeType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Created" => Ok(Self::Created),
+            "Updated" => Ok(Self::Updated),
+            "Deleted" => Ok(Self::Deleted),
+            _ => Err(anyhow::anyhow!("未知的 ChangeType: {}", s)),
+        }
+    }
+}
+
+impl std::str::FromStr for LineChangeType {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "Added" => Ok(Self::Added),
+            "Removed" => Ok(Self::Removed),
+            "Modified" => Ok(Self::Modified),
+            "Unchanged" => Ok(Self::Unchanged),
+            _ => Err(anyhow::anyhow!("未知的 LineChangeType: {}", s)),
+        }
+    }
+}

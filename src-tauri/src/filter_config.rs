@@ -166,24 +166,41 @@ impl FilterConfigManager {
             std::env::var("APPDATA")
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| {
-                    let mut path = PathBuf::new();
-                    path.push("C:");
+                    #[cfg(debug_assertions)]
+                    log::warn!("未找到 APPDATA 环境变量，使用默认路径");
+
+                    let username = std::env::var("USERNAME")
+                        .unwrap_or_else(|_| {
+                            #[cfg(debug_assertions)]
+                            log::warn!("未找到 USERNAME 环境变量，使用默认值");
+                            "Default".to_string()
+                        });
+
+                    let mut path = PathBuf::from("C:");
                     path.push("Users");
-                    path.push(std::env::var("USERNAME").unwrap_or("Default".to_string()));
+                    path.push(username);
                     path.push("AppData");
                     path.push("Roaming");
                     path
                 })
         } else if cfg!(target_os = "macos") {
             // macOS: ~/Library/Application Support
-            let home = std::env::var("HOME").unwrap_or(".".to_string());
+            let home = std::env::var("HOME").unwrap_or_else(|_| {
+                #[cfg(debug_assertions)]
+                log::warn!("未找到 HOME 环境变量，使用当前目录");
+                ".".to_string()
+            });
             let mut path = PathBuf::from(home);
             path.push("Library");
             path.push("Application Support");
             path
         } else {
             // Linux: ~/.config
-            let home = std::env::var("HOME").unwrap_or(".".to_string());
+            let home = std::env::var("HOME").unwrap_or_else(|_| {
+                #[cfg(debug_assertions)]
+                log::warn!("未找到 HOME 环境变量，使用当前目录");
+                ".".to_string()
+            });
             let mut path = PathBuf::from(home);
             path.push(".config");
             path

@@ -7,6 +7,7 @@ use anyhow::Result;
 use rusqlite::{Connection, params};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use similar::{ChangeTag, TextDiff};
 
 use crate::database::models::{
@@ -21,8 +22,32 @@ pub struct PromptVersionRepository {
     conn: Arc<Mutex<Connection>>,
 }
 
-unsafe impl Send for PromptVersionRepository {}
-unsafe impl Sync for PromptVersionRepository {}
+// Arc<Mutex<Connection>> 已经自动实现了 Send + Sync
+// 无需手动添加 unsafe impl
+
+/// 安全地将 i32 转换为 bool
+///
+/// 防御性设计：验证数据库中的布尔值只能是 0 或 1
+/// 其他值（如脏数据 2、-1）会导致错误而非静默降级
+fn bool_from_i32(value: i32, field_name: &str) -> std::result::Result<bool, rusqlite::Error> {
+    match value {
+        0 => Ok(false),
+        1 => Ok(true),
+        other => {
+            #[cfg(debug_assertions)]
+            log::warn!(
+                "字段 {} 的值不是有效的布尔值（0/1）: {}，将返回错误",
+                field_name,
+                other
+            );
+
+            Err(rusqlite::Error::InvalidParameterName(format!(
+                "字段 {} 的值不是有效的布尔值（0/1）: {}",
+                field_name, other
+            )))
+        }
+    }
+}
 
 impl PromptVersionRepository {
     /// 使用共享连接创建仓库实例
@@ -36,15 +61,63 @@ impl PromptVersionRepository {
         Ok(Self::with_conn(conn))
     }
 
-    /// 辅助方法：获取连接锁
+    /// 辅助方法：获取连接锁（带重试和超时机制）
+    ///
+    /// 防御性设计：
+    /// - 最多重试 3 次
+    /// - 单次锁定超时 10 秒
+    /// - 检测 Mutex 毒化状态
+    /// - 提供详细的错误信息
     fn with_conn_inner<F, R>(&self, f: F) -> Result<R>
     where
         F: FnOnce(&rusqlite::Connection) -> Result<R>,
     {
-        let conn = self.conn.lock().map_err(|e| {
-            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
-        })?;
-        f(&conn)
+        const MAX_RETRIES: u32 = 3;
+        const RETRY_DELAY: Duration = Duration::from_millis(100);
+        const LOCK_TIMEOUT: Duration = Duration::from_secs(10);
+
+        let start = Instant::now();
+        let mut attempts = 0;
+
+        loop {
+            attempts += 1;
+
+            match self.conn.try_lock() {
+                Ok(guard) => {
+                    // 成功获取锁，执行数据库操作
+                    return f(&guard).map_err(|e| {
+                        anyhow::anyhow!("数据库操作失败: {}", e)
+                    });
+                }
+                Err(e) => {
+                    let is_poisoned = matches!(e, std::sync::TryLockError::Poisoned(_));
+                    let elapsed = start.elapsed();
+
+                    // 判断是否应该继续重试
+                    if attempts >= MAX_RETRIES || elapsed > LOCK_TIMEOUT {
+                        return Err(anyhow::anyhow!(
+                            "获取数据库连接锁失败（尝试 {}/{}，耗时 {:?}）：{}",
+                            attempts,
+                            MAX_RETRIES,
+                            elapsed,
+                            if is_poisoned { "Mutex 已被毒化" } else { "锁竞争超时" }
+                        ));
+                    }
+
+                    #[cfg(debug_assertions)]
+                    log::debug!(
+                        "获取锁失败（尝试 {}/{}），{:?} 后重试: {}",
+                        attempts,
+                        MAX_RETRIES,
+                        RETRY_DELAY,
+                        if is_poisoned { "已毒化" } else { "繁忙" }
+                    );
+
+                    // 短暂休眠后重试
+                    std::thread::sleep(RETRY_DELAY);
+                }
+            }
+        }
     }
 
     // ============================================================================
@@ -94,7 +167,7 @@ impl PromptVersionRepository {
                     scenario: row.get(3)?,
                     tags: row.get(4)?,
                     language: row.get(5)?,
-                    is_system: row.get::<_, i32>(6)? == 1,
+                    is_system: bool_from_i32(row.get(6)?, "is_system")?,
                     created_at: row.get(7)?,
                     updated_at: row.get(8)?,
                 })
@@ -122,7 +195,7 @@ impl PromptVersionRepository {
                     scenario: row.get(3)?,
                     tags: row.get(4)?,
                     language: row.get(5)?,
-                    is_system: row.get::<_, i32>(6)? == 1,
+                    is_system: bool_from_i32(row.get(6)?, "is_system")?,
                     created_at: row.get(7)?,
                     updated_at: row.get(8)?,
                 }))
@@ -150,7 +223,7 @@ impl PromptVersionRepository {
                     scenario: row.get(3)?,
                     tags: row.get(4)?,
                     language: row.get(5)?,
-                    is_system: row.get::<_, i32>(6)? == 1,
+                    is_system: bool_from_i32(row.get(6)?, "is_system")?,
                     created_at: row.get(7)?,
                     updated_at: row.get(8)?,
                 }))
@@ -202,7 +275,7 @@ impl PromptVersionRepository {
                     id: Some(row.get(0)?),
                     template_id: row.get(1)?,
                     version_number: row.get(2)?,
-                    is_active: row.get::<_, i32>(3)? == 1,
+                    is_active: bool_from_i32(row.get(3)?, "is_active")?,
                     content: row.get(4)?,
                     metadata: row.get(5)?,
                     created_by: row.get(6)?,
@@ -230,7 +303,7 @@ impl PromptVersionRepository {
                     id: Some(row.get(0)?),
                     template_id: row.get(1)?,
                     version_number: row.get(2)?,
-                    is_active: row.get::<_, i32>(3)? == 1,
+                    is_active: bool_from_i32(row.get(3)?, "is_active")?,
                     content: row.get(4)?,
                     metadata: row.get(5)?,
                     created_by: row.get(6)?,
@@ -258,7 +331,7 @@ impl PromptVersionRepository {
                     id: Some(row.get(0)?),
                     template_id: row.get(1)?,
                     version_number: row.get(2)?,
-                    is_active: row.get::<_, i32>(3)? == 1,
+                    is_active: bool_from_i32(row.get(3)?, "is_active")?,
                     content: row.get(4)?,
                     metadata: row.get(5)?,
                     created_by: row.get(6)?,
@@ -271,13 +344,16 @@ impl PromptVersionRepository {
     }
 
     /// 激活指定版本（软回滚）
+    ///
+    /// 使用 rusqlite 事务 API，自动处理回滚
     pub fn activate_version(&self, template_id: i64, version_number: i32) -> Result<PromptVersion> {
         self.with_conn_inner(|conn| {
-            // 开启事务
-            conn.execute("BEGIN TRANSACTION", [])?;
+            // 使用 unchecked_transaction 自动管理事务
+            // Drop 时如果未 commit 会自动回滚
+            let tx = conn.unchecked_transaction()?;
 
             // 获取目标版本
-            let target_version: PromptVersion = conn.query_row(
+            let target_version: PromptVersion = tx.query_row(
                 "SELECT id, template_id, version_number, is_active, content, metadata, created_by, created_at
                  FROM prompt_versions
                  WHERE template_id = ?1 AND version_number = ?2",
@@ -286,7 +362,7 @@ impl PromptVersionRepository {
                     id: Some(row.get(0)?),
                     template_id: row.get(1)?,
                     version_number: row.get(2)?,
-                    is_active: row.get::<_, i32>(3)? == 1,
+                    is_active: bool_from_i32(row.get(3)?, "is_active")?,
                     content: row.get(4)?,
                     metadata: row.get(5)?,
                     created_by: row.get(6)?,
@@ -295,19 +371,26 @@ impl PromptVersionRepository {
             )?;
 
             // 取消当前激活版本
-            conn.execute(
+            tx.execute(
                 "UPDATE prompt_versions SET is_active = 0 WHERE template_id = ?1 AND is_active = 1",
                 params![template_id],
             )?;
 
-            // 激活目标版本
-            conn.execute(
+            // 激活目标版本（安全地提取 ID）
+            let target_version_id = target_version.id.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "目标版本缺少 ID 字段，无法激活: template_id={}, version_number={}",
+                    template_id, version_number
+                )
+            })?;
+
+            tx.execute(
                 "UPDATE prompt_versions SET is_active = 1 WHERE id = ?1",
-                params![&target_version.id.unwrap()],
+                params![&target_version_id],
             )?;
 
-            // 提交事务
-            conn.execute("COMMIT", [])?;
+            // 提交事务（如果这里失败，Drop 时会自动回滚）
+            tx.commit()?;
 
             Ok(target_version)
         })
@@ -316,6 +399,7 @@ impl PromptVersionRepository {
     /// 硬回滚：创建新版本，复制目标版本的内容并激活
     ///
     /// 这会保留完整的历史记录，创建一个新的版本号
+    /// 使用 rusqlite 事务 API，自动处理回滚
     pub fn rollback_to_version_hard(
         &self,
         template_id: i64,
@@ -324,11 +408,11 @@ impl PromptVersionRepository {
         rolled_back_by: &str,
     ) -> Result<PromptVersion> {
         self.with_conn_inner(|conn| {
-            // 开启事务
-            conn.execute("BEGIN TRANSACTION", [])?;
+            // 使用事务自动管理回滚
+            let tx = conn.unchecked_transaction()?;
 
             // 获取目标版本
-            let target_version: PromptVersion = conn.query_row(
+            let target_version: PromptVersion = tx.query_row(
                 "SELECT id, template_id, version_number, is_active, content, metadata, created_by, created_at
                  FROM prompt_versions
                  WHERE template_id = ?1 AND version_number = ?2",
@@ -337,7 +421,7 @@ impl PromptVersionRepository {
                     id: Some(row.get(0)?),
                     template_id: row.get(1)?,
                     version_number: row.get(2)?,
-                    is_active: row.get::<_, i32>(3)? == 1,
+                    is_active: bool_from_i32(row.get(3)?, "is_active")?,
                     content: row.get(4)?,
                     metadata: row.get(5)?,
                     created_by: row.get(6)?,
@@ -346,7 +430,7 @@ impl PromptVersionRepository {
             )?;
 
             // 获取下一个版本号
-            let next_version: i32 = conn.query_row(
+            let next_version: i32 = tx.query_row(
                 "SELECT COALESCE(MAX(version_number), 0) + 1 FROM prompt_versions WHERE template_id = ?1",
                 params![template_id],
                 |row| row.get(0),
@@ -355,13 +439,13 @@ impl PromptVersionRepository {
             let now = chrono::Utc::now().to_rfc3339();
 
             // 取消当前激活版本
-            conn.execute(
+            tx.execute(
                 "UPDATE prompt_versions SET is_active = 0 WHERE template_id = ?1 AND is_active = 1",
                 params![template_id],
             )?;
 
             // 创建新版本，复制目标版本的内容
-            conn.execute(
+            tx.execute(
                 "INSERT INTO prompt_versions (
                     template_id, version_number, is_active, content, metadata, created_by, created_at
                 ) VALUES (?1, ?2, 1, ?3, ?4, ?5, ?6)",
@@ -374,79 +458,90 @@ impl PromptVersionRepository {
                     &now,
                 ],
             )?;
-            let new_version_id = conn.last_insert_rowid();
+            let new_version_id = tx.last_insert_rowid();
 
-            // 复制目标版本的组件
-            let target_version_id = target_version.id.unwrap();
-            let mut stmt = conn.prepare(
-                "SELECT id, version_id, component_type, name, content, variables, language, sort_order
-                 FROM prompt_components
-                 WHERE version_id = ?1"
-            )?;
-
-            let components = stmt.query_map(params![target_version_id], |row| {
-                Ok((
-                    row.get::<_, String>(2)?,  // component_type
-                    row.get::<_, String>(3)?,  // name
-                    row.get::<_, String>(4)?,  // content
-                    row.get::<_, Option<String>>(5)?,  // variables
-                    row.get::<_, String>(6)?,  // language
-                    row.get::<_, i32>(7)?,     // sort_order
-                ))
+            // 复制目标版本的组件（安全地提取 ID）
+            let target_version_id = target_version.id.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "目标版本缺少 ID，无法复制组件: template_id={}, version_number={}",
+                    template_id, version_number
+                )
             })?;
 
-            for component in components {
-                let (component_type, name, content, variables, language, sort_order) = component?;
-                conn.execute(
-                    "INSERT INTO prompt_components (
-                        version_id, component_type, name, content, variables, language, sort_order
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                    params![
-                        new_version_id,
-                        component_type,
-                        name,
-                        content,
-                        variables,
-                        language,
-                        sort_order,
-                    ],
+            // 使用作用域限制 stmt 的生命周期
+            {
+                let mut stmt = tx.prepare(
+                    "SELECT id, version_id, component_type, name, content, variables, language, sort_order
+                     FROM prompt_components
+                     WHERE version_id = ?1"
                 )?;
-            }
+
+                let components = stmt.query_map(params![target_version_id], |row| {
+                    Ok((
+                        row.get::<_, String>(2)?,  // component_type
+                        row.get::<_, String>(3)?,  // name
+                        row.get::<_, String>(4)?,  // content
+                        row.get::<_, Option<String>>(5)?,  // variables
+                        row.get::<_, String>(6)?,  // language
+                        row.get::<_, i32>(7)?,     // sort_order
+                    ))
+                })?;
+
+                for component in components {
+                    let (component_type, name, content, variables, language, sort_order) = component?;
+                    tx.execute(
+                        "INSERT INTO prompt_components (
+                            version_id, component_type, name, content, variables, language, sort_order
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        params![
+                            new_version_id,
+                            component_type,
+                            name,
+                            content,
+                            variables,
+                            language,
+                            sort_order,
+                        ],
+                    )?;
+                }
+            } // stmt 在这里被 drop
 
             // 复制目标版本的参数
-            let mut stmt = conn.prepare(
-                "SELECT id, version_id, key, value, parameter_type, description
-                 FROM prompt_parameters
-                 WHERE version_id = ?1"
-            )?;
-
-            let parameters = stmt.query_map(params![target_version_id], |row| {
-                Ok((
-                    row.get::<_, String>(2)?,  // key
-                    row.get::<_, String>(3)?,  // value
-                    row.get::<_, String>(4)?,  // parameter_type
-                    row.get::<_, Option<String>>(5)?,  // description
-                ))
-            })?;
-
-            for parameter in parameters {
-                let (key, value, parameter_type, description) = parameter?;
-                conn.execute(
-                    "INSERT INTO prompt_parameters (
-                        version_id, key, value, parameter_type, description
-                    ) VALUES (?1, ?2, ?3, ?4, ?5)",
-                    params![
-                        new_version_id,
-                        key,
-                        value,
-                        parameter_type,
-                        description,
-                    ],
+            {
+                let mut stmt = tx.prepare(
+                    "SELECT id, version_id, key, value, parameter_type, description
+                     FROM prompt_parameters
+                     WHERE version_id = ?1"
                 )?;
-            }
 
-            // 提交事务
-            conn.execute("COMMIT", [])?;
+                let parameters = stmt.query_map(params![target_version_id], |row| {
+                    Ok((
+                        row.get::<_, String>(2)?,  // key
+                        row.get::<_, String>(3)?,  // value
+                        row.get::<_, String>(4)?,  // parameter_type
+                        row.get::<_, Option<String>>(5)?,  // description
+                    ))
+                })?;
+
+                for parameter in parameters {
+                    let (key, value, parameter_type, description) = parameter?;
+                    tx.execute(
+                        "INSERT INTO prompt_parameters (
+                            version_id, key, value, parameter_type, description
+                        ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                        params![
+                            new_version_id,
+                            key,
+                            value,
+                            parameter_type,
+                            description,
+                        ],
+                    )?;
+                }
+            } // stmt 在这里被 drop
+
+            // 提交事务（如果失败，Drop 时自动回滚）
+            tx.commit()?;
 
             Ok(PromptVersion {
                 id: Some(new_version_id),
@@ -462,6 +557,8 @@ impl PromptVersionRepository {
     }
 
     /// 创建新版本并激活（用于保存修改）
+    ///
+    /// 使用 rusqlite 事务 API，自动处理回滚
     pub fn create_and_activate_version(
         &self,
         template_id: i64,
@@ -471,11 +568,11 @@ impl PromptVersionRepository {
         created_by: &str,
     ) -> Result<PromptVersion> {
         self.with_conn_inner(|conn| {
-            // 开启事务
-            conn.execute("BEGIN TRANSACTION", [])?;
+            // 使用事务自动管理回滚
+            let tx = conn.unchecked_transaction()?;
 
             // 获取下一个版本号
-            let next_version: i32 = conn.query_row(
+            let next_version: i32 = tx.query_row(
                 "SELECT COALESCE(MAX(version_number), 0) + 1 FROM prompt_versions WHERE template_id = ?1",
                 params![template_id],
                 |row| row.get(0),
@@ -484,24 +581,24 @@ impl PromptVersionRepository {
             let now = chrono::Utc::now().to_rfc3339();
 
             // 取消当前激活版本
-            conn.execute(
+            tx.execute(
                 "UPDATE prompt_versions SET is_active = 0 WHERE template_id = ?1 AND is_active = 1",
                 params![template_id],
             )?;
 
             // 创建新版本
-            conn.execute(
+            tx.execute(
                 "INSERT INTO prompt_versions (
                     template_id, version_number, is_active, content, created_by, created_at
                 ) VALUES (?1, ?2, 1, ?3, ?4, ?5)",
                 params![template_id, next_version, &content, created_by, &now],
             )?;
 
-            let version_id = conn.last_insert_rowid();
+            let version_id = tx.last_insert_rowid();
 
             // 创建组件
             for component in &components {
-                conn.execute(
+                tx.execute(
                     "INSERT INTO prompt_components (
                         version_id, component_type, name, content, variables, language, sort_order
                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -519,7 +616,7 @@ impl PromptVersionRepository {
 
             // 创建参数
             for parameter in &parameters {
-                conn.execute(
+                tx.execute(
                     "INSERT INTO prompt_parameters (
                         version_id, key, value, parameter_type, description
                     ) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -533,8 +630,8 @@ impl PromptVersionRepository {
                 )?;
             }
 
-            // 提交事务
-            conn.execute("COMMIT", [])?;
+            // 提交事务（如果失败，Drop 时自动回滚）
+            tx.commit()?;
 
             Ok(PromptVersion {
                 id: Some(version_id),
@@ -565,17 +662,14 @@ impl PromptVersionRepository {
 
             let components = stmt.query_map(params![version_id], |row| {
                 let component_type_str: String = row.get(2)?;
-                let component_type = match component_type_str.as_str() {
-                    "MetaPrompt" => PromptComponentType::MetaPrompt,
-                    "PromptStructure" => PromptComponentType::PromptStructure,
-                    "FallbackTemplate" => PromptComponentType::FallbackTemplate,
-                    "SystemMessage" => PromptComponentType::SystemMessage,
-                    "UserMessage" => PromptComponentType::UserMessage,
-                    "Examples" => PromptComponentType::Examples,
-                    "OutputFormat" => PromptComponentType::OutputFormat,
-                    "Custom" => PromptComponentType::Custom,
-                    _ => PromptComponentType::Custom,
-                };
+                // 使用 FromStr trait 进行安全解析
+                let component_type: PromptComponentType = component_type_str.parse()
+                    .map_err(|e| {
+                        rusqlite::Error::InvalidParameterName(format!(
+                            "无效的 PromptComponentType '{}': {}",
+                            component_type_str, e
+                        ))
+                    })?;
 
                 Ok(PromptComponent {
                     id: Some(row.get(0)?),
@@ -608,12 +702,14 @@ impl PromptVersionRepository {
 
             let parameters = stmt.query_map(params![version_id], |row| {
                 let parameter_type_str: String = row.get(4)?;
-                let parameter_type = match parameter_type_str.as_str() {
-                    "LLM" => PromptParameterType::LLM,
-                    "Template" => PromptParameterType::Template,
-                    "Custom" => PromptParameterType::Custom,
-                    _ => PromptParameterType::Custom,
-                };
+                // 使用 FromStr trait 进行安全解析
+                let parameter_type: PromptParameterType = parameter_type_str.parse()
+                    .map_err(|e| {
+                        rusqlite::Error::InvalidParameterName(format!(
+                            "无效的 PromptParameterType '{}': {}",
+                            parameter_type_str, e
+                        ))
+                    })?;
 
                 Ok(PromptParameter {
                     id: Some(row.get(0)?),
@@ -920,11 +1016,8 @@ impl PromptVersionRepository {
     /// 辅助方法：从行转换为 PromptChange
     fn row_to_change(row: &rusqlite::Row) -> PromptChange {
         let change_type_str: String = row.get(5).unwrap_or_else(|_| "Updated".to_string());
-        let change_type = match change_type_str.as_str() {
-            "Created" => ChangeType::Created,
-            "Deleted" => ChangeType::Deleted,
-            _ => ChangeType::Updated,
-        };
+        // 使用 FromStr trait 进行安全解析，默认为 Updated
+        let change_type: ChangeType = change_type_str.parse().unwrap_or(ChangeType::Updated);
 
         PromptChange {
             id: row.get(0).unwrap_or(0),

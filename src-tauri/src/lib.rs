@@ -86,11 +86,24 @@ pub fn run() {
             // 确保数据库目录存在
             Ok(())
         })
-        .expect("初始化数据库失败");
+        .map_err(|e| {
+            log::error!("数据库初始化失败: {}", e);
+            #[cfg(debug_assertions)]
+            eprintln!("数据库初始化失败: {:?}", e);
+            std::process::exit(1);
+        })
+        .ok();
 
     // 创建 LLM 客户端管理器
     let llm_manager = LLMClientManager::from_default_db()
-        .expect("创建 LLM 客户端管理器失败");
+        .map_err(|e| {
+            log::error!("创建 LLM 客户端管理器失败: {}", e);
+            #[cfg(debug_assertions)]
+            eprintln!("创建 LLM 客户端管理器失败: {:?}", e);
+            std::process::exit(1);
+        })
+        .ok()
+        .expect("LLM 客户端管理器应该已创建（这行代码不应该执行）");
 
     // 创建启动管理器用于运行时诊断
     let startup_manager = startup::create_startup_manager();
@@ -190,5 +203,13 @@ pub fn run() {
             commands_prompt_versions::cmd_initialize_prompt_template_from_toml,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .map_err(|e| {
+            log::error!("Tauri 运行时错误: {}", e);
+            #[cfg(debug_assertions)]
+            eprintln!("Tauri 运行时错误: {:?}", e);
+            std::process::exit(1);
+            #[allow(unreachable_code)]
+            e
+        })
+        .ok();
 }

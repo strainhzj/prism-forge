@@ -5,6 +5,7 @@
 use anyhow::Result;
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 /// 全局数据库连接单例
 static GLOBAL_CONNECTION: OnceLock<Arc<Mutex<Connection>>> = OnceLock::new();
@@ -78,11 +79,28 @@ pub fn get_connection_shared() -> Result<Arc<Mutex<Connection>>> {
         return Ok(conn.clone());
     }
 
-    // 获取初始化锁
+    // 获取初始化锁（带超时和重试机制）
     let init_lock = INIT_LOCK.get_or_init(|| Mutex::new(false));
-    let mut initializing = init_lock.lock().map_err(|e| {
-        anyhow::anyhow!("获取初始化锁失败（Mutex 已被毒化）: {}", e)
-    })?;
+
+    const LOCK_TIMEOUT: Duration = Duration::from_secs(10);
+    const RETRY_DELAY: Duration = Duration::from_millis(50);
+    let start = Instant::now();
+
+    let mut initializing = loop {
+        match init_lock.try_lock() {
+            Ok(guard) => break guard,
+            Err(e) => {
+                if start.elapsed() > LOCK_TIMEOUT {
+                    let is_poisoned = matches!(e, std::sync::TryLockError::Poisoned(_));
+                    return Err(anyhow::anyhow!(
+                        "获取初始化锁超时（10秒）：{}",
+                        if is_poisoned { "Mutex 已被毒化" } else { "锁竞争超时" }
+                    ));
+                }
+                std::thread::sleep(RETRY_DELAY);
+            }
+        }
+    };
 
     // 双重检查：可能在等待锁期间已被其他线程初始化
     if let Some(conn) = GLOBAL_CONNECTION.get() {
@@ -100,15 +118,15 @@ pub fn get_connection_shared() -> Result<Arc<Mutex<Connection>>> {
     // 执行初始化
     let conn = initialize_connection().map_err(|e| {
         // 重置初始化标记
-        if let Ok(mut lock) = init_lock.lock() {
-            *lock = false;
+        if let Ok(mut guard) = init_lock.try_lock() {
+            *guard = false;
         }
         e
     })?;
 
     // 设置初始化完成标记
-    if let Ok(mut lock) = init_lock.lock() {
-        *lock = true;
+    if let Ok(mut guard) = init_lock.try_lock() {
+        *guard = true;
     }
 
     // 存储到全局单例
@@ -125,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_get_db_path() {
-        let path = get_db_path().unwrap();
+        let path = get_db_path().expect("获取数据库路径失败");
         assert!(path.ends_with("prism_forge.db"));
     }
 
@@ -133,8 +151,8 @@ mod tests {
     fn test_get_connection_shared_singleton() {
         // 重置全局状态（仅用于测试）
         // 注意: 这在实际应用中不应该这样做
-        let conn1 = get_connection_shared().unwrap();
-        let conn2 = get_connection_shared().unwrap();
+        let conn1 = get_connection_shared().expect("获取第一个连接失败");
+        let conn2 = get_connection_shared().expect("获取第二个连接失败");
 
         // 验证是同一个实例（通过 Arc 指针比较）
         let ptr1 = Arc::as_ptr(&conn1) as usize;
@@ -144,13 +162,13 @@ mod tests {
 
     #[test]
     fn test_connection_is_accessible() {
-        let conn = get_connection_shared().unwrap();
-        let guard = conn.lock().unwrap();
+        let conn = get_connection_shared().expect("获取数据库连接失败");
+        let guard = conn.lock().expect("获取数据库锁失败");
 
         // 验证可以执行简单查询
         let result: String = guard
             .query_row("SELECT sqlite_version()", [], |row| row.get(0))
-            .unwrap();
+            .expect("查询 SQLite 版本失败");
         log::info!("SQLite 版本: {}", result);
     }
 }
