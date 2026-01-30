@@ -12,15 +12,14 @@ import { VersionDetailPanel } from './VersionDetailPanel';
 import { VersionComparePanel } from './VersionComparePanel';
 import { ChangeHistoryPanel } from './ChangeHistoryPanel';
 import { RollbackDialog } from './RollbackDialog';
-
-// 新架构：模板名称（迁移后的多语言模板）
-const OPTIMIZER_TEMPLATE_NAME = 'session_analysis_multilingual';
+import './styles.css';
 
 type TabType = 'detail' | 'compare' | 'history';
 
 interface PromptVersionsDrawerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  templateName?: string;
 }
 
 type AlertType = 'success' | 'error';
@@ -35,7 +34,7 @@ type AlertType = 'success' | 'error';
  * - 变更历史
  * - 版本回滚（软回滚/硬回滚）
  */
-export function PromptVersionsDrawer({ open, onOpenChange }: PromptVersionsDrawerProps) {
+export function PromptVersionsDrawer({ open, onOpenChange, templateName = 'session_analysis' }: PromptVersionsDrawerProps) {
   const { t } = useTranslation('promptVersions');
   const queryClient = useQueryClient();
 
@@ -67,9 +66,9 @@ export function PromptVersionsDrawer({ open, onOpenChange }: PromptVersionsDrawe
 
   // 获取模板
   const { data: template, isLoading: templateLoading } = useQuery({
-    queryKey: ['prompt-template', OPTIMIZER_TEMPLATE_NAME],
-    queryFn: () => invoke<any>('cmd_get_prompt_template_by_name', { name: OPTIMIZER_TEMPLATE_NAME }),
-    enabled: open,
+    queryKey: ['prompt-template', templateName],
+    queryFn: () => invoke<any>('cmd_get_prompt_template_by_name', { name: templateName }),
+    enabled: open && !!templateName,
   });
 
   // 获取版本列表
@@ -225,7 +224,7 @@ export function PromptVersionsDrawer({ open, onOpenChange }: PromptVersionsDrawe
                 未找到版本管理模板
               </h3>
               <p className="text-sm mb-4" style={{ color: 'var(--color-text-secondary)' }}>
-                模板名称: {OPTIMIZER_TEMPLATE_NAME}
+                模板名称: {templateName}
               </p>
               <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
                 请检查数据库中是否存在该模板
@@ -263,7 +262,7 @@ export function PromptVersionsDrawer({ open, onOpenChange }: PromptVersionsDrawe
         {/* Main Content */}
         <div className="flex-1 flex gap-6 overflow-hidden">
           {/* Left Panel: Version List */}
-          <div className="w-1/3 overflow-y-auto">
+          <div className="w-1/3 overflow-y-auto prompt-versions-scroll">
             <VersionListTable
               versions={versions}
               activeVersion={activeVersion}
@@ -273,9 +272,9 @@ export function PromptVersionsDrawer({ open, onOpenChange }: PromptVersionsDrawe
           </div>
 
           {/* Right Panel: Details / Compare / History */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto prompt-versions-scroll">
             {selectedVersion !== null && versionDetail ? (
-              <>
+              <div className="fade-in">
                 {/* Tabs */}
                 <div className="flex gap-1 mb-4 border-b" style={{ borderColor: 'var(--color-border-light)' }}>
                   <button
@@ -354,7 +353,7 @@ export function PromptVersionsDrawer({ open, onOpenChange }: PromptVersionsDrawe
                 {activeTab === 'history' && (
                   <ChangeHistoryPanel changes={changes} />
                 )}
-              </>
+              </div>
             ) : (
               <div className="flex items-center justify-center h-full text-secondary">
                 {t('view')}

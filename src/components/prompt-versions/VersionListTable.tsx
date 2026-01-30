@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { PromptVersion } from '@/types/generated';
+import './styles.css';
 
 interface VersionListTableProps {
   versions: PromptVersion[];
@@ -45,10 +46,7 @@ export function VersionListTable({
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr style={{
-              backgroundColor: 'var(--color-bg-primary)',
-              borderBottom: '1px solid var(--color-border-light)',
-            }}>
+            <tr className="table-header">
               <th className="text-left py-2 px-3 font-medium" style={{ color: 'var(--color-text-secondary)' }}>
                 版本
               </th>
@@ -68,26 +66,9 @@ export function VersionListTable({
               <tr
                 key={version.id}
                 onClick={() => onSelectVersion(version.versionNumber)}
-                className="cursor-pointer transition-colors"
-                style={{
-                  borderBottom: '1px solid var(--color-border-light)',
-                  backgroundColor: selectedVersion === version.versionNumber
-                    ? 'rgba(74, 158, 255, 0.08)'
-                    : 'transparent',
-                  borderLeft: selectedVersion === version.versionNumber
-                    ? '3px solid var(--color-accent-blue)'
-                    : '3px solid transparent',
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedVersion !== version.versionNumber) {
-                    e.currentTarget.style.backgroundColor = 'var(--color-bg-primary)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedVersion !== version.versionNumber) {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                  }
-                }}
+                className={`cursor-pointer table-row ${
+                  selectedVersion === version.versionNumber ? 'table-row-active' : ''
+                }`}
               >
                 <td className="py-2 px-3">
                   <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
@@ -96,13 +77,7 @@ export function VersionListTable({
                 </td>
                 <td className="py-2 px-3">
                   {version.isActive ? (
-                    <span
-                      className="px-2 py-0.5 rounded-full text-xs font-medium"
-                      style={{
-                        backgroundColor: 'var(--color-accent-green)',
-                        color: 'white',
-                      }}
-                    >
+                    <span className="active-badge px-2 py-0.5 rounded-full text-xs font-medium">
                       {t('active')}
                     </span>
                   ) : (
@@ -116,8 +91,8 @@ export function VersionListTable({
                 </td>
                 <td className="py-2 px-3 text-right">
                   <button
-                    className="text-xs transition-colors hover:opacity-80"
-                    style={{ color: 'var(--color-text-secondary)' }}
+                    className="text-xs transition-colors hover:opacity-80 btn-ghost-enhanced"
+                    style={{ color: 'var(--color-text-secondary)', padding: '0.25rem 0.5rem', borderRadius: '0.375rem' }}
                     onClick={(e) => {
                       e.stopPropagation();
                       onSelectVersion(version.versionNumber);

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { PromptChange } from '@/types/generated';
+import './styles.css';
 
 interface ChangeHistoryPanelProps {
   changes: PromptChange[];
@@ -40,29 +41,17 @@ export function ChangeHistoryPanel({ changes }: ChangeHistoryPanelProps) {
     }
   };
 
-  // 获取变更类型样式
-  const getChangeTypeStyle = (changeType: string) => {
+  // 获取变更类型样式类名
+  const getChangeTypeClassName = (changeType: string) => {
     switch (changeType) {
       case 'Created':
-        return {
-          backgroundColor: 'rgba(76, 175, 80, 0.1)',
-          color: 'var(--color-accent-green)',
-        };
+        return 'change-icon-created';
       case 'Deleted':
-        return {
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          color: 'var(--color-accent-red)',
-        };
+        return 'change-icon-deleted';
       case 'Updated':
-        return {
-          backgroundColor: 'rgba(245, 158, 11, 0.1)',
-          color: 'var(--color-accent-warm)',
-        };
+        return 'change-icon-updated';
       default:
-        return {
-          backgroundColor: 'var(--color-bg-primary)',
-          color: 'var(--color-text-secondary)',
-        };
+        return '';
     }
   };
 
@@ -86,17 +75,8 @@ export function ChangeHistoryPanel({ changes }: ChangeHistoryPanelProps) {
           </div>
         ) : (
           changes.map((change) => (
-            <div
-              key={change.id}
-              className="flex items-start gap-3 p-3 rounded-lg border"
-              style={{
-                borderColor: 'var(--color-border-light)',
-              }}
-            >
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0"
-                style={getChangeTypeStyle(change.changeType)}
-              >
+            <div key={change.id} className="change-history-item">
+              <div className={`change-icon ${getChangeTypeClassName(change.changeType)}`}>
                 {getChangeTypeIcon(change.changeType)}
               </div>
               <div className="flex-1 min-w-0">

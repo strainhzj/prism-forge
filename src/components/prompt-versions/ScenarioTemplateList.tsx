@@ -1,8 +1,18 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { PromptTemplate, PromptVersion } from '@/types/generated';
-import { Edit, Eye } from 'lucide-react';
+import { Edit, Eye, Trash2 } from 'lucide-react';
 import { PromptEditDrawer } from './PromptEditDrawer';
+import { PromptVersionsDrawer } from './PromptVersionsDrawer';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface ScenarioTemplateListProps {
   onEditTemplate?: (templateName: string, currentVersion: PromptVersion) => void;
@@ -22,8 +32,12 @@ export function ScenarioTemplateList({ onEditTemplate }: ScenarioTemplateListPro
   const [templates, setTemplates] = useState<ScenarioTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [editDrawerOpen, setEditDrawerOpen] = useState(false);
+  const [versionsDrawerOpen, setVersionsDrawerOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<PromptTemplate | null>(null);
   const [selectedVersion, setSelectedVersion] = useState<PromptVersion | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState<PromptTemplate | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // 加载场景模板
   const loadTemplates = async () => {
@@ -74,10 +88,47 @@ export function ScenarioTemplateList({ onEditTemplate }: ScenarioTemplateListPro
     }
   };
 
+  // 处理查看版本
+  const handleViewVersions = (template: PromptTemplate) => {
+    setSelectedTemplate(template);
+    setVersionsDrawerOpen(true);
+  };
+
   // 保存成功后重新加载
   const handleSaveSuccess = () => {
     setEditDrawerOpen(false);
     loadTemplates();
+  };
+
+  // 处理删除按钮点击
+  const handleDeleteClick = (template: PromptTemplate) => {
+    setTemplateToDelete(template);
+    setDeleteDialogOpen(true);
+  };
+
+  // 确认删除
+  const handleDeleteConfirm = async () => {
+    if (!templateToDelete) return;
+
+    setDeleting(true);
+    try {
+      const deleted = await invoke<number>('cmd_delete_prompt_template_by_name', {
+        name: templateToDelete.name,
+      });
+
+      if (deleted > 0) {
+        // 删除成功，重新加载列表
+        await loadTemplates();
+      } else {
+        console.warn(`模板 ${templateToDelete.name} 不存在`);
+      }
+    } catch (error) {
+      console.error('删除模板失败:', error);
+    } finally {
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+      setTemplateToDelete(null);
+    }
   };
 
   if (loading) {
@@ -139,20 +190,66 @@ export function ScenarioTemplateList({ onEditTemplate }: ScenarioTemplateListPro
                   <Edit className="w-4 h-4" />
                 </button>
                 <button
-                  className="p-2 rounded-md transition-colors"
+                  onClick={() => handleViewVersions(template)}
+                  className="p-2 rounded-md transition-colors hover:scale-110"
                   style={{
                     backgroundColor: 'var(--color-bg-primary)',
-                    color: 'var(--color-text-secondary)',
+                    color: 'var(--color-accent-blue)',
                   }}
-                  title="查看版本"
+                  title="版本管理"
                 >
                   <Eye className="w-4 h-4" />
                 </button>
+                {/* 只允许删除非 session_analysis 的模板（用于清理遗留数据） */}
+                {template.scenario !== 'session_analysis' && (
+                  <button
+                    onClick={() => handleDeleteClick(template)}
+                    className="p-2 rounded-md transition-colors hover:bg-red-50 dark:hover:bg-red-900/20"
+                    style={{
+                      backgroundColor: 'var(--color-bg-primary)',
+                      color: 'var(--color-accent-warm)',
+                    }}
+                    title="删除"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
         ))}
       </div>
+
+      {/* 删除确认对话框 */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除模板 "{templateToDelete?.name}" 吗？此操作将删除该模板及其所有版本，且无法恢复。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setTemplateToDelete(null);
+              }}
+              disabled={deleting}
+            >
+              取消
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+            >
+              {deleting ? '删除中...' : '确认删除'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* 编辑抽屉 */}
       {(selectedTemplate || editDrawerOpen) && (
@@ -168,6 +265,18 @@ export function ScenarioTemplateList({ onEditTemplate }: ScenarioTemplateListPro
           onSaveSuccess={handleSaveSuccess}
         />
       )}
+
+      {/* 版本管理抽屉 */}
+      <PromptVersionsDrawer
+        open={versionsDrawerOpen}
+        onOpenChange={(open) => {
+          setVersionsDrawerOpen(open);
+          if (!open) {
+            setSelectedTemplate(null);
+          }
+        }}
+        templateName={selectedTemplate?.name}
+      />
     </>
   );
 }

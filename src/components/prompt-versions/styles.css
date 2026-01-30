@@ -1,0 +1,301 @@
+/**
+ * 提示词版本管理专用样式
+ * 基于 prompt-version-manager-preview.html 的视觉设计
+ */
+
+/* ==================== Diff 高亮样式 ==================== */
+
+.diff-added {
+  background-color: rgba(76, 175, 80, 0.15);
+  border-left: 3px solid var(--color-accent-green);
+}
+
+.diff-removed {
+  background-color: rgba(239, 68, 68, 0.15);
+  border-left: 3px solid var(--color-accent-red);
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.diff-modified {
+  background-color: rgba(245, 158, 11, 0.15);
+  border-left: 3px solid var(--color-accent-warm);
+}
+
+.diff-unchanged {
+  opacity: 0.6;
+}
+
+/* ==================== 表格样式 ==================== */
+
+.table-header {
+  background-color: var(--color-bg-primary);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.table-row {
+  border-bottom: 1px solid var(--color-border-light);
+  transition: background-color 0.15s ease;
+}
+
+.table-row:hover {
+  background-color: var(--color-bg-primary);
+}
+
+.table-row-active {
+  background-color: rgba(74, 158, 255, 0.08);
+  border-left: 3px solid var(--color-accent-blue);
+}
+
+/* ==================== 自定义滚动条 ==================== */
+
+.prompt-versions-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.prompt-versions-scroll::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+
+.prompt-versions-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-border-light);
+  border-radius: 4px;
+}
+
+.prompt-versions-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}
+
+/* ==================== 动画效果 ==================== */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* ==================== 按钮样式增强 ==================== */
+
+/* Ghost 按钮悬停效果 */
+.btn-ghost-enhanced:hover {
+  background-color: var(--color-bg-primary);
+  transform: translateY(-1px);
+  transition: all 0.2s ease;
+}
+
+/* Primary 按钮悬停效果 */
+.btn-primary-enhanced:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  transition: all 0.2s ease;
+}
+
+/* Danger 按钮悬停效果 */
+.btn-danger-enhanced:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  transition: all 0.2s ease;
+}
+
+/* ==================== Tab 激活状态 ==================== */
+
+.tab-active {
+  border-bottom: 2px solid var(--color-accent-blue);
+  color: var(--color-accent-blue);
+}
+
+/* ==================== 对话框遮罩 ==================== */
+
+.dialog-overlay {
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+/* ==================== 代码块样式 ==================== */
+
+.code-block {
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border-light);
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ==================== 激活徽章 ==================== */
+
+.active-badge {
+  background-color: var(--color-accent-green);
+  color: white;
+}
+
+/* ==================== 版本选择器样式 ==================== */
+
+.version-selector {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border-light);
+  background-color: var(--color-bg-card);
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.version-selector:hover {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.version-selector:focus {
+  outline: none;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  border-color: var(--color-accent-blue);
+}
+
+/* ==================== 变更统计卡片 ==================== */
+
+.stat-card-added {
+  background-color: rgba(76, 175, 80, 0.15);
+  border-left: 3px solid var(--color-accent-green);
+}
+
+.stat-card-removed {
+  background-color: rgba(239, 68, 68, 0.15);
+  border-left: 3px solid var(--color-accent-red);
+}
+
+.stat-card-modified {
+  background-color: rgba(245, 158, 11, 0.15);
+  border-left: 3px solid var(--color-accent-warm);
+}
+
+/* ==================== 组件变更卡片 ==================== */
+
+.component-change-card {
+  border: 1px solid var(--color-border-light);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.component-change-header {
+  background-color: var(--color-bg-primary);
+  padding: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.component-change-badge {
+  font-size: 0.75rem;
+}
+
+.component-change-badge.created {
+  color: #22c55e;
+}
+
+.component-change-badge.deleted {
+  color: #ef4444;
+}
+
+.component-change-badge.updated {
+  color: #eab308;
+}
+
+/* ==================== 回滚策略选项 ==================== */
+
+.rollback-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border-light);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: var(--color-bg-primary);
+}
+
+.rollback-option:hover {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.rollback-option-selected-soft {
+  background-color: rgba(76, 175, 80, 0.08);
+  border-color: var(--color-accent-green);
+}
+
+.rollback-option-selected-hard {
+  background-color: rgba(245, 158, 11, 0.08);
+  border-color: var(--color-accent-warm);
+}
+
+/* ==================== 变更历史项 ==================== */
+
+.change-history-item {
+  display: flex;
+  align-items: start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border-light);
+}
+
+.change-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.change-icon-created {
+  background-color: rgba(76, 175, 80, 0.1);
+  color: var(--color-accent-green);
+}
+
+.change-icon-deleted {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--color-accent-red);
+}
+
+.change-icon-updated {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: var(--color-accent-warm);
+}
+
+/* ==================== 元数据卡片 ==================== */
+
+.metadata-card {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background-color: var(--color-bg-primary);
+}
+
+/* ==================== 内容预览区域 ==================== */
+
+.content-preview {
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border-light);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  max-height: 16rem;
+  overflow-y: auto;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Courier New', monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+}

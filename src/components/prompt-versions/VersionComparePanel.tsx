@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { PromptVersion, PromptVersionDiff, LineDiff } from '@/types/generated';
-// import type { ComponentDiff, ParameterDiff } from '@/types/generated';
+import './styles.css';
 
 interface VersionComparePanelProps {
   versions: PromptVersion[];
@@ -41,52 +41,18 @@ export function VersionComparePanel({
     return t(`changeType.${changeType}` as any) || changeType;
   };
 
-  // 获取行变更类型样式
-  const getLineDiffStyle = (changeType: string) => {
-    switch (changeType) {
-      case 'added':
-        return {
-          backgroundColor: 'rgba(76, 175, 80, 0.15)',
-          borderLeft: '3px solid var(--color-accent-green)',
-        };
-      case 'removed':
-        return {
-          backgroundColor: 'rgba(239, 68, 68, 0.15)',
-          borderLeft: '3px solid var(--color-accent-red)',
-          textDecoration: 'line-through' as const,
-          opacity: 0.7,
-        };
-      case 'modified':
-        return {
-          backgroundColor: 'rgba(245, 158, 11, 0.15)',
-          borderLeft: '3px solid var(--color-accent-warm)',
-        };
-      default:
-        return {
-          opacity: 0.6,
-        };
-    }
-  };
-
   // 渲染行差异
   const renderLineDiffs = (lineDiffs: LineDiff[]) => {
     if (lineDiffs.length === 0) return null;
 
     return (
-      <div className="font-mono text-xs">
+      <div className="code-block text-xs">
         {lineDiffs.map((diff, idx) => (
-          <div
-            key={idx}
-            className="px-3 py-1"
-            style={getLineDiffStyle(diff.changeType)}
-          >
+          <div key={idx} className={`diff-${diff.changeType} px-3 py-1`}>
             <span className="mr-2" style={{ color: 'var(--color-text-secondary)' }}>
               {diff.lineNumber || '-'}
             </span>
-            <span
-              className={diff.changeType === 'removed' ? 'line-through' : ''}
-              style={{ color: 'var(--color-text-primary)' }}
-            >
+            <span className={diff.changeType === 'removed' ? 'line-through' : ''} style={{ color: 'var(--color-text-primary)' }}>
               {diff.changeType === 'added'
                 ? diff.newContent || ''
                 : diff.changeType === 'removed'
@@ -110,15 +76,8 @@ export function VersionComparePanel({
     }
 
     return comparison.componentChanges.map((change, idx) => (
-      <div
-        key={idx}
-        className="border rounded-lg overflow-hidden"
-        style={{ borderColor: 'var(--color-border-light)' }}
-      >
-        <div
-          className="flex items-center justify-between px-3 py-2"
-          style={{ backgroundColor: 'var(--color-bg-primary)' }}
-        >
+      <div key={idx} className="component-change-card">
+        <div className="component-change-header">
           <div className="flex items-center gap-2">
             <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
               {change.componentType}
@@ -127,29 +86,11 @@ export function VersionComparePanel({
               {change.componentName}
             </span>
           </div>
-          <span
-            className={`text-xs ${
-              change.changeType === 'updated'
-                ? 'text-yellow-500'
-                : change.changeType === 'created'
-                ? 'text-green-500'
-                : 'text-red-500'
-            }`}
-          >
+          <span className={`text-xs component-change-badge ${change.changeType}`}>
             {getChangeTypeLabel(change.changeType)}
           </span>
         </div>
-        {change.lineDiffs.length > 0 && (
-          <div
-            className="p-2"
-            style={{
-              backgroundColor: 'var(--color-bg-primary)',
-              border: '1px solid var(--color-border-light)',
-            }}
-          >
-            {renderLineDiffs(change.lineDiffs)}
-          </div>
-        )}
+        {change.lineDiffs.length > 0 && renderLineDiffs(change.lineDiffs)}
       </div>
     ));
   };
@@ -239,12 +180,7 @@ export function VersionComparePanel({
                 compareTo
               )
             }
-            className="w-full px-3 py-2 rounded-lg border-2 text-sm cursor-pointer transition-all hover:shadow-sm focus:shadow-md outline-none"
-            style={{
-              backgroundColor: 'var(--color-bg-card)',
-              borderColor: compareFrom ? 'var(--color-accent-blue)' : 'var(--color-border-light)',
-              color: 'var(--color-text-primary)',
-            }}
+            className="version-selector"
           >
             <option value="">选择版本</option>
             {versions.map((v) => (
@@ -271,12 +207,7 @@ export function VersionComparePanel({
                 e.target.value ? Number(e.target.value) : null
               )
             }
-            className="w-full px-3 py-2 rounded-lg border-2 text-sm cursor-pointer transition-all hover:shadow-sm focus:shadow-md outline-none"
-            style={{
-              backgroundColor: 'var(--color-bg-card)',
-              borderColor: compareTo ? 'var(--color-accent-green)' : 'var(--color-border-light)',
-              color: 'var(--color-text-primary)',
-            }}
+            className="version-selector"
           >
             <option value="">选择版本</option>
             {versions.map((v) => (
@@ -290,13 +221,7 @@ export function VersionComparePanel({
 
       {/* Comparison Summary */}
       <div className="flex gap-3">
-        <div
-          className="flex-1 p-3 rounded-lg"
-          style={{
-            backgroundColor: 'rgba(76, 175, 80, 0.15)',
-            borderLeft: '3px solid var(--color-accent-green)',
-          }}
-        >
+        <div className="flex-1 p-3 rounded-lg stat-card-added">
           <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>
             {t('added')}
           </div>
@@ -304,13 +229,7 @@ export function VersionComparePanel({
             {addedCount}
           </div>
         </div>
-        <div
-          className="flex-1 p-3 rounded-lg"
-          style={{
-            backgroundColor: 'rgba(239, 68, 68, 0.15)',
-            borderLeft: '3px solid var(--color-accent-red)',
-          }}
-        >
+        <div className="flex-1 p-3 rounded-lg stat-card-removed">
           <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>
             {t('removed')}
           </div>
@@ -318,13 +237,7 @@ export function VersionComparePanel({
             {removedCount}
           </div>
         </div>
-        <div
-          className="flex-1 p-3 rounded-lg"
-          style={{
-            backgroundColor: 'rgba(245, 158, 11, 0.15)',
-            borderLeft: '3px solid var(--color-accent-warm)',
-          }}
-        >
+        <div className="flex-1 p-3 rounded-lg stat-card-modified">
           <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-primary)' }}>
             {t('modified')}
           </div>

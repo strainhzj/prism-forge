@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import type { PromptVersion, PromptComponent, PromptParameter } from '@/types/generated';
+import './styles.css';
 
 interface VersionDetailPanelProps {
   version: PromptVersion;
@@ -64,13 +65,7 @@ export function VersionDetailPanel({
               v{version.versionNumber}
             </h3>
             {version.isActive && (
-              <span
-                className="px-2 py-0.5 rounded-full text-xs font-medium"
-                style={{
-                  backgroundColor: 'var(--color-accent-green)',
-                  color: 'white',
-                }}
-              >
+              <span className="active-badge px-2 py-0.5 rounded-full text-xs font-medium">
                 {t('active')}
               </span>
             )}
@@ -117,7 +112,7 @@ export function VersionDetailPanel({
 
       {/* Metadata */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+        <div className="metadata-card">
           <div className="text-xs mb-1" style={{ color: 'var(--color-text-secondary)' }}>
             {t('createdBy')}
           </div>
@@ -125,7 +120,7 @@ export function VersionDetailPanel({
             {version.createdBy}
           </div>
         </div>
-        <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--color-bg-primary)' }}>
+        <div className="metadata-card">
           <div className="text-xs mb-1" style={{ color: 'var(--color-text-secondary)' }}>
             {t('components')}
           </div>
@@ -140,14 +135,7 @@ export function VersionDetailPanel({
         <h4 className="text-sm font-medium mb-2" style={{ color: 'var(--color-text-primary)' }}>
           {t('contentPreview')}
         </h4>
-        <div
-          className="rounded-lg p-4 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed"
-          style={{
-            backgroundColor: 'var(--color-bg-primary)',
-            border: '1px solid var(--color-border-light)',
-            color: 'var(--color-text-primary)',
-          }}
-        >
+        <div className="content-preview prompt-versions-scroll">
           <pre className="whitespace-pre-wrap break-words">{version.content}</pre>
         </div>
       </div>

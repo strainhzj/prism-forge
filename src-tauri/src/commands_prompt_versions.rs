@@ -525,3 +525,39 @@ pub async fn cmd_cleanup_legacy_templates() -> Result<usize, String> {
 
     Ok(deleted_count)
 }
+
+/// 按名称删除提示词模板
+///
+/// 此命令会：
+/// 1. 根据模板名称查找模板
+/// 2. 删除模板及其所有版本
+/// 3. 返回删除的模板信息
+///
+/// # 参数
+/// - `name`: 模板名称
+///
+/// # 返回
+/// 返回被删除的模板数量（0 表示未找到，1 表示删除成功）
+#[tauri::command]
+pub async fn cmd_delete_prompt_template_by_name(name: String) -> Result<usize, String> {
+    let repo = PromptVersionRepository::from_default_db()
+        .map_err(|e| format!("创建版本仓库失败: {}", e))?;
+
+    // 根据名称查找模板
+    let template = repo.get_template_by_name(&name)
+        .map_err(|e| format!("查找模板失败: {}", e))?;
+
+    match template {
+        Some(template) => {
+            let template_id = template.id
+                .ok_or_else(|| format!("模板 {} 没有有效的 ID", name))?;
+
+            // 删除模板及其所有版本
+            repo.delete_template(template_id)
+                .map_err(|e| format!("删除模板失败: {}", e))?;
+
+            Ok(1)
+        }
+        None => Ok(0),
+    }
+}

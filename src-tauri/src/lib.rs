@@ -198,6 +198,7 @@ pub fn run() {
             commands_prompt_versions::cmd_update_prompt_components,
             commands_prompt_versions::cmd_check_config_updated,
             commands_prompt_versions::cmd_cleanup_legacy_templates,
+            commands_prompt_versions::cmd_delete_prompt_template_by_name,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| {

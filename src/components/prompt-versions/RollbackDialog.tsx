@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import './styles.css';
 
 interface RollbackDialogProps {
   open: boolean;
@@ -42,7 +43,7 @@ export function RollbackDialog({ open, onOpenChange, onConfirm, loading }: Rollb
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="fade-in">
         <AlertDialogHeader>
           <AlertDialogTitle>{t('confirmRollback')}</AlertDialogTitle>
           <AlertDialogDescription>{t('rollbackWarning')}</AlertDialogDescription>
@@ -55,17 +56,9 @@ export function RollbackDialog({ open, onOpenChange, onConfirm, loading }: Rollb
           </label>
           <div className="space-y-2">
             <label
-              className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all hover:shadow-sm ${
-                strategy === 'soft' ? 'shadow-sm' : ''
+              className={`rollback-option ${
+                strategy === 'soft' ? 'rollback-option-selected-soft' : ''
               }`}
-              style={{
-                backgroundColor: strategy === 'soft'
-                  ? 'rgba(76, 175, 80, 0.08)'
-                  : 'var(--color-bg-primary)',
-                borderColor: strategy === 'soft'
-                  ? 'var(--color-accent-green)'
-                  : 'var(--color-border-light)',
-              }}
               onClick={() => setStrategy('soft')}
             >
               <input
@@ -74,7 +67,7 @@ export function RollbackDialog({ open, onOpenChange, onConfirm, loading }: Rollb
                 value="soft"
                 checked={strategy === 'soft'}
                 onChange={() => setStrategy('soft')}
-                className="cursor-pointer accent-green-600"
+                className="cursor-pointer"
                 style={{ accentColor: 'var(--color-accent-green)' }}
               />
               <div className="flex-1">
@@ -94,17 +87,9 @@ export function RollbackDialog({ open, onOpenChange, onConfirm, loading }: Rollb
               </div>
             </label>
             <label
-              className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all hover:shadow-sm ${
-                strategy === 'hard' ? 'shadow-sm' : ''
+              className={`rollback-option ${
+                strategy === 'hard' ? 'rollback-option-selected-hard' : ''
               }`}
-              style={{
-                backgroundColor: strategy === 'hard'
-                  ? 'rgba(245, 158, 11, 0.08)'
-                  : 'var(--color-bg-primary)',
-                borderColor: strategy === 'hard'
-                  ? 'var(--color-accent-warm)'
-                  : 'var(--color-border-light)',
-              }}
               onClick={() => setStrategy('hard')}
             >
               <input
