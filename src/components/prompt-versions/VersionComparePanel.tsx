@@ -26,10 +26,10 @@ export function VersionComparePanel({
 
   // 计算变更统计
   const addedCount = comparison.componentChanges.filter(
-    (c) => c.changeType === 'Created' || c.lineDiffs.some((l) => l.changeType === 'Added')
+    (c) => c.changeType === 'Created' || (c.lineDiffs?.some((l) => l.changeType === 'Added') ?? false)
   ).length;
   const removedCount = comparison.componentChanges.filter(
-    (c) => c.changeType === 'Deleted' || c.lineDiffs.some((l) => l.changeType === 'Removed')
+    (c) => c.changeType === 'Deleted' || (c.lineDiffs?.some((l) => l.changeType === 'Removed') ?? false)
   ).length;
   const modifiedCount = comparison.componentChanges.filter(
     (c) => c.changeType === 'Updated'
@@ -208,9 +208,11 @@ export function VersionComparePanel({
             className="text-xs font-medium font-mono"
             style={{ color: 'var(--color-accent-green)' }}
           >
-            {param.newValue && param.newValue.length > 15
-              ? `${param.newValue.substring(0, 15)}...`
-              : param.newValue || '-'}
+            {param.newValue
+              ? (param.newValue.length > 15
+                  ? `${param.newValue.substring(0, 15)}...`
+                  : param.newValue)
+              : '-'}
           </span>
         </div>
       </div>
@@ -225,7 +227,7 @@ export function VersionComparePanel({
       {/* Version Selector */}
       <div className="flex items-center gap-4">
         <div className="flex-1">
-          <label className="text-xs mb-1 block" style={{ color: 'var(--color-text-secondary)' }}>
+          <label className="text-xs mb-1 block font-medium" style={{ color: 'var(--color-accent-blue)' }}>
             {t('fromVersion')}
           </label>
           <select
@@ -236,10 +238,10 @@ export function VersionComparePanel({
                 compareTo
               )
             }
-            className="w-full px-3 py-2 rounded-lg border text-sm cursor-pointer"
+            className="w-full px-3 py-2 rounded-lg border-2 text-sm cursor-pointer transition-all hover:shadow-sm focus:shadow-md outline-none"
             style={{
               backgroundColor: 'var(--color-bg-card)',
-              borderColor: 'var(--color-border-light)',
+              borderColor: compareFrom ? 'var(--color-accent-blue)' : 'var(--color-border-light)',
               color: 'var(--color-text-primary)',
             }}
           >
@@ -251,13 +253,13 @@ export function VersionComparePanel({
             ))}
           </select>
         </div>
-        <div className="flex items-center justify-center">
-          <svg className="w-5 h-5" style={{ color: 'var(--color-text-secondary)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        <div className="flex items-center justify-center pt-5">
+          <svg className="w-5 h-5" style={{ color: 'var(--color-accent-blue)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
           </svg>
         </div>
         <div className="flex-1">
-          <label className="text-xs mb-1 block" style={{ color: 'var(--color-text-secondary)' }}>
+          <label className="text-xs mb-1 block font-medium" style={{ color: 'var(--color-accent-green)' }}>
             {t('toVersion')}
           </label>
           <select
@@ -268,10 +270,10 @@ export function VersionComparePanel({
                 e.target.value ? Number(e.target.value) : null
               )
             }
-            className="w-full px-3 py-2 rounded-lg border text-sm cursor-pointer"
+            className="w-full px-3 py-2 rounded-lg border-2 text-sm cursor-pointer transition-all hover:shadow-sm focus:shadow-md outline-none"
             style={{
               backgroundColor: 'var(--color-bg-card)',
-              borderColor: 'var(--color-border-light)',
+              borderColor: compareTo ? 'var(--color-accent-green)' : 'var(--color-border-light)',
               color: 'var(--color-text-primary)',
             }}
           >

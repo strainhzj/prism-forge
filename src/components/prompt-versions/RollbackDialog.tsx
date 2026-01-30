@@ -55,12 +55,16 @@ export function RollbackDialog({ open, onOpenChange, onConfirm, loading }: Rollb
           </label>
           <div className="space-y-2">
             <label
-              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                strategy === 'soft' ? 'ring-2 ring-blue-500' : ''
+              className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all hover:shadow-sm ${
+                strategy === 'soft' ? 'shadow-sm' : ''
               }`}
               style={{
-                backgroundColor: 'var(--color-bg-primary)',
-                borderColor: strategy === 'soft' ? 'var(--color-accent-blue)' : 'var(--color-border-light)',
+                backgroundColor: strategy === 'soft'
+                  ? 'rgba(76, 175, 80, 0.08)'
+                  : 'var(--color-bg-primary)',
+                borderColor: strategy === 'soft'
+                  ? 'var(--color-accent-green)'
+                  : 'var(--color-border-light)',
               }}
               onClick={() => setStrategy('soft')}
             >
@@ -70,10 +74,18 @@ export function RollbackDialog({ open, onOpenChange, onConfirm, loading }: Rollb
                 value="soft"
                 checked={strategy === 'soft'}
                 onChange={() => setStrategy('soft')}
-                className="cursor-pointer"
+                className="cursor-pointer accent-green-600"
+                style={{ accentColor: 'var(--color-accent-green)' }}
               />
               <div className="flex-1">
-                <div className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                <div
+                  className="text-sm font-medium"
+                  style={{
+                    color: strategy === 'soft'
+                      ? 'var(--color-accent-green)'
+                      : 'var(--color-text-primary)'
+                  }}
+                >
                   {t('softRollback')}
                 </div>
                 <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
@@ -82,12 +94,16 @@ export function RollbackDialog({ open, onOpenChange, onConfirm, loading }: Rollb
               </div>
             </label>
             <label
-              className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                strategy === 'hard' ? 'ring-2 ring-blue-500' : ''
+              className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all hover:shadow-sm ${
+                strategy === 'hard' ? 'shadow-sm' : ''
               }`}
               style={{
-                backgroundColor: 'var(--color-bg-primary)',
-                borderColor: strategy === 'hard' ? 'var(--color-accent-blue)' : 'var(--color-border-light)',
+                backgroundColor: strategy === 'hard'
+                  ? 'rgba(245, 158, 11, 0.08)'
+                  : 'var(--color-bg-primary)',
+                borderColor: strategy === 'hard'
+                  ? 'var(--color-accent-warm)'
+                  : 'var(--color-border-light)',
               }}
               onClick={() => setStrategy('hard')}
             >
@@ -98,9 +114,17 @@ export function RollbackDialog({ open, onOpenChange, onConfirm, loading }: Rollb
                 checked={strategy === 'hard'}
                 onChange={() => setStrategy('hard')}
                 className="cursor-pointer"
+                style={{ accentColor: 'var(--color-accent-warm)' }}
               />
               <div className="flex-1">
-                <div className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                <div
+                  className="text-sm font-medium"
+                  style={{
+                    color: strategy === 'hard'
+                      ? 'var(--color-accent-warm)'
+                      : 'var(--color-text-primary)'
+                  }}
+                >
                   {t('hardRollback')}
                 </div>
                 <div className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
@@ -136,9 +160,11 @@ export function RollbackDialog({ open, onOpenChange, onConfirm, loading }: Rollb
             variant="ghost"
             onClick={handleCancel}
             disabled={loading}
+            className="border-2 transition-all hover:scale-[1.02]"
             style={{
-              border: '1px solid var(--color-border-light)',
-              color: 'var(--color-text-primary)',
+              borderColor: 'var(--color-border-light)',
+              color: 'var(--color-text-secondary)',
+              fontWeight: 500,
             }}
           >
             {t('cancel')}
@@ -147,9 +173,12 @@ export function RollbackDialog({ open, onOpenChange, onConfirm, loading }: Rollb
             variant="destructive"
             onClick={handleConfirm}
             disabled={loading}
+            className="border-2 transition-all hover:scale-[1.02] hover:shadow-md"
             style={{
               backgroundColor: 'var(--color-accent-red)',
+              borderColor: 'var(--color-accent-red)',
               color: 'white',
+              fontWeight: 600,
             }}
           >
             {loading ? '处理中...' : t('confirmRollbackBtn')}

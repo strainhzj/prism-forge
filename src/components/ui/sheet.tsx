@@ -68,10 +68,22 @@ const SheetContent = React.forwardRef<
     >
       {children}
       <SheetPrimitive.Close
-        className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary"
-        style={{ color: 'var(--color-text-secondary)' }}
-        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-text-primary)'}
-        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-secondary)'}
+        className="absolute right-4 top-4 rounded-md opacity-70 ring-offset-background transition-all hover:opacity-100 hover:scale-110 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary flex items-center justify-center"
+        style={{
+          color: 'var(--color-text-secondary)',
+          backgroundColor: 'var(--color-bg-primary)',
+          border: '1px solid var(--color-border-light)',
+          width: '32px',
+          height: '32px',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = 'var(--color-accent-warm)';
+          e.currentTarget.style.borderColor = 'var(--color-accent-warm)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = 'var(--color-text-secondary)';
+          e.currentTarget.style.borderColor = 'var(--color-border-light)';
+        }}
       >
         <X className="h-4 w-4" />
         <span className="sr-only">关闭</span>

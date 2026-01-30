@@ -27,6 +27,10 @@ export function VersionDetailPanel({
   // 格式化日期
   const formatDateTime = (dateString: string) => {
     const date = new Date(dateString);
+    // 检查无效日期
+    if (isNaN(date.getTime())) {
+      return '-';
+    }
     return date.toLocaleString('zh-CN', {
       year: 'numeric',
       month: '2-digit',
@@ -81,10 +85,12 @@ export function VersionDetailPanel({
               variant="ghost"
               size="sm"
               onClick={onCompare}
-              className="transition-all hover:scale-[1.02]"
+              className="transition-all hover:scale-[1.02] hover:shadow-md"
               style={{
-                border: '1px solid var(--color-border-light)',
-                color: 'var(--color-text-primary)',
+                border: '2px solid var(--color-accent-blue)',
+                color: 'var(--color-accent-blue)',
+                backgroundColor: 'transparent',
+                fontWeight: 600,
               }}
             >
               {t('compareWith')}
@@ -95,9 +101,12 @@ export function VersionDetailPanel({
               variant="destructive"
               size="sm"
               onClick={onRollback}
+              className="transition-all hover:scale-[1.02] hover:shadow-md"
               style={{
-                backgroundColor: 'var(--color-accent-red)',
+                backgroundColor: 'var(--color-accent-warm)',
                 color: 'white',
+                border: '2px solid var(--color-accent-warm)',
+                fontWeight: 600,
               }}
             >
               {t('rollback')}
