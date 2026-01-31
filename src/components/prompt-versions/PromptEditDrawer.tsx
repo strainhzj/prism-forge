@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { useQueryClient } from '@tanstack/react-query';
 import type { PromptVersion } from '@/types/generated';
 import { X, AlertCircle, Copy, Check } from 'lucide-react';
 
@@ -60,6 +61,7 @@ export function PromptEditDrawer({
   currentVersion,
   onSaveSuccess,
 }: PromptEditDrawerProps) {
+  const queryClient = useQueryClient();
   const [currentLanguage, setCurrentLanguage] = useState<Language>('zh');
   const [componentData, setComponentData] = useState<ComponentData | null>(null);
   const [editedContent, setEditedContent] = useState('');
@@ -253,6 +255,10 @@ export function PromptEditDrawer({
         componentsData,
         updatedLanguages,
       });
+
+      // 刷新版本列表（触发 React Query 缓存失效）
+      queryClient.invalidateQueries({ queryKey: ['prompt-versions'] });
+      queryClient.invalidateQueries({ queryKey: ['prompt-active-version'] });
 
       // 保存成功回调
       onSaveSuccess?.();
