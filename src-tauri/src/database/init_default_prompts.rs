@@ -235,11 +235,12 @@ pub fn import_default_prompts(conn: &mut Connection) -> Result<()> {
                             "UPDATE prompt_templates
                              SET description = ?1, scenario = ?2, tags = ?3, updated_at = ?4
                              WHERE id = ?5",
-                            [
+                            rusqlite::params![
                                 DEFAULT_TEMPLATE.description,
                                 DEFAULT_TEMPLATE.scenario,
                                 DEFAULT_TEMPLATE.tags,
-                                &now,
+                                now,
+                                template_id,
                             ],
                         )?;
 
@@ -248,7 +249,7 @@ pub fn import_default_prompts(conn: &mut Connection) -> Result<()> {
                             "UPDATE prompt_versions
                              SET content = ?1, created_at = ?2
                              WHERE template_id = ?3 AND version_number = 1",
-                            [&content_str, &now],
+                            rusqlite::params![content_str, now, template_id],
                         )?;
 
                         log::info!("已覆盖模板 '{}' 的 v1 内容", DEFAULT_TEMPLATE.name);

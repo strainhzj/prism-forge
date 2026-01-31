@@ -1329,8 +1329,8 @@ impl PromptVersionRepository {
         let change_type_str: String = row.get(5).unwrap_or_else(|_| "Updated".to_string());
         let change_type: ChangeType = change_type_str.parse().unwrap_or(ChangeType::Updated);
 
-        // field_name 字段也是索引 5，重新获取（SQLite 允许重复获取同一列）
-        let field_name: String = row.get(5).unwrap_or_else(|_| "unknown".to_string());
+        // field_name 字段（索引 6）
+        let field_name: String = row.get(6).unwrap_or_else(|_| "unknown".to_string());
 
         PromptChange {
             id,
@@ -1340,11 +1340,11 @@ impl PromptVersionRepository {
             component_id: row.get(4).ok(),
             change_type,
             field_name,
-            old_value: row.get(6).ok(),
-            new_value: row.get(7).ok(),
-            line_number: row.get(8).ok(),
-            change_summary: row.get(9).ok(),
-            changed_at: row.get(10).unwrap_or_else(|_| chrono::Utc::now().to_rfc3339()),
+            old_value: row.get(7).ok(),
+            new_value: row.get(8).ok(),
+            line_number: row.get(9).ok(),
+            change_summary: row.get(10).ok(),
+            changed_at: row.get(11).unwrap_or_else(|_| chrono::Utc::now().to_rfc3339()),
         }
     }
 
