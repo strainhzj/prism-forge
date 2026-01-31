@@ -134,6 +134,40 @@ pub async fn cmd_compare_prompt_versions(
         .map_err(|e| e.to_string())
 }
 
+/// 从版本的 content 字段迁移组件数据
+///
+/// 这是一个数据修复命令，用于修复那些没有正确创建组件记录的版本
+#[tauri::command]
+pub async fn cmd_migrate_prompt_components(version_id: i64) -> Result<usize, String> {
+    let repo = PromptVersionRepository::from_default_db()
+        .map_err(|e| format!("创建版本仓库失败: {}", e))?;
+
+    repo.migrate_components_from_content(version_id)
+        .map_err(|e| e.to_string())
+}
+
+/// 批量迁移模板的所有版本组件
+#[tauri::command]
+pub async fn cmd_migrate_all_template_components(template_id: i64) -> Result<usize, String> {
+    let repo = PromptVersionRepository::from_default_db()
+        .map_err(|e| format!("创建版本仓库失败: {}", e))?;
+
+    // 获取所有版本
+    let versions = repo.list_versions(template_id)
+        .map_err(|e| format!("获取版本列表失败: {}", e))?;
+
+    let mut total_migrated = 0;
+    for version in versions {
+        if let Some(id) = version.id {
+            let count = repo.migrate_components_from_content(id)
+                .map_err(|e| format!("迁移版本 {} 失败: {}", version.version_number, e))?;
+            total_migrated += count;
+        }
+    }
+
+    Ok(total_migrated)
+}
+
 /// 获取版本的所有组件（旧版，兼容保留）
 #[tauri::command]
 pub async fn cmd_get_prompt_components_by_id(version_id: i64) -> Result<Vec<PromptComponent>, String> {

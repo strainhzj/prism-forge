@@ -89,5 +89,10 @@
   "noChanges": "No changes",
   "noComponents": "No components",
   "noParameters": "No parameters",
-  "noHistory": "No change history"
+  "noHistory": "No change history",
+  "selectToCompare": "Select to Compare",
+  "compareDisabledTooltip": "Please select two versions in the list to compare",
+  "selectedCount": "{count}/2 selected",
+  "selectVersionsHint": "Please select two versions to compare",
+  "compareTabDisabled": "Please select two versions first"
 }

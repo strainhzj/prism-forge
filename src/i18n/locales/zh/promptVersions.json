@@ -89,5 +89,10 @@
   "noChanges": "无变更",
   "noComponents": "无组件",
   "noParameters": "无参数",
-  "noHistory": "暂无变更历史"
+  "noHistory": "暂无变更历史",
+  "selectToCompare": "选择对比",
+  "compareDisabledTooltip": "请先在左侧列表中选择两个版本进行对比",
+  "selectedCount": "已选择 {count}/2",
+  "selectVersionsHint": "请选择两个版本进行对比",
+  "compareTabDisabled": "请先选择两个版本"
 }

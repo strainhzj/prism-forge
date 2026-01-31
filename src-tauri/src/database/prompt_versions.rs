@@ -770,6 +770,108 @@ impl PromptVersionRepository {
         })
     }
 
+    /// 从版本的 content 字段解析并填充组件表
+    ///
+    /// 这是一个数据修复方法，用于修复那些没有正确创建组件记录的版本
+    pub fn migrate_components_from_content(&self, version_id: i64) -> Result<usize> {
+        // 首先检查是否已有组件，如果有则跳过
+        let existing = self.list_components(version_id)?;
+        if !existing.is_empty() {
+            return Ok(0);
+        }
+
+        // 获取版本信息
+        let version = self.with_conn_inner(|conn| -> Result<PromptVersion> {
+            let mut stmt = conn.prepare(
+                "SELECT id, template_id, version_number, is_active, content, metadata, created_by, created_at
+                 FROM prompt_versions
+                 WHERE id = ?1"
+            )?;
+            let version = stmt.query_row(params![version_id], |row| {
+                Ok(PromptVersion {
+                    id: Some(row.get(0)?),
+                    template_id: row.get(1)?,
+                    version_number: row.get(2)?,
+                    is_active: bool_from_i32(row.get(3)?, "is_active")?,
+                    content: row.get(4)?,
+                    metadata: row.get(5)?,
+                    created_by: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            })?;
+            Ok(version)
+        })?;
+
+        // 解析 content JSON
+        let content_data: serde_json::Value = serde_json::from_str(&version.content)
+            .map_err(|e| anyhow::anyhow!("解析 content JSON 失败: {}", e))?;
+
+        let mut components = Vec::new();
+        let mut sort_order = 0;
+
+        // 遍历语言
+        if let Some(obj) = content_data.as_object() {
+            for (lang, lang_data) in obj {
+                if let Some(lang_obj) = lang_data.as_object() {
+                    // 遍历组件类型
+                    for (component_type_key, component_data) in lang_obj {
+                        // 确定组件类型 - 映射到现有类型
+                        let component_type = match component_type_key.as_str() {
+                            "input_template" => PromptComponentType::UserMessage,
+                            "meta_prompt" => PromptComponentType::MetaPrompt,
+                            "output_template" => PromptComponentType::OutputFormat,
+                            _ => continue,
+                        };
+
+                        // 提取 content 字段
+                        if let Some(content) = component_data.as_object().and_then(|d| d.get("content")) {
+                            if let Some(content_str) = content.as_str() {
+                                components.push(PromptComponent {
+                                    id: None,
+                                    version_id,
+                                    component_type: component_type.clone(),
+                                    name: component_type_key.to_string(),
+                                    content: content_str.to_string(),
+                                    variables: None,
+                                    language: lang.clone(),
+                                    sort_order,
+                                });
+                                sort_order += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 插入组件
+        if !components.is_empty() {
+            self.with_conn_inner(|conn| {
+                let tx = conn.unchecked_transaction()?;
+                for component in &components {
+                    tx.execute(
+                        "INSERT INTO prompt_components (
+                            version_id, component_type, name, content, variables, language, sort_order
+                        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        params![
+                            version_id,
+                            format!("{:?}", component.component_type),
+                            &component.name,
+                            &component.content,
+                            &component.variables,
+                            &component.language,
+                            component.sort_order,
+                        ],
+                    )?;
+                }
+                tx.commit()?;
+                Ok(())
+            })?;
+        }
+
+        Ok(components.len())
+    }
+
     // ============================================================================
     // 版本对比 (Version Comparison)
     // ============================================================================

@@ -190,6 +190,8 @@ pub fn run() {
             commands_prompt_versions::cmd_rollback_prompt_version_hard,
             commands_prompt_versions::cmd_save_prompt_version,
             commands_prompt_versions::cmd_compare_prompt_versions,
+            commands_prompt_versions::cmd_migrate_prompt_components,
+            commands_prompt_versions::cmd_migrate_all_template_components,
             commands_prompt_versions::cmd_get_prompt_components_by_id,
             commands_prompt_versions::cmd_get_prompt_parameters,
             commands_prompt_versions::cmd_get_prompt_version_changes,
