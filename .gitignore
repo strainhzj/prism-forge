@@ -48,3 +48,8 @@ tests/
 *.backup*
 *.before_fix
 *.orig
+
+# Playwright config and preview files
+playwright.config.ts
+prompt-version-manager-preview.html
+postcss.config.js

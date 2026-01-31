@@ -650,6 +650,10 @@ impl PromptVersionRepository {
     ///
     /// 用于组件化提示词更新，外部已经计算好版本号
     ///
+    /// 此方法会：
+    /// 1. 创建版本记录
+    /// 2. 自动从 content 字段解析并创建组件记录
+    ///
     /// # 参数
     /// - `template_id`: 模板 ID
     /// - `version_number`: 指定的版本号
@@ -678,6 +682,32 @@ impl PromptVersionRepository {
 
             let version_id = conn.last_insert_rowid();
 
+            // 防御性：验证 version_id 有效
+            if version_id == 0 {
+                return Err(anyhow::anyhow!(
+                    "创建版本失败: last_insert_rowid 返回 0, template_id={}, version_number={}",
+                    template_id, version_number
+                ));
+            }
+
+            // 自动创建组件记录
+            // 注意：如果组件创建失败，版本记录仍然存在，需要手动清理
+            match Self::create_components_from_content_inner(conn, version_id, &content) {
+                Ok(count) => {
+                    #[cfg(debug_assertions)]
+                    log::debug!("版本 {} 成功创建 {} 个组件", version_id, count);
+                }
+                Err(e) => {
+                    // 组件创建失败，但版本记录已插入
+                    // 返回错误，让调用者决定是否回滚
+                    #[cfg(debug_assertions)]
+                    log::warn!("版本 {} 组件创建失败: {}, 版本记录已存在", version_id, e);
+                    return Err(e.context(format!(
+                        "版本 {} 组件创建失败，但版本记录已插入", version_id
+                    )));
+                }
+            }
+
             Ok(PromptVersion {
                 id: Some(version_id),
                 template_id,
@@ -694,6 +724,128 @@ impl PromptVersionRepository {
     // ============================================================================
     // 组件管理 (Component Management)
     // ============================================================================
+
+    /// 内部方法：从 content 字段解析并创建组件记录
+    ///
+    /// 此方法用于在创建新版本时自动生成组件记录，避免版本对比时出现
+    /// "全部删除"的误判。
+    ///
+    /// # 参数
+    /// - `conn`: 数据库连接（借用）
+    /// - `version_id`: 版本 ID
+    /// - `content`: 组件化 JSON 内容
+    ///
+    /// # 返回
+    /// 创建的组件数量
+    ///
+    /// # 错误处理
+    /// - 如果 JSON 解析失败，返回错误
+    /// - 如果组件插入失败，返回错误（部分组件可能已插入）
+    fn create_components_from_content_inner(
+        conn: &rusqlite::Connection,
+        version_id: i64,
+        content: &str,
+    ) -> Result<usize> {
+        // 解析 content JSON
+        let content_data: serde_json::Value = serde_json::from_str(content)
+            .map_err(|e| {
+                #[cfg(debug_assertions)]
+                log::error!("解析 content JSON 失败: {}", e);
+                anyhow::anyhow!("解析 content JSON 失败: {}", e)
+            })?;
+
+        let mut components = Vec::new();
+        let mut sort_order = 0;
+
+        // 遍历语言
+        if let Some(obj) = content_data.as_object() {
+            for (lang, lang_data) in obj {
+                if let Some(lang_obj) = lang_data.as_object() {
+                    // 遍历组件类型
+                    for (component_type_key, component_data) in lang_obj {
+                        // 确定组件类型 - 映射到现有类型
+                        let component_type = match component_type_key.as_str() {
+                            "input_template" => PromptComponentType::UserMessage,
+                            "meta_prompt" => PromptComponentType::MetaPrompt,
+                            "output_template" => PromptComponentType::OutputFormat,
+                            _ => {
+                                #[cfg(debug_assertions)]
+                                log::warn!("未知的组件类型: {}, 跳过", component_type_key);
+                                continue;
+                            }
+                        };
+
+                        // 提取 content 字段
+                        if let Some(content_value) = component_data.as_object().and_then(|d| d.get("content")) {
+                            if let Some(content_str) = content_value.as_str() {
+                                components.push((
+                                    component_type,
+                                    component_type_key.to_string(),
+                                    content_str.to_string(),
+                                    lang.clone(),
+                                    sort_order,
+                                ));
+                                sort_order += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 批量插入组件
+        let mut inserted_count = 0;
+        if !components.is_empty() {
+            for (component_type, name, content_str, language, sort_order) in &components {
+                // 防御性：检查字符串长度，避免数据库限制
+                if name.len() > 255 {
+                    #[cfg(debug_assertions)]
+                    log::warn!("组件名称过长 ({} 字节)，跳过: {}", name.len(), name);
+                    continue;
+                }
+
+                if content_str.len() > 1_000_000 {
+                    #[cfg(debug_assertions)]
+                    log::warn!("组件内容过长 ({} 字节)，跳过: {}", content_str.len(), name);
+                    continue;
+                }
+
+                match conn.execute(
+                    "INSERT INTO prompt_components (
+                        version_id, component_type, name, content, variables, language, sort_order
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![
+                        version_id,
+                        format!("{:?}", component_type),
+                        name,
+                        content_str,
+                        None as Option<String>,  // variables
+                        language,
+                        sort_order,
+                    ],
+                ) {
+                    Ok(_) => inserted_count += 1,
+                    Err(e) => {
+                        #[cfg(debug_assertions)]
+                        log::error!("插入组件 {} 失败: {}, 已插入 {} 个", name, e, inserted_count);
+                        return Err(anyhow::anyhow!(
+                            "插入组件 {} 失败: {}, 已插入 {} 个",
+                            name, e, inserted_count
+                        ));
+                    }
+                }
+            }
+
+            #[cfg(debug_assertions)]
+            log::info!(
+                "为版本 {} 创建了 {} 个组件记录",
+                version_id,
+                inserted_count
+            );
+        }
+
+        Ok(inserted_count)
+    }
 
     /// 获取版本的所有组件
     pub fn list_components(&self, version_id: i64) -> Result<Vec<PromptComponent>> {
