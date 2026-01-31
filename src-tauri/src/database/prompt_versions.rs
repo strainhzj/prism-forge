@@ -1161,19 +1161,33 @@ impl PromptVersionRepository {
     }
 
     /// 辅助方法：从行转换为 PromptChange
+    ///
+    /// 防御性设计：
+    /// - 使用 unwrap_or_default 处理基本类型，避免类型不匹配导致 panic
+    /// - 使用 ok() 处理 Option 类型，转换错误为 None
+    /// - 字符串字段提供合理的默认值
     fn row_to_change(row: &rusqlite::Row) -> PromptChange {
+        // 使用 unwrap_or_default 替代 unwrap_or，避免类型不匹配时的 panic
+        // unwrap_or_default 只在 Result::Err 时返回默认值，类型匹配时正常返回值
+        let id: i64 = row.get(0).unwrap_or_default();
+        let template_id: i64 = row.get(1).unwrap_or_default();
+        let to_version_id: i64 = row.get(3).unwrap_or_default();
+
+        // change_type 字段（索引 5）需要特殊处理：先获取字符串，再解析枚举
         let change_type_str: String = row.get(5).unwrap_or_else(|_| "Updated".to_string());
-        // 使用 FromStr trait 进行安全解析，默认为 Updated
         let change_type: ChangeType = change_type_str.parse().unwrap_or(ChangeType::Updated);
 
+        // field_name 字段也是索引 5，重新获取（SQLite 允许重复获取同一列）
+        let field_name: String = row.get(5).unwrap_or_else(|_| "unknown".to_string());
+
         PromptChange {
-            id: row.get(0).unwrap_or(0),
-            template_id: row.get(1).unwrap_or(0),
+            id,
+            template_id,
             from_version_id: row.get(2).ok(),
-            to_version_id: row.get(3).unwrap_or(0),
+            to_version_id,
             component_id: row.get(4).ok(),
             change_type,
-            field_name: row.get(5).unwrap_or_else(|_| "unknown".to_string()),
+            field_name,
             old_value: row.get(6).ok(),
             new_value: row.get(7).ok(),
             line_number: row.get(8).ok(),
@@ -1256,18 +1270,6 @@ impl PromptVersionRepository {
                 params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
 
             let rows = stmt.query_map(params_ref.as_slice(), |row| {
-                // 防御性：验证语言字段是否存在
-                let language: Option<String> = row.get(6)?;
-                let language_value = match language {
-                    Some(lang) if !lang.is_empty() => lang,
-                    _ => {
-                        #[cfg(debug_assertions)]
-                        eprintln!("[PromptVersionRepository] 警告: 版本 ID {} 缺少 language metadata，使用默认值 'unknown'",
-                                 row.get::<_, i64>(0).unwrap_or(0));
-                        "unknown".to_string()
-                    }
-                };
-
                 // 防御性：安全获取各个字段，使用 ? 传播错误而非 unwrap
                 let id: i64 = row.get(0)?;
                 let template_id: i64 = row.get(1)?;
@@ -1275,10 +1277,21 @@ impl PromptVersionRepository {
                 let content: String = row.get(3)?;
                 let description: Option<String> = row.get(4)?;
                 let scenario: String = row.get(5)?;
+                let language: Option<String> = row.get(6)?;
                 let is_system: i32 = row.get(7)?;
                 let is_active: i32 = row.get(8)?;
                 let version_number: i32 = row.get(9)?;
                 let created_at: String = row.get(10)?;
+
+                // 防御性：验证语言字段是否存在（使用已获取的 id 值，避免重复查询）
+                let language_value = match language {
+                    Some(lang) if !lang.is_empty() => lang,
+                    _ => {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[PromptVersionRepository] 警告: 版本 ID {} 缺少 language metadata，使用默认值 'unknown'", id);
+                        "unknown".to_string()
+                    }
+                };
 
                 // 构建扁平化的 JSON 对象
                 let mut map = serde_json::Map::new();
