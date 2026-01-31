@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { PromptVersion } from '@/types/generated';
-import { X, AlertCircle } from 'lucide-react';
+import { X, AlertCircle, Copy, Check } from 'lucide-react';
 
 interface PromptEditDrawerProps {
   isOpen: boolean;
@@ -68,18 +68,34 @@ export function PromptEditDrawer({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // 加载组件数据
   useEffect(() => {
     if (!isOpen || !templateName) return;
 
+    // 取消之前的请求
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // 创建新的 AbortController
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     const loadComponentData = async () => {
       setLoading(true);
+      setError(null);
       try {
         // 获取组件化数据
         const data = await invoke<ComponentData>('cmd_get_prompt_components', {
           templateName,
         });
+
+        // 检查请求是否已取消
+        if (abortController.signal.aborted) return;
 
         setComponentData(data);
 
@@ -92,43 +108,58 @@ export function PromptEditDrawer({
         const updated = await invoke<boolean>('cmd_check_config_updated', {
           templateName,
         });
+
+        if (abortController.signal.aborted) return;
+
         setConfigUpdated(updated);
         setShowWarning(updated);
-      } catch (error) {
-        console.error('加载组件数据失败:', error);
+      } catch (err) {
+        if (abortController.signal.aborted) return;
+        const errorMsg = err instanceof Error ? err.message : '加载失败，请重试';
+        if (import.meta.env.DEV) {
+          console.error('加载组件数据失败:', err);
+        }
+        setError(errorMsg);
       } finally {
-        setLoading(false);
+        if (!abortController.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
 
     loadComponentData();
-  }, [isOpen, templateName]);
+
+    // 清理函数
+    return () => {
+      abortController.abort();
+    };
+  }, [isOpen, templateName, currentLanguage]);
 
   // 切换语言时临时保存当前编辑内容
-  const handleLanguageSwitch = (newLanguage: Language) => {
+  const handleLanguageSwitch = useCallback((newLanguage: Language) => {
     if (!componentData) return;
 
-    // 临时保存当前编辑内容到状态
-    setComponentData((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        [currentLanguage]: {
-          ...prev[currentLanguage],
-          meta_prompt: {
-            ...prev[currentLanguage].meta_prompt,
-            content: editedContent,
-          },
+    // 先构建更新后的状态
+    const updatedState: ComponentData = {
+      ...componentData,
+      [currentLanguage]: {
+        ...componentData[currentLanguage],
+        meta_prompt: {
+          ...componentData[currentLanguage].meta_prompt,
+          content: editedContent,
         },
-      };
-    });
+      },
+    };
 
-    // 切换到新语言
-    const newContent = componentData[newLanguage].meta_prompt.content;
+    // 从更新后的状态中获取新语言的内容
+    const newContent = updatedState[newLanguage].meta_prompt.content;
+
+    // 批量更新状态
+    setComponentData(updatedState);
     setEditedContent(newContent);
     setOriginalContent(newContent);
     setCurrentLanguage(newLanguage);
-  };
+  }, [componentData, currentLanguage, editedContent]);
 
   // 检测用户开始编辑
   useEffect(() => {
@@ -146,11 +177,49 @@ export function PromptEditDrawer({
     }
   }, [editedContent, originalContent, componentData, currentLanguage, showWarning]);
 
+  // 构建完整提示词预览（meta_prompt + input_template + output_template）
+  const buildFullPromptPreview = useCallback((): string => {
+    if (!componentData || !componentData[currentLanguage]) {
+      return '';
+    }
+
+    const langData = componentData[currentLanguage];
+    const metaPrompt = editedContent;
+    const inputTemplate = langData.input_template?.content ?? '';
+    const outputTemplate = langData.output_template?.content ?? '';
+
+    return `${metaPrompt}\n\n${inputTemplate}\n\n${outputTemplate}`;
+  }, [componentData, currentLanguage, editedContent]);
+
+  // 复制预览内容
+  const handleCopyPreview = async () => {
+    const preview = buildFullPromptPreview();
+    if (preview) {
+      try {
+        await navigator.clipboard.writeText(preview);
+        setCopied(true);
+      } catch (err) {
+        if (import.meta.env.DEV) {
+          console.error('复制失败:', err);
+        }
+      }
+    }
+  };
+
+  // 清理复制状态定时器
+  useEffect(() => {
+    if (!copied) return;
+
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
   // 保存修改
   const handleSave = async () => {
     if (!componentData || saving) return;
 
     setSaving(true);
+    setError(null);
     try {
       // 构建更新后的组件数据
       const updatedData: ComponentData = {
@@ -164,21 +233,36 @@ export function PromptEditDrawer({
         },
       };
 
+      // 序列化数据，检查是否有循环引用
+      let componentsData: string;
+      try {
+        componentsData = JSON.stringify(updatedData);
+        if (!componentsData) {
+          throw new Error('数据序列化失败');
+        }
+      } catch (err) {
+        throw new Error('保存数据格式错误，请检查输入内容');
+      }
+
       // 确定哪些语言被更新了
       const updatedLanguages: Language[] = [currentLanguage];
 
       // 调用后端命令更新组件
       await invoke<PromptVersion>('cmd_update_prompt_components', {
         templateName,
-        componentsData: JSON.stringify(updatedData),
+        componentsData,
         updatedLanguages,
       });
 
       // 保存成功回调
       onSaveSuccess?.();
       onClose();
-    } catch (error) {
-      console.error('保存失败:', error);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : '保存失败，请重试';
+      if (import.meta.env.DEV) {
+        console.error('保存失败:', err);
+      }
+      setError(errorMsg);
     } finally {
       setSaving(false);
     }
@@ -245,6 +329,26 @@ export function PromptEditDrawer({
           </div>
         )}
 
+        {/* Error Banner */}
+        {error && (
+          <div className="mx-6 mt-4 p-3 rounded-md flex items-start gap-2" style={{
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.3)',
+          }}>
+            <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: '#EF4444' }} />
+            <div className="flex-1 text-sm" style={{ color: 'var(--color-text-primary)' }}>
+              {error}
+            </div>
+            <button
+              onClick={() => setError(null)}
+              className="text-sm underline hover:opacity-80"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              关闭
+            </button>
+          </div>
+        )}
+
         {/* Language Tabs */}
         <div className="px-6 pt-4">
           <div className="flex gap-2 border-b" style={{ borderColor: 'var(--color-border-light)' }}>
@@ -279,8 +383,8 @@ export function PromptEditDrawer({
           </div>
         </div>
 
-        {/* Editor */}
-        <div className="flex-1 p-6 overflow-auto">
+        {/* Editor - 上下两个窗格 */}
+        <div className="flex-1 flex flex-col overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center" style={{ color: 'var(--color-text-secondary)' }}>
@@ -289,22 +393,76 @@ export function PromptEditDrawer({
               </div>
             </div>
           ) : (
-            <div className="h-full flex flex-col">
-              <label className="block text-sm font-medium mb-2" style={{ color: 'var(--color-text-primary)' }}>
-                Meta-Prompt
-              </label>
-              <textarea
-                value={editedContent}
-                onChange={(e) => setEditedContent(e.target.value)}
-                className="flex-1 w-full p-4 rounded-md border font-mono text-sm resize-none focus:outline-none focus:ring-2"
-                style={{
-                  backgroundColor: 'var(--color-bg-primary)',
-                  borderColor: 'var(--color-border-light)',
-                  color: 'var(--color-text-primary)',
-                }}
-                placeholder="输入 Meta-Prompt 内容..."
-              />
-            </div>
+            <>
+              {/* 上窗格 - 编辑区 */}
+              <div className="flex-1 flex flex-col p-6 border-b" style={{ borderColor: 'var(--color-border-light)' }}>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                    Meta-Prompt {currentLanguage === 'zh' ? '(中文)' : '(English)'}
+                  </label>
+                  <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    可编辑
+                  </span>
+                </div>
+                <textarea
+                  value={editedContent}
+                  onChange={(e) => setEditedContent(e.target.value)}
+                  className="flex-1 w-full p-4 rounded-md border font-mono text-sm resize-none focus:outline-none focus:ring-2"
+                  style={{
+                    backgroundColor: 'var(--color-bg-primary)',
+                    borderColor: 'var(--color-border-light)',
+                    color: 'var(--color-text-primary)',
+                  }}
+                  placeholder="输入 Meta-Prompt 内容..."
+                />
+              </div>
+
+              {/* 下窗格 - 完整提示词预览区 */}
+              <div className="flex-1 flex flex-col p-6 overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                    完整提示词预览
+                  </label>
+                  <button
+                    onClick={handleCopyPreview}
+                    className="flex items-center gap-1 px-2 py-1 text-xs rounded transition-colors"
+                    style={{
+                      backgroundColor: 'var(--color-bg-primary)',
+                      color: 'var(--color-text-secondary)',
+                      border: '1px solid var(--color-border-light)',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--color-border-light)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--color-bg-primary)';
+                    }}
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-3 h-3" style={{ color: 'var(--color-accent-green)' }} />
+                        <span>已复制</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3" />
+                        <span>复制</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div
+                  className="flex-1 p-4 rounded-md border overflow-auto font-mono text-xs whitespace-pre-wrap break-words"
+                  style={{
+                    backgroundColor: 'var(--color-bg-primary)',
+                    borderColor: 'var(--color-border-light)',
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  {buildFullPromptPreview() || <span style={{ color: 'var(--color-text-secondary)' }}>预览加载中...</span>}
+                </div>
+              </div>
+            </>
           )}
         </div>
 
