@@ -385,6 +385,65 @@ PrismForge 不替代 **Claude Code**，而是增强你的 **Claude Code** 使用
 
 ---
 
+## 更新日志 (Changelog)
+
+### v1.0.2 - 提示词版本管理系统 (2026-02-01)
+
+#### 🎯 核心功能
+
+**提示词版本管理系统**
+- ✅ 完整的版本控制：支持提示词模板的版本化管理
+- ✅ 组件化架构：UserMessage、MetaPrompt、OutputFormat 独立管理
+- ✅ 变更追踪：字段级、组件级的自动变更追踪
+- ✅ 一键回滚：快速回滚到任意历史版本
+- ✅ 版本对比：可视化展示版本间差异
+
+#### 📦 新增功能
+
+**数据库层（Rust）**
+- 新增 `PromptVersionRepository`、`PromptComponentRepository`、`RollbackRepository`
+- 支持版本 CRUD、组件解析、变更计算
+- 防御性编程：全面使用 `?` 和显式类型注解避免 panic
+- 事务支持：确保版本创建的原子性
+- 版本创建时自动从 content 解析并创建组件记录
+
+**前端 UI 层（React）**
+- 提示词库页面（`PromptsPage`）：统一管理所有提示词模板
+- 版本管理抽屉（`PromptVersionsDrawer`）：版本列表和详情
+- 版本编辑器（`PromptEditDrawer`）：上下双窗格布局，实时预览
+- 变更历史面板（`ChangeHistoryPanel`）：字段级变更追踪
+- 版本对比面板（`VersionComparePanel`）：可视化差异展示
+- 回滚确认对话框（`RollbackDialog`）：安全的版本回滚
+
+#### 🔧 技术改进
+
+**代码质量**
+- 修复 rusqlite `row.get()` panic 风险（使用显式类型注解）
+- 修复 SQL 参数缺失问题（使用 `rusqlite::params!` 宏）
+- 修复数据库列索引不对齐问题
+- 修复 ESM 模式下 `__dirname` 不可用问题（使用 `import.meta.url`）
+
+**用户体验**
+- 实时刷新编辑后版本列表
+- 优化按钮分辨度（区分操作类型）
+- 完整暗色模式适配
+- 中英文双语支持（新增 `prompts.json`、`promptVersions.json`）
+
+#### 📊 统计数据
+
+- 90 个文件更改
+- 11,260 行新增代码
+- 494 行删除代码
+- 28 个提交记录
+
+#### 🐛 Bug 修复
+
+- 修复 `init_default_prompts` 中 UPDATE 语句缺少 template_id 参数
+- 修复 `prompt_versions` 中 `row_to_change` 列索引偏移错误
+- 修复 vite/vitest 配置在 ESM 模式下的兼容性问题
+
+---
+
 ## 相关链接
 
 - [Claude Code 官方文档](https://code.anthropic.com/)
