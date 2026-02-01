@@ -6,7 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { Wand2, Copy, Save, Check, Loader2, AlertCircle, Info } from 'lucide-react';
+import { Wand2, Copy, Save, Check, Loader2, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,8 @@ import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { useCurrentSessionFilePath, useCurrentSession } from '@/stores/useCurrentSessionStore';
 import { useCurrentLanguage } from '@/stores/useLanguageStore';
-import type { EnhancedPrompt, EnhancedPromptRequest } from '@/types/generated';
+import { useAlert } from '@/hooks/useAlert';
+import type { Prompt, EnhancedPrompt, EnhancedPromptRequest } from '@/types/generated';
 
 export interface PromptBuilderProps {
   /**
@@ -44,6 +45,7 @@ export function PromptBuilder({
   const [goal, setGoal] = useState(initialGoal);
   const [result, setResult] = useState<EnhancedPrompt | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -53,6 +55,9 @@ export function PromptBuilder({
   const currentSession = useCurrentSession();
   // 获取当前语言（用于提示词优化）
   const currentLanguage = useCurrentLanguage();
+
+  // 使用 Alert Hook
+  const { alert, showAlert } = useAlert();
 
   // 调试日志
   const DEBUG = import.meta.env.DEV;
@@ -123,16 +128,70 @@ export function PromptBuilder({
    * 保存提示词
    */
   const handleSave = useCallback(async () => {
+    // P0-4: 添加保存前的验证
     if (!result) return;
 
+    if (!result.enhancedPrompt || result.enhancedPrompt.trim().length === 0) {
+      showAlert('error', '生成的提示词为空，无法保存');
+      return;
+    }
+
+    if (isSaving) return; // 防止重复点击
+
+    setIsSaving(true);
+
     try {
-      // TODO: 实现保存到数据库的功能
+      // P1-3: 改进时间戳格式和目标词提取
+      const timestamp = new Date().toISOString().split('T')[0].replace(/-/g, '');
+
+      // P1-3: 提取有意义的词，并处理边界情况
+      const words = goal.trim()
+        .replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s]/g, '') // 移除特殊字符
+        .split(/\s+/)
+        .filter(w => w.length > 0) // 过滤空字符串
+        .slice(0, 3);
+
+      const goalWords = words.length > 0
+        ? words.join('_')
+        : 'untitled'; // 默认值
+
+      // P3-2: 限制提示词名称最大长度
+      const maxLength = 50;
+      const baseName = `user_${timestamp}`;
+      const suffix = `_${goalWords}`;
+      const promptName = `${baseName}${suffix}`.slice(0, maxLength);
+
+      const prompt: Prompt = {
+        id: null,
+        name: promptName,
+        content: result.enhancedPrompt,
+        description: `基于用户目标生成: ${goal.slice(0, 50)}${goal.length > 50 ? '...' : ''}`,
+        scenario: 'session_analysis',
+        category: 'general', // P1-5: 使用默认值，避免与数据库约束冲突
+        isDefault: false,
+        isSystem: false,
+        language: currentLanguage,
+        version: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await invoke('cmd_save_prompt', { prompt });
+
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      showAlert('success', '提示词保存成功');
+
+      // P2-6: 使用清理函数替代 setTimeout
+      const timer = setTimeout(() => setSaved(false), 2000);
+      return () => clearTimeout(timer);
     } catch (err) {
       console.error('保存失败:', err);
+      // P0-1: 使用 Alert 替代 alert()
+      showAlert('error', `保存失败: ${err instanceof Error ? err.message : '未知错误'}`);
+    } finally {
+      setIsSaving(false);
     }
-  }, [result]);
+  }, [result, goal, currentLanguage, isSaving, showAlert]);
 
   /**
    * 计算置信度的颜色
@@ -304,14 +363,39 @@ export function PromptBuilder({
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-medium">增强的提示词</Label>
                 <div className="flex items-center gap-2">
+                  {/* Alert 提示 */}
+                  {alert.show && (
+                    <div
+                      className={cn(
+                        'flex items-center gap-1 px-3 py-1 rounded-md text-xs font-medium',
+                        alert.type === 'success' && 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400',
+                        alert.type === 'error' && 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400',
+                        alert.type === 'warning' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400',
+                        alert.type === 'info' && 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'
+                      )}
+                    >
+                      {alert.type === 'success' && <Check className="h-3 w-3" />}
+                      {alert.type === 'error' && <AlertTriangle className="h-3 w-3" />}
+                      {alert.type === 'warning' && <AlertCircle className="h-3 w-3" />}
+                      {alert.type === 'info' && <Info className="h-3 w-3" />}
+                      <span>{alert.message}</span>
+                    </div>
+                  )}
+
                   {/* 保存按钮 */}
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={handleSave}
+                    disabled={isSaving || !result} // P2-7: 添加禁用状态
                     className="h-7 px-2"
                   >
-                    {saved ? (
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        <span className="text-xs">保存中...</span>
+                      </>
+                    ) : saved ? (
                       <>
                         <Check className="h-4 w-4 mr-1 text-green-500" />
                         <span className="text-xs">已保存</span>

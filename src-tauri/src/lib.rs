@@ -4,6 +4,7 @@ pub mod perf;
 mod llm;
 pub mod database;
 mod commands;
+mod commands_prompt_versions;
 mod tokenizer;
 mod monitor;
 mod parser;
@@ -84,11 +85,24 @@ pub fn run() {
             // 确保数据库目录存在
             Ok(())
         })
-        .expect("初始化数据库失败");
+        .map_err(|e| {
+            log::error!("数据库初始化失败: {}", e);
+            #[cfg(debug_assertions)]
+            eprintln!("数据库初始化失败: {:?}", e);
+            std::process::exit(1);
+        })
+        .ok();
 
     // 创建 LLM 客户端管理器
     let llm_manager = LLMClientManager::from_default_db()
-        .expect("创建 LLM 客户端管理器失败");
+        .map_err(|e| {
+            log::error!("创建 LLM 客户端管理器失败: {}", e);
+            #[cfg(debug_assertions)]
+            eprintln!("创建 LLM 客户端管理器失败: {:?}", e);
+            std::process::exit(1);
+        })
+        .ok()
+        .expect("LLM 客户端管理器应该已创建（这行代码不应该执行）");
 
     // 创建启动管理器用于运行时诊断
     let startup_manager = startup::create_startup_manager();
@@ -164,7 +178,38 @@ pub fn run() {
             cmd_toggle_prompt_history_favorite,
             cmd_get_favorite_prompt_history,
             cmd_count_prompt_history,
+            // 提示词版本管理命令（统一接口）
+            commands_prompt_versions::cmd_get_prompts_unified,
+            commands_prompt_versions::cmd_get_prompt_templates,
+            commands_prompt_versions::cmd_get_prompt_template_by_name,
+            commands_prompt_versions::cmd_get_prompt_template_by_scenario,
+            commands_prompt_versions::cmd_get_prompt_versions,
+            commands_prompt_versions::cmd_get_active_prompt_version,
+            commands_prompt_versions::cmd_get_prompt_version_by_number,
+            commands_prompt_versions::cmd_activate_prompt_version,
+            commands_prompt_versions::cmd_rollback_prompt_version_hard,
+            commands_prompt_versions::cmd_save_prompt_version,
+            commands_prompt_versions::cmd_compare_prompt_versions,
+            commands_prompt_versions::cmd_migrate_prompt_components,
+            commands_prompt_versions::cmd_migrate_all_template_components,
+            commands_prompt_versions::cmd_get_prompt_components_by_id,
+            commands_prompt_versions::cmd_get_prompt_parameters,
+            commands_prompt_versions::cmd_get_prompt_version_changes,
+            // 组件化提示词管理命令
+            commands_prompt_versions::cmd_get_prompt_components,
+            commands_prompt_versions::cmd_update_prompt_components,
+            commands_prompt_versions::cmd_check_config_updated,
+            commands_prompt_versions::cmd_cleanup_legacy_templates,
+            commands_prompt_versions::cmd_delete_prompt_template_by_name,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .map_err(|e| {
+            log::error!("Tauri 运行时错误: {}", e);
+            #[cfg(debug_assertions)]
+            eprintln!("Tauri 运行时错误: {:?}", e);
+            std::process::exit(1);
+            #[allow(unreachable_code)]
+            e
+        })
+        .ok();
 }

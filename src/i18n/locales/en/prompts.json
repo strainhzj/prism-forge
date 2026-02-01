@@ -1,0 +1,67 @@
+{
+  "title": "Prompt Management",
+  "description": "Manage system and custom prompts",
+  "backToHome": "Back to Home",
+  "loading": "Loading...",
+  "errorLoading": "Failed to load",
+  "newPrompt": "New Prompt",
+  "editPrompt": "Edit Prompt",
+  "save": "Save",
+  "saving": "Saving...",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "edit": "Edit",
+  "resetToDefault": "Reset to Default",
+  "confirmDelete": "Delete Prompt",
+  "confirmDeleteDescription": "Are you sure you want to delete this prompt? This action cannot be undone.",
+  "confirmReset": "Reset to Default",
+  "confirmResetDescription": "Are you sure you want to reset to default? Current changes will be lost.",
+  "noPromptsFound": "No prompts found",
+  "searchPlaceholder": "Search prompt name or description...",
+  "default": "Default",
+  "system": "System",
+  "scenario": "Scenario",
+  "version": "Version",
+  "lastUpdated": "Last updated",
+  "fields": {
+    "name": "Prompt Name",
+    "content": "Prompt Content",
+    "description": "Description",
+    "scenario": "Scenario",
+    "category": "Category",
+    "language": "Language"
+  },
+  "placeholders": {
+    "name": "e.g., my_custom_prompt",
+    "content": "Enter prompt content...",
+    "description": "Briefly describe the purpose of this prompt"
+  },
+  "errors": {
+    "nameRequired": "Prompt name is required",
+    "contentRequired": "Prompt content is required",
+    "scenarioRequired": "Please select a scenario",
+    "languageRequired": "Please select a language"
+  },
+  "filters": {
+    "allScenarios": "All Scenarios",
+    "allLanguages": "All Languages",
+    "zh": "中文",
+    "en": "English"
+  },
+  "scenarios": {
+    "session_analysis": "Session Analysis"
+  },
+  "success": {
+    "created": "Prompt created",
+    "updated": "Prompt updated",
+    "deleted": "Prompt deleted",
+    "reset": "Prompt reset to default"
+  },
+  "error": {
+    "createFailed": "Failed to create prompt",
+    "updateFailed": "Failed to update prompt",
+    "deleteFailed": "Failed to delete prompt",
+    "resetFailed": "Failed to reset prompt",
+    "loadFailed": "Failed to load prompt list"
+  }
+}

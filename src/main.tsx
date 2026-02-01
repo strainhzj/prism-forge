@@ -23,6 +23,9 @@ const PromptLab = lazy(() =>
 const DiagnosticPage = lazy(() =>
   import("./pages/DiagnosticPage").then(m => ({ default: m.DiagnosticPage }))
 );
+const PromptsPage = lazy(() =>
+  import("./pages/PromptsPage").then(m => ({ default: m.default }))
+);
 
 // 加载中组件
 const RouteLoadingFallback = () => (
@@ -76,6 +79,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
                 <Route path="/sessions" element={<SessionsPage />} />
                 <Route path="/prompt-lab" element={<PromptLab />} />
                 <Route path="/diagnostic" element={<DiagnosticPage />} />
+                <Route path="/prompts" element={<PromptsPage />} />
               </Routes>
             </Suspense>
           </RouteDebugger>

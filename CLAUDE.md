@@ -10,7 +10,72 @@ PrismForge 是一个基于 Tauri 2 + React 18 的桌面应用程序，核心功�
 
  **在使用 Claude Code 开发本项目时，必须遵守以下约束：**
 
-### 1. 交互模式（必读）
+### 1. 代码简洁性原则
+
+✅ **追求代码简洁、模块化、可复用，避免过度复杂**
+
+**核心原则**：代码应该足够简洁、模块化，可以直接复用，无须关心内部过程，并非越多越好。
+
+**实现标准**：
+
+1. **简洁性优先**：用最少的代码实现功能，避免不必要的复杂性
+2. **模块化设计**：每个模块只做一件事，职责单一明确
+3. **封装内部实现**：使用者只需知道"做什么"，无需了解"怎么做"
+4. **可复用性第一**：通用功能提取为公共模块，避免重复代码
+5. **拒绝过度工程**：不预支未来需求，不添加当前不需要的功能
+
+**判断标准**：
+
+- ✅ 代码行数减少 = 更好（在不损失可读性的前提下）
+- ✅ 一个函数能完成 = 绝不拆成两个
+- ✅ 现有组件能满足 = 绝不创建新组件
+- ❌ 为了"可能将来需要"而添加功能 = 错误
+- ❌ 代码"看起来很专业"但实际没用 = 错误
+
+**示例**：
+
+**✅ 正确示例：**
+```typescript
+// 简洁：直接使用
+const isValid = validateEmail(email);
+
+// 复用：现有组件
+<Button onClick={handleSubmit}>提交</Button>
+```
+
+```rust
+// 简洁：直接返回
+pub fn get_config(&self) -> Result<Config> {
+    self.config.load()
+}
+```
+
+**❌ 错误示例：**
+```typescript
+// 过度封装：不必要的抽象层
+class EmailValidatorAdapter {
+  constructor(private validator: EmailValidator) {}
+  validate(email: string) { return this.validator.validate(email); }
+}
+
+// 过度工程：为"将来可能需要"添加功能
+interface Props {
+  onSubmit: () => void;
+  onCancel?: () => void;  // ❌ 当前未使用
+}
+```
+
+```rust
+// 过度拆分：简单操作多层包装
+pub fn get_type(&self) -> Result<ProviderType> {
+    let provider = self.load_provider()?;
+    Ok(provider.get_type())
+}
+```
+
+**遵循原则**：KISS（保持简单）、DRY（不重复）、YAGNI（不做不需要的事）
+
+### 2. 交互模式（必读）
 
 🔴 **开始任务前，必须先提出实现假设并获得确认**
 
@@ -33,7 +98,7 @@ PrismForge 是一个基于 Tauri 2 + React 18 的桌面应用程序，核心功�
        会修改 src/stores/useSessionStore.ts，这样设计符合吗？"
 ```
 
-### 2. 代码复用优先
+### 3. 代码复用优先
 
 ✅ **优先复用现有代码和类，仅在必要时创建新的**
 
@@ -53,7 +118,7 @@ PrismForge 是一个基于 Tauri 2 + React 18 的桌面应用程序，核心功�
 ❌ 避免：创建功能重复的工具函数
 ```
 
-### 3. 问题澄清机制
+### 4. 问题澄清机制
 
 ❓ **遇到不清楚的细节时，主动提问获取补充信息**
 
@@ -76,7 +141,7 @@ PrismForge 是一个基于 Tauri 2 + React 18 的桌面应用程序，核心功�
        是否需要我实现这个方案？"
 ```
 
-### 4. 国际化与主题约束
+### 5. 国际化与主题约束
 
 🌍 **所有用户可见文本必须使用 `useTranslation` hook**
 
@@ -93,37 +158,53 @@ t('form.providerType')
 - 翻译键规范：`namespace.category.key` （如 `settings.form.providerType`）
 - 动态内容：通过 `PROVIDER_TYPE_KEYS` 映射 + `useMemo` 缓存
 
-🎨 **组件必须适配暗色/亮色主题（使用 Tailwind `dark:` 前缀）**
+🎨 **组件必须适配暗色/亮色主题（使用 CSS 变量）**
 
 ```tsx
-// ✅ 正确
-<div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+// ✅ 正确：使用 CSS 变量
+<div style={{ backgroundColor: 'var(--color-bg-card)', color: 'var(--color-text-primary)' }}>
 
-// ❌ 错误
-<div className="bg-white text-gray-900">
+// ❌ 错误：硬编码 Tailwind 颜色类
+<div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+
+// ❌ 错误：硬编码内联样式
+<div style={{ backgroundColor: '#FFFFFF' }}>
 ```
 
-**常用颜色映射：**
-| 元素           | 亮色主题                                  | 暗色主题                                            |
-| -------------- | ----------------------------------------- | --------------------------------------------------- |
-| **背景**       | `bg-white`                                | `dark:bg-gray-900`                                  |
-| **卡片背景**   | `bg-gray-50`                              | `dark:bg-gray-800`                                  |
-| **边框**       | `border-gray-200`                         | `dark:border-gray-700`                              |
-| **文本主色**   | `text-gray-900`                           | `dark:text-gray-100`                                |
-| **文本次要**   | `text-gray-600`                           | `dark:text-gray-400`                                |
-| **文本禁用**   | `text-gray-400`                           | `dark:text-gray-600`                                |
-| **主色调**     | `bg-orange-500`                           | `dark:bg-orange-600`                                |
-| **主色调悬停** | `hover:bg-orange-600`                     | `dark:hover:bg-orange-700`                          |
-| **输入框**     | `bg-white border-gray-300`                | `dark:bg-gray-800 dark:border-gray-600`             |
-| **输入框文本** | `text-gray-900 placeholder:text-gray-400` | `dark:text-gray-100 dark:placeholder:text-gray-500` |
-| **按钮主色**   | `bg-primary`                              | `dark:bg-primary-dark`                              |
-| **按钮次要**   | `bg-gray-200 text-gray-900`               | `dark:bg-gray-700 dark:text-gray-100`               |
-| **危险操作**   | `text-red-600 hover:text-red-700`         | `dark:text-red-400 dark:hover:text-red-300`         |
-| **成功提示**   | `text-green-600 bg-green-50`              | `dark:text-green-400 dark:bg-green-900/20`          |
-| **警告提示**   | `text-yellow-600 bg-yellow-50`            | `dark:text-yellow-400 dark:bg-yellow-900/20`        |
-| **错误提示**   | `text-red-600 bg-red-50`                  | `dark:text-red-400 dark:bg-red-900/20`              |
+**主题色 CSS 变量定义**（`src/index.css`）：
 
-### 5.提交git前需要先与我确认
+| 用途           | 浅色模式变量值                        | 暗色模式变量值                        |
+| -------------- | ------------------------------------- | ------------------------------------- |
+| **背景**       | `--color-bg-primary: #F8F9FA`         | `--color-bg-primary: #121212`         |
+| **卡片背景**   | `--color-bg-card: #FFFFFF`            | `--color-bg-card: #1E1E1E`            |
+| **主强调色**   | `--color-accent-warm: #F59E0B`        | `--color-accent-warm: #FF6B6B`        |
+| **次强调色**   | `--color-accent-blue: #2563EB`        | `--color-accent-blue: #4A9EFF`        |
+| **绿色主题**   | `--color-accent-green: #4CAF50`       | `--color-accent-green: #66BB6A`       |
+| **文本主色**   | `--color-text-primary: #1F2937`       | `--color-text-primary: #E0E0E0`       |
+| **文本次要**   | `--color-text-secondary: #6B7280`     | `--color-text-secondary: #9CA3AF`     |
+| **边框色**     | `--color-border-light: #E5E7EB`       | `--color-border-light: #333333`       |
+
+**使用示例**：
+```tsx
+// 按钮（组件已内置 CSS 变量）
+<Button variant="primary">点击</Button>
+
+// 卡片
+<div style={{
+  backgroundColor: 'var(--color-bg-card)',
+  borderColor: 'var(--color-border-light)'
+}}>
+
+// 文本
+<p style={{ color: 'var(--color-text-primary)' }}>内容</p>
+```
+
+**注意**：
+- 所有 UI 组件（Button、Dialog、Input 等）已内置 CSS 变量，直接使用即可
+- 自定义组件必须使用 CSS 变量，禁止硬编码颜色值
+- 主题切换通过 `<html>` 标签的 `class="dark"` 自动生效
+
+### 6.提交git前需要先与我确认
 
 **总结**：
 
@@ -131,7 +212,7 @@ t('form.providerType')
 - 🔍 **搜索** → ♻️ **复用优先** → 🆕 **必要时创建**
 - ❓ **发现疑问** → 💬 **主动提问** → 📊 **提供选项** → 👍 **等待决策**
 
-### **6.Rust 全局单例模式**
+### **7.Rust 全局单例模式**
 
 ```rust
 // ❌ 错误：创建新实例
@@ -142,7 +223,7 @@ let manager = get_config_manager()
     .ok_or_else(|| CommandError::new("未初始化"))?;
 ```
 
-### 7.前端敏感日志防护
+### 8.前端敏感日志防护
 
 ```typescript
 // ❌ 危险：总是输出
@@ -154,7 +235,7 @@ if (import.meta.env.DEV) {
 }
 ```
 
-### 8. ts-rs 类型生成
+### 9. ts-rs 类型生成
 
 ```rust
 #[derive(TS)]
@@ -170,7 +251,7 @@ pub struct MyStruct {
 - 入口文件：`src-tauri/src/build_types.rs`
 - ⚠️ 禁止手动编辑生成的 `.ts` 文件
 
-### 9.避免敏感信息泄露
+### 10.避免敏感信息泄露
 
 **前端防护：**
 - 使用 `import.meta.env.DEV` 判断开发环境
@@ -187,7 +268,7 @@ pub struct MyStruct {
 - 返回数据使用掩码处理（如 `api_key_mask`）
 - 敏感字段使用 `secrecy::SecretString` 包装
 
-### 10. String → Path 转换错误
+### 11. String → Path 转换错误
 
 ```rust
 // ❌ 错误：String 没有 file_name() 方法
@@ -204,9 +285,9 @@ let path = if let Some(ref path_str) = request.current_session_file_path {
 };
 ```
 
-### 11. 常见陷阱
+### 12. 常见陷阱
 
-#### 11.1 非空断言滥用
+#### 12.1 非空断言滥用
 
 ```typescript
 // ❌ 危险
@@ -216,7 +297,7 @@ onClick={(e) => handleToggleFavorite(history.id!, e)}
 onClick={(e) => { if (!history.id) return; handleToggleFavorite(history.id, e); }}
 ```
 
-#### 11.2 正则捕获组索引变化
+#### 12.2 正则捕获组索引变化
 
 ```typescript
 // ✅ 使用命名捕获组
@@ -224,7 +305,7 @@ const regex = /###\s*\*\*(?<lang>目标偏离程度\|Goal Divergence)\*\*\s*\n(?
 const content = match.groups?.content ?? '';
 ```
 
-#### 11.3 测试文件模块未声明
+#### 12.3 测试文件模块未声明
 
 ```rust
 // ❌ 错误：独立测试文件
@@ -235,7 +316,7 @@ const content = match.groups?.content ?? '';
 mod integration_tests { }
 ```
 
-#### 11.4 数据库竞态条件
+#### 12.4 数据库竞态条件
 
 ```rust
 // ❌ 错误：两次调用
@@ -249,7 +330,7 @@ let id = self.with_conn_inner(|conn| {
 })?;
 ```
 
-#### 11.5 国际化逻辑错误
+#### 12.5 国际化逻辑错误
 
 ```rust
 // ❌ 错误：非英非中显示中文
@@ -259,7 +340,7 @@ if language == "en" { } else { "中文" }
 if language == "zh" { "中文" } else { "English" }
 ```
 
-#### 11.6 条件编译误用
+#### 12.6 条件编译误用
 
 ```rust
 // ❌ 错误：cfg! 是运行时判断
@@ -269,6 +350,77 @@ if cfg!(debug_assertions) { eprintln!("..."); }
 #[cfg(debug_assertions)]
 { eprintln!("..."); }
 ```
+
+#### 12.7 避免快速交付思维：初期过分追求"功能能跑"，忽视了用户体验一致性
+
+1. **UI 组件统一使用**：必须使用 `src/components/ui/` 中的 UI 组件
+   - 按钮统一使用 `<Button>` 组件（禁止直接写 `<button className="...">` 或硬编码颜色）
+   - 对话框统一使用 `<Dialog>` 或 `<AlertDialog>`（禁止使用原生 confirm/alert）
+   - 表单输入统一使用 `<Input>`、`<Textarea>`、`<Select>` 等
+3. **交互模式统一**：
+   - 删除操作必须使用 `<AlertDialog>` 确认
+   - 表单提交按钮必须在提交时显示 loading 状态
+   - 所有用户可见文本必须使用 `useTranslation` hook（见条款 4）
+
+**注意**：项目采用 CSS 变量主题系统（`src/index.css`），所有主题色通过 `:root` 和 `:root.dark` 定义，自动适配深浅色模式。
+
+#### 12.8 避免缺乏组件意识：未意识到项目中已有实现功能的组件
+
+1. **实现前必须查阅组件库文档**：`docs/COMPONENTS.md`（记录所有业务组件）
+2. **优先使用现有组件**：
+   - UI 基础组件：`src/components/ui/`（Button、Dialog、Input、AlertDialog 等）
+   - 业务组件：`src/components/{settings,project,session,prompt}/`（见 COMPONENTS.md）
+3. **复用判断标准**：
+   - 如果功能 >50% 相似，优先考虑扩展现有组件
+   - 如果需要新组件，先与项目负责人确认
+
+#### 12.9 避免设计债务累积：临时解决方案未及时重构，演变成技术债务
+
+1. **禁止临时方案**：除非项目负责人明确允许，否则不允许使用临时方案
+2. **实现前检查清单**（必须全部满足才能开始编码）：
+   - [ ] 检查是否与现有功能集成（见 12.8 组件复用）
+   - [ ] 确认 UI/UX 一致性（见 12.7 用户体验规范）
+   - [ ] 验证代码风格符合项目规范
+   - [ ] 考虑错误处理和边界情况
+   - [ ] 确认安全性检查（避免 XSS、注入等漏洞）
+   - [ ] 确认国际化支持（`useTranslation`）
+   - [ ] 确认主题适配（使用 CSS 变量，不硬编码颜色）
+
+#### 12.10 提高代码复用意识
+
+实现功能前，优先检查是否存在已实现相同功能的方法
+
+### 13. 防御性编程原则
+
+  - **永不信任外部输入**：包括数据库、API、用户输入
+  - **提供默认值**：当数据不符合预期时，使用安全的降级策略
+  - **日志记录**：在开发环境输出验证失败的警告
+  - **永不使用 `unwrap()`**：在生产代码中，所有 `unwrap()` 应替换为 `?` 或 `map_err`
+  - **慎用 `expect()`**：仅在确实不可能失败的情况下使用（如硬编码的常量）
+  - **移除手动 `unsafe impl`**：让编译器自动推导 Send/Sync
+  - **使用事务作用域**：确保数据库操作原子性
+  - **类型安全转换**：避免裸类型比较和断言
+  - **超时和重试**：对可能阻塞的操作添加超时机制
+   - **使用显式类型注解**: rusqlite 数据库行获取安全
+
+```rust
+// ❌ 错误：unwrap_or 在类型不匹配时会 panic
+let id: i64 = row.get(0).unwrap_or(0);
+
+// ✅ 正确：使用显式类型注解 + unwrap_or_default
+let id: i64 = row.get(0).unwrap_or_default();
+
+// ✅ 最佳：使用 ? 传播错误
+let id: i64 = row.get(0)?;
+```
+
+### 14. 避免联合类型理解偏差
+
+  - 前后端类型映射时，需要考虑联合类型的处理
+  - 使用 as const 确保字面量类型推断
+  - 处理 bigint 和 number 的类型差异（Rust i64 → TS bigint）
+
+
 
 ## 技术栈
 

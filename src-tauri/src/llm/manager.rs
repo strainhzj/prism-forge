@@ -132,13 +132,13 @@ impl LLMClientManager {
                     secrecy::SecretString::new(selected_key.into()),
                     provider.base_url.clone(),
                     api_key_ref.clone(),
-                );
+                )?;
 
                 Ok(Box::new(client))
             }
             ApiProviderType::Ollama => {
                 // Ollama 不需要 API Key
-                let client = OllamaProvider::new(Some(provider.base_url.clone()));
+                let client = OllamaProvider::new(Some(provider.base_url.clone()))?;
                 Ok(Box::new(client))
             }
             ApiProviderType::XAI => {
@@ -163,7 +163,7 @@ impl LLMClientManager {
                     secrecy::SecretString::new(selected_key.into()),
                     provider.base_url.clone(),
                     api_key_ref.clone(),
-                );
+                )?;
 
                 Ok(Box::new(client))
             }
@@ -204,7 +204,7 @@ impl LLMClientManager {
                         location,
                         Some(provider.base_url.clone()),
                         access_token,
-                    );
+                    )?;
 
                     Ok(Box::new(client))
                 } else {
@@ -229,7 +229,7 @@ impl LLMClientManager {
                         secrecy::SecretString::new(selected_key.into()),
                         provider.base_url.clone(),
                         api_key_ref.clone(),
-                    );
+                    )?;
 
                     Ok(Box::new(client))
                 }
@@ -256,7 +256,7 @@ impl LLMClientManager {
                     secrecy::SecretString::new(selected_key.into()),
                     provider.base_url.clone(),
                     api_key_ref.clone(),
-                );
+                )?;
 
                 Ok(Box::new(client))
             }

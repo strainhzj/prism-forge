@@ -4,6 +4,7 @@
     "sessions": "会话历史",
     "settings": "API 设置",
     "promptLab": "提示词生成记录",
+    "prompts": "提示词管理",
     "diagnostic": "诊断"
   }
 }

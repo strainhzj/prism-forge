@@ -30,19 +30,19 @@ impl OllamaProvider {
     ///
     /// # 参数
     /// - `base_url`: Ollama 服务地址（默认 http://127.0.0.1:11434）
-    pub fn new(base_url: Option<String>) -> Self {
+    pub fn new(base_url: Option<String>) -> Result<Self> {
         let client = Client::builder()
             .build()
-            .expect("创建 HTTP 客户端失败");
+            .context("创建 HTTP 客户端失败")?;
 
-        Self {
+        Ok(Self {
             client,
             base_url: base_url.unwrap_or_else(|| OLLAMA_DEFAULT_URL.to_string()),
-        }
+        })
     }
 
     /// 获取默认地址的提供商
-    pub fn default() -> Self {
+    pub fn default() -> Result<Self> {
         Self::new(None)
     }
 
@@ -327,7 +327,7 @@ mod tests {
 
     #[test]
     fn test_build_request() {
-        let provider = OllamaProvider::default();
+        let provider = OllamaProvider::default().unwrap();
 
         let messages = vec![
             Message::system("You are helpful"),
@@ -345,7 +345,7 @@ mod tests {
 
     #[test]
     fn test_default_url() {
-        let provider = OllamaProvider::default();
+        let provider = OllamaProvider::default().unwrap();
         assert_eq!(provider.base_url, OLLAMA_DEFAULT_URL);
     }
 }

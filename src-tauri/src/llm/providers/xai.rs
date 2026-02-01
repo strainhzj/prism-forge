@@ -34,31 +34,31 @@ impl XAIProvider {
     /// # 参数
     /// - `api_key`: X AI API Key
     /// - `base_url`: API 基础 URL
-    pub fn new(api_key: SecretString, base_url: String) -> Self {
+    pub fn new(api_key: SecretString, base_url: String) -> Result<Self> {
         let client = Client::builder()
             .build()
-            .expect("创建 HTTP 客户端失败");
+            .context("创建 HTTP 客户端失败")?;
 
-        Self {
+        Ok(Self {
             client,
             api_key,
             base_url,
             _api_key_ref: None,
-        }
+        })
     }
 
     /// 使用 API Key 引用创建提供商
-    pub fn with_ref(api_key: SecretString, base_url: String, api_key_ref: String) -> Self {
+    pub fn with_ref(api_key: SecretString, base_url: String, api_key_ref: String) -> Result<Self> {
         let client = Client::builder()
             .build()
-            .expect("创建 HTTP 客户端失败");
+            .context("创建 HTTP 客户端失败")?;
 
-        Self {
+        Ok(Self {
             client,
             api_key,
             base_url,
             _api_key_ref: Some(api_key_ref),
-        }
+        })
     }
 
 
@@ -337,7 +337,7 @@ mod tests {
         let provider = XAIProvider::new(
             SecretString::new("test-key".to_string().into()),
             "https://api.x.ai/v1".to_string(),
-        );
+        ).unwrap();
 
         let messages = vec![
             Message::system("You are helpful"),
@@ -356,7 +356,7 @@ mod tests {
         let provider = XAIProvider::new(
             SecretString::new("test-key".to_string().into()),
             "https://api.x.ai/v1".to_string(),
-        );
+        ).unwrap();
 
         let messages = vec![Message::user("test")];
         let params = ModelParams::new("grok-beta")
@@ -378,7 +378,7 @@ mod tests {
         let provider = XAIProvider::new(
             SecretString::new("xai-test-key".to_string().into()),
             "https://api.x.ai/v1".to_string(),
-        );
+        ).unwrap();
 
         let messages = vec![Message::user("Hello")];
         let request = provider.build_request(messages, ModelParams::new("grok-beta"));
@@ -456,7 +456,8 @@ mod property_tests {
             let provider = XAIProvider::new(
                 SecretString::new(api_key.clone().into()),
                 "https://api.x.ai/v1".to_string(),
-            );
+            )
+            .expect("创建 XAIProvider 失败");
 
             // Verify the API key is stored correctly
             prop_assert_eq!(provider.api_key.expose_secret(), &api_key);
@@ -474,7 +475,8 @@ mod property_tests {
             let provider = XAIProvider::new(
                 SecretString::new("test-key".to_string().into()),
                 "https://api.x.ai/v1".to_string(),
-            );
+            )
+            .expect("创建 XAIProvider 失败");
 
             let params = ModelParams::new(model.clone())
                 .with_temperature(temperature);
@@ -538,7 +540,8 @@ mod property_tests {
             let provider = XAIProvider::new(
                 SecretString::new("test-key".to_string().into()),
                 "https://api.x.ai/v1".to_string(),
-            );
+            )
+            .expect("创建 XAIProvider 失败");
 
             let params = ModelParams::new(model.clone())
                 .with_temperature(temperature);
@@ -567,7 +570,8 @@ mod property_tests {
             let provider = XAIProvider::new(
                 SecretString::new("test-key".to_string().into()),
                 "https://api.x.ai/v1".to_string(),
-            );
+            )
+            .expect("创建 XAIProvider 失败");
 
             let messages = vec![Message::user("test")];
             let params = ModelParams::new(model)

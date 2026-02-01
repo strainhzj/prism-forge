@@ -35,6 +35,7 @@ pub struct ParsedEvent {
 pub struct OptimizeRequest {
     pub session_file: String,
     pub goal: String,
+    pub language: String,
 }
 
 /// 优化结果
@@ -144,24 +145,14 @@ impl PromptOptimizer {
             format!("[{}] {}:\n{}", e.time, e.role.to_uppercase(), e.content)
         }).collect::<Vec<String>>().join("\n--------------------\n");
 
-        // 3. 构建系统提示词
-        let system_prompt = r#"
-你是一个 Claude Code 结对编程助手。请分析下方的会话日志（包含用户指令、Claude 的操作、以及工具返回的文件内容/报错）。
+        // 3. 构建系统提示词（从数据库加载）
+        let system_prompt = Self::load_system_prompt(&request.language)
+            .unwrap_or_else(|e| {
+                #[cfg(debug_assertions)]
+                eprintln!("⚠️  加载系统提示词失败: {}，使用 fallback 提示词", e);
 
-任务：
-1. **判断焦点 (Focus Check)**：Claude 是否陷入了死循环？是否在反复读取无关文件？是否无视了报错？
-2. **生成提示词 (Prompt Generation)**：为用户写一段可以直接发送给 Claude 的**中文指令**。
-   - 如果 Claude 走偏了：写一段严厉的纠正指令。
-   - 如果 Claude 做得对：写一段推进下一步的指令，并引用刚才读取到的文件上下文（例如："基于刚才读取的 main.py..."）。
-
-输出格式：
----
-【状态】: [正常 / 迷失 / 报错循环]
-【分析】: (简短分析当前情况)
-【建议提示词】:
-(你的 Prompt 内容)
----
-"#;
+                Self::get_fallback_prompt(&request.language)
+            });
 
         let full_text = format!(
             "{}\n\n== 会话日志 ==\n{}\n\n== 用户当前目标 ==\n{}",
@@ -406,6 +397,113 @@ impl PromptOptimizer {
             status,
             analysis,
             suggested_prompt,
+        }
+    }
+
+    /// 从数据库加载系统提示词
+    ///
+    /// 如果数据库中没有，使用硬编码的 fallback 提示词
+    fn load_system_prompt(language: &str) -> Result<String> {
+        use crate::database::prompt_versions::PromptVersionRepository;
+
+        // 从新的版本管理系统读取提示词
+        let repo = PromptVersionRepository::from_default_db()
+            .map_err(|e| anyhow::anyhow!("创建版本仓库失败: {}", e))?;
+
+        // 查询指定语言的活跃版本
+        let templates = repo.list_templates()
+            .map_err(|e| anyhow::anyhow!("查询模板失败: {}", e))?;
+
+        for template in templates {
+            if template.scenario == "session_analysis" {
+                // 防御性：安全获取模板 ID
+                let template_id = match template.id {
+                    Some(id) if id > 0 => id,
+                    _ => {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[PromptOptimizer] 警告: 模板 '{}' ID 无效或为 0，跳过", template.name);
+                        continue;
+                    }
+                };
+
+                // 获取该模板的所有版本
+                let versions = match repo.list_versions(template_id) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[PromptOptimizer] 警告: 查询模板 {} 版本失败: {}，跳过", template_id, e);
+                        continue;
+                    }
+                };
+
+                // 查找匹配语言的活跃版本
+                for version in versions {
+                    if !version.is_active {
+                        continue;
+                    }
+
+                    // 防御性：使用 JSON 解析而非字符串包含判断
+                    if let Some(metadata) = &version.metadata {
+                        // 尝试解析 metadata JSON
+                        if let Ok(metadata_json) = serde_json::from_str::<serde_json::Value>(metadata) {
+                            if let Some(lang_value) = metadata_json.get("language").and_then(|v| v.as_str()) {
+                                if lang_value == language {
+                                    return Ok(version.content);
+                                }
+                            }
+                        } else {
+                            #[cfg(debug_assertions)]
+                            eprintln!("[PromptOptimizer] 警告: 版本 {} metadata JSON 解析失败: {}",
+                                     version.id.unwrap_or(0), metadata);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback 到硬编码提示词
+        #[cfg(debug_assertions)]
+        eprintln!("⚠️  未找到默认提示词 session_analysis_{}，使用 fallback 提示词", language);
+
+        Ok(Self::get_fallback_prompt(language))
+    }
+
+    /// 获取硬编码的 fallback 提示词
+    fn get_fallback_prompt(language: &str) -> String {
+        if language == "en" {
+            r#"You are a Claude Code pair programming assistant. Please analyze the conversation log below (including user instructions, Claude's operations, and tool-returned file contents/errors).
+
+Tasks:
+1. **Focus Check**: Has Claude fallen into an infinite loop? Is it repeatedly reading irrelevant files? Is it ignoring errors?
+2. **Prompt Generation**: Write a **Chinese instruction** that the user can send directly to Claude.
+   - If Claude is off track: Write a stern corrective instruction.
+   - If Claude is doing well: Write an instruction to advance to the next step, referencing the file context just read (e.g., "Based on main.py just read...").
+
+Output Format:
+---
+[Status]: [Normal / Lost / Error Loop]
+[Analysis]: (Brief analysis of current situation)
+[Suggested Prompt]:
+(Your prompt content)
+---
+"#.to_string()
+        } else {
+            r#"你是一个 Claude Code 结对编程助手。请分析下方的会话日志（包含用户指令、Claude 的操作、以及工具返回的文件内容/报错）。
+
+任务：
+1. **判断焦点 (Focus Check)**：Claude 是否陷入了死循环？是否在反复读取无关文件？是否无视了报错？
+2. **生成提示词 (Prompt Generation)**：为用户写一段可以直接发送给 Claude 的**中文指令**。
+   - 如果 Claude 走偏了：写一段严厉的纠正指令。
+   - 如果 Claude 做得对：写一段推进下一步的指令，并引用刚才读取到的文件上下文（例如："基于刚才读取的 main.py..."）。
+
+输出格式：
+---
+【状态】: [正常 / 迷失 / 报错循环]
+【分析】: (简短分析当前情况)
+【建议提示词】:
+(你的 Prompt 内容)
+---
+"#.to_string()
         }
     }
 }

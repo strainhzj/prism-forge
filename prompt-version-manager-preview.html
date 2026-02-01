@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PrismForge - Prompt Version Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Theme Variables - Using project's CSS variable system */
+    :root {
+      --color-bg-primary: #F8F9FA;
+      --color-bg-card: #FFFFFF;
+      --color-accent-warm: #F59E0B;
+      --color-accent-blue: #2563EB;
+      --color-accent-green: #4CAF50;
+      --color-accent-red: #EF4444;
+      --color-text-primary: #1F2937;
+      --color-text-secondary: #6B7280;
+      --color-border-light: #E5E7EB;
+    }
+
+    :root.dark {
+      --color-bg-primary: #121212;
+      --color-bg-card: #1E1E1E;
+      --color-accent-warm: #FF6B6B;
+      --color-accent-blue: #4A9EFF;
+      --color-accent-green: #66BB6A;
+      --color-accent-red: #F87171;
+      --color-text-primary: #E0E0E0;
+      --color-text-secondary: #9CA3AF;
+      --color-border-light: #333333;
+    }
+
+    * {
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--color-bg-primary);
+      color: var(--color-text-primary);
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    .card {
+      background-color: var(--color-bg-card);
+      border: 1px solid var(--color-border-light);
+      transition: all 0.2s ease;
+    }
+
+    .text-primary {
+      color: var(--color-text-primary);
+    }
+
+    .text-secondary {
+      color: var(--color-text-secondary);
+    }
+
+    .border-theme {
+      border-color: var(--color-border-light);
+    }
+
+    /* Diff Highlighting */
+    .diff-added {
+      background-color: rgba(76, 175, 80, 0.15);
+      border-left: 3px solid var(--color-accent-green);
+    }
+
+    .diff-removed {
+      background-color: rgba(239, 68, 68, 0.15);
+      border-left: 3px solid var(--color-accent-red);
+      text-decoration: line-through;
+      opacity: 0.7;
+    }
+
+    .diff-modified {
+      background-color: rgba(245, 158, 11, 0.15);
+      border-left: 3px solid var(--color-accent-warm);
+    }
+
+    .diff-unchanged {
+      opacity: 0.6;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--color-bg-primary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--color-border-light);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--color-text-secondary);
+    }
+
+    /* Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade-in {
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    /* Custom Button Styles */
+    .btn-primary {
+      background-color: var(--color-accent-blue);
+      color: white;
+      transition: all 0.2s;
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    .btn-danger {
+      background-color: var(--color-accent-red);
+      color: white;
+      transition: all 0.2s;
+    }
+
+    .btn-danger:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    .btn-ghost {
+      background-color: transparent;
+      color: var(--color-text-primary);
+      border: 1px solid var(--color-border-light);
+      transition: all 0.2s;
+    }
+
+    .btn-ghost:hover {
+      background-color: var(--color-bg-primary);
+    }
+
+    /* Active Version Badge */
+    .active-badge {
+      background-color: var(--color-accent-green);
+      color: white;
+    }
+
+    /* Code Block */
+    .code-block {
+      background-color: var(--color-bg-primary);
+      border: 1px solid var(--color-border-light);
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    /* Tab Active State */
+    .tab-active {
+      border-bottom: 2px solid var(--color-accent-blue);
+      color: var(--color-accent-blue);
+    }
+
+    /* Table Styles */
+    .table-header {
+      background-color: var(--color-bg-primary);
+      border-bottom: 1px solid var(--color-border-light);
+    }
+
+    .table-row {
+      border-bottom: 1px solid var(--color-border-light);
+      transition: background-color 0.15s;
+    }
+
+    .table-row:hover {
+      background-color: var(--color-bg-primary);
+    }
+
+    .table-row-active {
+      background-color: rgba(74, 158, 255, 0.08);
+      border-left: 3px solid var(--color-accent-blue);
+    }
+
+    /* Dialog Overlay */
+    .dialog-overlay {
+      background-color: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6">
+  <div id="app" class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <header class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-semibold text-primary">提示词版本管理</h1>
+        <p class="text-secondary text-sm mt-1">Optimizer Prompt Template - 版本历史与对比</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <!-- Theme Toggle -->
+        <button onclick="toggleTheme()" class="btn-ghost px-3 py-2 rounded-lg cursor-pointer text-sm flex items-center gap-2">
+          <svg id="theme-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+          </svg>
+          <span id="theme-text">暗色</span>
+        </button>
+        <!-- Language Toggle -->
+        <button onclick="toggleLanguage()" class="btn-ghost px-3 py-2 rounded-lg cursor-pointer text-sm">
+          <span id="lang-text">EN</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Left Panel: Version List -->
+      <div class="lg:col-span-1">
+        <div class="card rounded-xl p-4">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-semibold text-primary" data-i18n="versionList">版本列表</h2>
+            <span class="text-xs text-secondary" id="version-count">6 个版本</span>
+          </div>
+
+          <!-- Version Table -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="table-header">
+                  <th class="text-left py-2 px-3 font-medium text-secondary">版本</th>
+                  <th class="text-left py-2 px-3 font-medium text-secondary">状态</th>
+                  <th class="text-left py-2 px-3 font-medium text-secondary">时间</th>
+                  <th class="text-right py-2 px-3 font-medium text-secondary">操作</th>
+                </tr>
+              </thead>
+              <tbody id="version-table-body">
+                <!-- Dynamic Content -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Version Summary -->
+          <div class="mt-4 pt-4 border-t border-theme">
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-secondary" data-i18n="activeVersion">当前激活版本</span>
+              <span class="font-medium text-primary" id="active-version-display">v6</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Panel: Version Detail / Compare -->
+      <div class="lg:col-span-2">
+        <!-- Tabs -->
+        <div class="flex gap-1 mb-4 border-b border-theme">
+          <button onclick="switchTab('detail')" id="tab-detail" class="px-4 py-2 text-sm font-medium tab-active cursor-pointer transition-colors" data-i18n="detail">
+            版本详情
+          </button>
+          <button onclick="switchTab('compare')" id="tab-compare" class="px-4 py-2 text-sm font-medium text-secondary hover:text-primary cursor-pointer transition-colors" data-i18n="compare">
+            版本对比
+          </button>
+          <button onclick="switchTab('history')" id="tab-history" class="px-4 py-2 text-sm font-medium text-secondary hover:text-primary cursor-pointer transition-colors" data-i18n="history">
+            变更历史
+          </button>
+        </div>
+
+        <!-- Detail Panel -->
+        <div id="panel-detail" class="fade-in">
+          <div class="card rounded-xl p-5">
+            <!-- Version Header -->
+            <div class="flex items-start justify-between mb-5">
+              <div>
+                <div class="flex items-center gap-2 mb-1">
+                  <h3 class="text-xl font-semibold text-primary" id="detail-version">v6</h3>
+                  <span class="active-badge px-2 py-0.5 rounded-full text-xs font-medium" data-i18n="active">激活</span>
+                </div>
+                <p class="text-secondary text-sm" id="detail-date">2025-01-30 14:32:15</p>
+              </div>
+              <div class="flex gap-2">
+                <button onclick="openComparePanel()" class="btn-ghost px-3 py-1.5 rounded-lg text-sm cursor-pointer" data-i18n="compareWith">对比</button>
+                <button onclick="openRollbackDialog()" class="btn-danger px-3 py-1.5 rounded-lg text-sm cursor-pointer" data-i18n="rollback">回滚</button>
+              </div>
+            </div>
+
+            <!-- Metadata -->
+            <div class="grid grid-cols-2 gap-4 mb-5">
+              <div class="p-3 rounded-lg" style="background-color: var(--color-bg-primary);">
+                <div class="text-xs text-secondary mb-1" data-i18n="createdBy">创建者</div>
+                <div class="text-sm font-medium text-primary" id="detail-author">user</div>
+              </div>
+              <div class="p-3 rounded-lg" style="background-color: var(--color-bg-primary);">
+                <div class="text-xs text-secondary mb-1" data-i18n="components">组件数量</div>
+                <div class="text-sm font-medium text-primary" id="detail-components">8 个组件</div>
+              </div>
+            </div>
+
+            <!-- Content Preview -->
+            <div class="mb-4">
+              <h4 class="text-sm font-medium text-primary mb-2" data-i18n="contentPreview">内容预览</h4>
+              <div class="code-block rounded-lg p-4 max-h-64 overflow-y-auto">
+                <pre id="detail-content" class="whitespace-pre-wrap"></pre>
+              </div>
+            </div>
+
+            <!-- Components List -->
+            <div>
+              <h4 class="text-sm font-medium text-primary mb-2" data-i18n="componentList">组件列表</h4>
+              <div id="detail-components-list" class="space-y-2">
+                <!-- Dynamic Content -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Compare Panel -->
+        <div id="panel-compare" class="hidden fade-in">
+          <div class="card rounded-xl p-5">
+            <!-- Version Selector -->
+            <div class="flex items-center gap-4 mb-5">
+              <div class="flex-1">
+                <label class="text-xs text-secondary mb-1 block" data-i18n="fromVersion">源版本</label>
+                <select id="compare-from" onchange="updateComparison()" class="w-full px-3 py-2 rounded-lg border border-theme bg-transparent text-primary text-sm cursor-pointer">
+                  <!-- Dynamic Options -->
+                </select>
+              </div>
+              <div class="flex items-center justify-center">
+                <svg class="w-5 h-5 text-secondary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                </svg>
+              </div>
+              <div class="flex-1">
+                <label class="text-xs text-secondary mb-1 block" data-i18n="toVersion">目标版本</label>
+                <select id="compare-to" onchange="updateComparison()" class="w-full px-3 py-2 rounded-lg border border-theme bg-transparent text-primary text-sm cursor-pointer">
+                  <!-- Dynamic Options -->
+                </select>
+              </div>
+            </div>
+
+            <!-- Comparison Summary -->
+            <div class="flex gap-3 mb-5">
+              <div class="flex-1 p-3 rounded-lg diff-added">
+                <div class="text-xs font-medium mb-1" data-i18n="added">添加</div>
+                <div class="text-lg font-semibold" id="diff-added-count">3</div>
+              </div>
+              <div class="flex-1 p-3 rounded-lg diff-removed">
+                <div class="text-xs font-medium mb-1" data-i18n="removed">删除</div>
+                <div class="text-lg font-semibold" id="diff-removed-count">1</div>
+              </div>
+              <div class="flex-1 p-3 rounded-lg diff-modified">
+                <div class="text-xs font-medium mb-1" data-i18n="modified">修改</div>
+                <div class="text-lg font-semibold" id="diff-modified-count">5</div>
+              </div>
+            </div>
+
+            <!-- Component Changes -->
+            <div class="mb-5">
+              <h4 class="text-sm font-medium text-primary mb-3" data-i18n="componentChanges">组件变更</h4>
+              <div id="component-changes" class="space-y-3">
+                <!-- Dynamic Content -->
+              </div>
+            </div>
+
+            <!-- Parameter Changes -->
+            <div>
+              <h4 class="text-sm font-medium text-primary mb-3" data-i18n="parameterChanges">参数变更</h4>
+              <div id="parameter-changes" class="space-y-2">
+                <!-- Dynamic Content -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- History Panel -->
+        <div id="panel-history" class="hidden fade-in">
+          <div class="card rounded-xl p-5">
+            <h4 class="text-sm font-medium text-primary mb-4" data-i18n="changeHistory">变更历史</h4>
+            <div id="change-history" class="space-y-3">
+              <!-- Dynamic Content -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rollback Confirmation Dialog -->
+  <div id="rollback-dialog" class="fixed inset-0 dialog-overlay hidden items-center justify-center z-50">
+    <div class="card rounded-xl p-6 max-w-md w-full mx-4 fade-in">
+      <div class="mb-4">
+        <h3 class="text-lg font-semibold text-primary mb-2" data-i18n="confirmRollback">确认回滚</h3>
+        <p class="text-secondary text-sm" data-i18n="rollbackWarning">此操作将切换到选定版本，当前激活版本将被停用。</p>
+      </div>
+
+      <!-- Rollback Strategy -->
+      <div class="mb-4">
+        <label class="text-sm font-medium text-primary mb-2 block" data-i18n="rollbackStrategy">回滚策略</label>
+        <div class="space-y-2">
+          <label class="flex items-center gap-3 p-3 rounded-lg border border-theme cursor-pointer hover:bg-opacity-50" style="background-color: var(--color-bg-primary);">
+            <input type="radio" name="rollback-strategy" value="soft" checked class="cursor-pointer">
+            <div class="flex-1">
+              <div class="text-sm font-medium text-primary" data-i18n="softRollback">软回滚</div>
+              <div class="text-xs text-secondary" data-i18n="softRollbackDesc">直接切换激活标志，保留原版本号</div>
+            </div>
+          </label>
+          <label class="flex items-center gap-3 p-3 rounded-lg border border-theme cursor-pointer hover:bg-opacity-50" style="background-color: var(--color-bg-primary);">
+            <input type="radio" name="rollback-strategy" value="hard" class="cursor-pointer">
+            <div class="flex-1">
+              <div class="text-sm font-medium text-primary" data-i18n="hardRollback">硬回滚</div>
+              <div class="text-xs text-secondary" data-i18n="hardRollbackDesc">创建新版本复制内容，保留完整历史</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Comment Input -->
+      <div class="mb-5">
+        <label class="text-sm font-medium text-primary mb-2 block" data-i18n="comment">备注</label>
+        <input type="text" id="rollback-comment" class="w-full px-3 py-2 rounded-lg border border-theme bg-transparent text-primary text-sm" placeholder="可选：添加回滚说明">
+      </div>
+
+      <!-- Actions -->
+      <div class="flex gap-3">
+        <button onclick="closeRollbackDialog()" class="flex-1 btn-ghost px-4 py-2 rounded-lg cursor-pointer" data-i18n="cancel">取消</button>
+        <button onclick="confirmRollback()" class="flex-1 btn-danger px-4 py-2 rounded-lg cursor-pointer" data-i18n="confirmRollbackBtn">确认回滚</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Sample Data
+    const versions = [
+      { id: 1, version: 1, isActive: false, createdAt: '2025-01-25 10:15:00', createdBy: 'system', components: 6, content: '你是一位专业的提示词工程师。你的任务是分析用户目标和会话历史...' },
+      { id: 2, version: 2, isActive: false, createdAt: '2025-01-26 14:20:30', createdBy: 'user', components: 7, content: '你是一位专业的提示词工程师。你的任务是分析用户目标和会话历史，生成结构化提示词...' },
+      { id: 3, version: 3, isActive: false, createdAt: '2025-01-27 09:45:12', createdBy: 'user', components: 7, content: '你是一位专业的提示词工程师。你的任务是分析用户目标和会话历史，生成高信噪比提示词...' },
+      { id: 4, version: 4, isActive: false, createdAt: '2025-01-28 16:30:45', createdBy: 'user', components: 8, content: '你是一位专业的提示词工程师。你的任务是分析用户目标和会话历史，生成结构化、高信噪比的提示词...' },
+      { id: 5, version: 5, isActive: false, createdAt: '2025-01-29 11:20:00', createdBy: 'user', components: 8, content: '你是一位专业的提示词工程师。你的任务是全面分析用户目标和会话历史，生成结构化、高信噪比的提示词...' },
+      { id: 6, version: 6, isActive: true, createdAt: '2025-01-30 14:32:15', createdBy: 'user', components: 8, content: '你是一位专业的提示词工程师。你的任务是分析用户目标和会话历史，生成结构化、高信噪比的提示词，以指导 AI 编程助手高效地完成任务...' },
+    ];
+
+    const components = [
+      { type: 'MetaPrompt', name: 'meta_prompt_zh', language: 'zh' },
+      { type: 'MetaPrompt', name: 'meta_prompt_en', language: 'en' },
+      { type: 'PromptStructure', name: 'structure_zh', language: 'zh' },
+      { type: 'PromptStructure', name: 'structure_en', language: 'en' },
+      { type: 'Fallback', name: 'no_sessions_template_zh', language: 'zh' },
+      { type: 'Fallback', name: 'no_sessions_template_en', language: 'en' },
+      { type: 'LLMParams', name: 'llm_params', language: '-' },
+      { type: 'SessionContext', name: 'session_context', language: '-' },
+    ];
+
+    const diffData = {
+      componentChanges: [
+        {
+          type: 'MetaPrompt',
+          name: 'meta_prompt_zh',
+          changeType: 'modified',
+          lines: [
+            { num: 1, type: 'unchanged', content: '你是一位专业的提示词工程师。你的任务是' },
+            { num: 2, type: 'unchanged', content: '分析用户目标和会话历史，生成' },
+            { num: 3, type: 'removed', content: '结构化提示词' },
+            { num: 3, type: 'added', content: '结构化、高信噪比的提示词' },
+            { num: 4, type: 'unchanged', content: '，以指导 AI 编程助手高效地完成任务。' },
+          ]
+        },
+        {
+          type: 'PromptStructure',
+          name: 'structure_zh',
+          changeType: 'modified',
+          lines: [
+            { num: 10, type: 'removed', content: '- **用户目标**: {{goal}}' },
+            { num: 10, type: 'added', content: '- **下一步目标**: {{goal}}' },
+          ]
+        }
+      ],
+      parameterChanges: [
+        { key: 'temperature', type: 'LLM', oldValue: 0.3, newValue: 0.1 },
+        { key: 'max_tokens', type: 'LLM', oldValue: 1000, newValue: 1500 },
+      ]
+    };
+
+    const changeHistory = [
+      { version: 'v6 → v5', type: 'updated', component: 'meta_prompt_zh', field: 'content', time: '2025-01-30 14:32:15', author: 'user' },
+      { version: 'v5 → v4', type: 'updated', component: 'structure_zh', field: 'content', time: '2025-01-29 11:20:00', author: 'user' },
+      { version: 'v4 → v3', type: 'created', component: 'session_context', field: 'include_rating', time: '2025-01-28 16:30:45', author: 'user' },
+      { version: 'v3 → v2', type: 'updated', component: 'llm_params', field: 'temperature', time: '2025-01-27 09:45:12', author: 'user' },
+      { version: 'v2 → v1', type: 'created', component: 'fallback_template', field: 'template_zh', time: '2025-01-26 14:20:30', author: 'user' },
+    ];
+
+    // Translations
+    const i18n = {
+      zh: {
+        versionList: '版本列表',
+        activeVersion: '当前激活版本',
+        detail: '版本详情',
+        compare: '版本对比',
+        history: '变更历史',
+        active: '激活',
+        compareWith: '对比',
+        rollback: '回滚',
+        createdBy: '创建者',
+        components: '组件数量',
+        contentPreview: '内容预览',
+        componentList: '组件列表',
+        fromVersion: '源版本',
+        toVersion: '目标版本',
+        added: '添加',
+        removed: '删除',
+        modified: '修改',
+        componentChanges: '组件变更',
+        parameterChanges: '参数变更',
+        changeHistory: '变更历史',
+        confirmRollback: '确认回滚',
+        rollbackWarning: '此操作将切换到选定版本，当前激活版本将被停用。',
+        rollbackStrategy: '回滚策略',
+        softRollback: '软回滚',
+        softRollbackDesc: '直接切换激活标志，保留原版本号',
+        hardRollback: '硬回滚',
+        hardRollbackDesc: '创建新版本复制内容，保留完整历史',
+        comment: '备注',
+        cancel: '取消',
+        confirmRollbackBtn: '确认回滚',
+        view: '查看',
+      },
+      en: {
+        versionList: 'Version List',
+        activeVersion: 'Active Version',
+        detail: 'Detail',
+        compare: 'Compare',
+        history: 'History',
+        active: 'Active',
+        compareWith: 'Compare',
+        rollback: 'Rollback',
+        createdBy: 'Created By',
+        components: 'Components',
+        contentPreview: 'Content Preview',
+        componentList: 'Component List',
+        fromVersion: 'From Version',
+        toVersion: 'To Version',
+        added: 'Added',
+        removed: 'Removed',
+        modified: 'Modified',
+        componentChanges: 'Component Changes',
+        parameterChanges: 'Parameter Changes',
+        changeHistory: 'Change History',
+        confirmRollback: 'Confirm Rollback',
+        rollbackWarning: 'This will switch to the selected version. Current active version will be deactivated.',
+        rollbackStrategy: 'Rollback Strategy',
+        softRollback: 'Soft Rollback',
+        softRollbackDesc: 'Toggle active flag directly, keep version number',
+        hardRollback: 'Hard Rollback',
+        hardRollbackDesc: 'Create new version with copied content, preserve history',
+        comment: 'Comment',
+        cancel: 'Cancel',
+        confirmRollbackBtn: 'Confirm Rollback',
+        view: 'View',
+      }
+    };
+
+    let currentLang = 'zh';
+    let currentTheme = 'light';
+    let selectedVersion = 6;
+
+    // Initialize
+    function init() {
+      renderVersionTable();
+      renderVersionDetail(versions.find(v => v.version === selectedVersion));
+      renderCompareOptions();
+      renderComparison();
+      renderChangeHistory();
+      updateLanguage();
+    }
+
+    // Render Version Table
+    function renderVersionTable() {
+      const tbody = document.getElementById('version-table-body');
+      tbody.innerHTML = versions.map(v => `
+        <tr class="table-row ${v.isActive ? 'table-row-active' : ''} cursor-pointer" onclick="selectVersion(${v.version})">
+          <td class="py-2 px-3">
+            <span class="font-medium text-primary">v${v.version}</span>
+          </td>
+          <td class="py-2 px-3">
+            ${v.isActive ? '<span class="active-badge px-2 py-0.5 rounded-full text-xs font-medium">激活</span>' : '<span class="text-secondary text-xs">-</span>'}
+          </td>
+          <td class="py-2 px-3 text-secondary text-xs">${v.createdAt.split(' ')[0]}</td>
+          <td class="py-2 px-3 text-right">
+            <button class="text-secondary hover:text-primary text-xs cursor-pointer" data-i18n="view">查看</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Select Version
+    function selectVersion(version) {
+      selectedVersion = version;
+      renderVersionDetail(versions.find(v => v.version === version));
+      renderVersionTable();
+      updateLanguage();
+    }
+
+    // Render Version Detail
+    function renderVersionDetail(version) {
+      document.getElementById('detail-version').textContent = `v${version.version}`;
+      document.getElementById('detail-date').textContent = version.createdAt;
+      document.getElementById('detail-author').textContent = version.createdBy;
+      document.getElementById('detail-components').textContent = `${version.components} 个组件`;
+      document.getElementById('detail-content').textContent = version.content;
+
+      const componentsList = document.getElementById('detail-components-list');
+      componentsList.innerHTML = components.map(c => `
+        <div class="flex items-center justify-between p-2 rounded-lg border border-theme text-sm">
+          <div class="flex items-center gap-2">
+            <span class="text-secondary text-xs">${c.type}</span>
+            <span class="text-primary font-medium">${c.name}</span>
+          </div>
+          <span class="text-secondary text-xs">${c.language}</span>
+        </div>
+      `).join('');
+    }
+
+    // Render Compare Options
+    function renderCompareOptions() {
+      const fromSelect = document.getElementById('compare-from');
+      const toSelect = document.getElementById('compare-to');
+
+      const options = versions.map(v => `<option value="${v.version}">v${v.version} ${v.isActive ? '(激活)' : ''}</option>`).join('');
+
+      fromSelect.innerHTML = options;
+      toSelect.innerHTML = options;
+
+      fromSelect.value = 5;
+      toSelect.value = 6;
+    }
+
+    // Render Comparison
+    function renderComparison() {
+      document.getElementById('diff-added-count').textContent = diffData.componentChanges.filter(c => c.lines.some(l => l.type === 'added')).length;
+      document.getElementById('diff-removed-count').textContent = diffData.componentChanges.filter(c => c.lines.some(l => l.type === 'removed')).length;
+      document.getElementById('diff-modified-count').textContent = diffData.componentChanges.filter(c => c.changeType === 'modified').length;
+
+      const componentChangesEl = document.getElementById('component-changes');
+      componentChangesEl.innerHTML = diffData.componentChanges.map(c => `
+        <div class="border border-theme rounded-lg overflow-hidden">
+          <div class="flex items-center justify-between px-3 py-2" style="background-color: var(--color-bg-primary);">
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-secondary">${c.type}</span>
+              <span class="text-sm font-medium text-primary">${c.name}</span>
+            </div>
+            <span class="text-xs ${c.changeType === 'modified' ? 'text-yellow-500' : 'text-green-500'}">${c.changeType === 'modified' ? '修改' : '添加'}</span>
+          </div>
+          <div class="code-block text-xs">
+            ${c.lines.map(l => `
+              <div class="diff-${l.type} px-3 py-1">
+                <span class="text-secondary mr-2">${l.num}</span>
+                <span class="${l.type === 'removed' ? 'line-through' : ''}">${l.content}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+
+      const parameterChangesEl = document.getElementById('parameter-changes');
+      parameterChangesEl.innerHTML = diffData.parameterChanges.map(p => `
+        <div class="flex items-center justify-between p-2 rounded-lg border border-theme text-sm">
+          <div>
+            <span class="text-xs text-secondary">${p.type}</span>
+            <span class="text-primary font-medium ml-2">${p.key}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-secondary line-through text-xs">${p.oldValue}</span>
+            <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+            </svg>
+            <span class="text-green-500 font-medium">${p.newValue}</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Render Change History
+    function renderChangeHistory() {
+      const historyEl = document.getElementById('change-history');
+      historyEl.innerHTML = changeHistory.map(h => `
+        <div class="flex items-start gap-3 p-3 rounded-lg border border-theme">
+          <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
+            h.type === 'created' ? 'bg-green-100 text-green-600' :
+            h.type === 'deleted' ? 'bg-red-100 text-red-600' :
+            'bg-yellow-100 text-yellow-600'
+          }">
+            ${h.type === 'created' ? '+' : h.type === 'deleted' ? '-' : '~'}
+          </div>
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-sm font-medium text-primary">${h.version}</span>
+              <span class="text-xs text-secondary">${h.time}</span>
+            </div>
+            <div class="text-xs text-secondary">
+              <span class="font-medium">${h.component}</span> · ${h.field} · ${h.author}
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Tab Switching
+    function switchTab(tab) {
+      ['detail', 'compare', 'history'].forEach(t => {
+        document.getElementById(`panel-${t}`).classList.add('hidden');
+        document.getElementById(`tab-${t}`).classList.remove('tab-active');
+        document.getElementById(`tab-${t}`).classList.add('text-secondary');
+      });
+
+      document.getElementById(`panel-${tab}`).classList.remove('hidden');
+      document.getElementById(`tab-${tab}`).classList.add('tab-active');
+      document.getElementById(`tab-${tab}`).classList.remove('text-secondary');
+    }
+
+    // Theme Toggle
+    function toggleTheme() {
+      currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+      document.documentElement.classList.toggle('dark', currentTheme === 'dark');
+      document.getElementById('theme-icon').innerHTML = currentTheme === 'dark'
+        ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>'
+        : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>';
+      document.getElementById('theme-text').textContent = currentTheme === 'dark' ? '亮色' : '暗色';
+    }
+
+    // Language Toggle
+    function toggleLanguage() {
+      currentLang = currentLang === 'zh' ? 'en' : 'zh';
+      document.getElementById('lang-text').textContent = currentLang === 'zh' ? 'EN' : '中文';
+      updateLanguage();
+    }
+
+    // Update Language
+    function updateLanguage() {
+      const t = i18n[currentLang];
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (t[key]) {
+          el.textContent = t[key];
+        }
+      });
+    }
+
+    // Dialog Functions
+    function openRollbackDialog() {
+      document.getElementById('rollback-dialog').classList.remove('hidden');
+      document.getElementById('rollback-dialog').classList.add('flex');
+    }
+
+    function closeRollbackDialog() {
+      document.getElementById('rollback-dialog').classList.add('hidden');
+      document.getElementById('rollback-dialog').classList.remove('flex');
+    }
+
+    function confirmRollback() {
+      const strategy = document.querySelector('input[name="rollback-strategy"]:checked').value;
+      const comment = document.getElementById('rollback-comment').value;
+      alert(`回滚成功！\n策略: ${strategy === 'soft' ? '软回滚' : '硬回滚'}\n备注: ${comment || '无'}`);
+      closeRollbackDialog();
+    }
+
+    function openComparePanel() {
+      switchTab('compare');
+    }
+
+    // Initialize on load
+    init();
+  </script>
+</body>
+</html>

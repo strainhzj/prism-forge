@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use crate::llm::{LLMClientManager, interface::{Message, ModelParams}};
 use crate::database::repository::SessionRepository;
+use crate::database::prompt_versions::PromptVersionRepository;
 use crate::database::models::TokenStats;
 use crate::tokenizer::TokenCounter;
 use crate::parser::view_level::{ViewLevel, MessageFilter, QAPair};
@@ -99,6 +100,8 @@ pub struct EnhancedPrompt {
 pub struct PromptGenerator {
     /// 数据库仓库
     repository: SessionRepository,
+    /// 提示词版本仓库
+    prompt_version_repo: PromptVersionRepository,
     /// 上下文压缩器
     compressor: ContextCompressor,
     /// Token 计数器
@@ -121,6 +124,7 @@ impl PromptGenerator {
 
         Ok(Self {
             repository: SessionRepository::from_default_db()?,
+            prompt_version_repo: PromptVersionRepository::from_default_db()?,
             compressor: ContextCompressor::new()?,
             token_counter: TokenCounter::new()?,
             config_manager,
@@ -210,6 +214,7 @@ impl PromptGenerator {
 
         Ok(Self {
             repository: SessionRepository::from_default_db()?,
+            prompt_version_repo: PromptVersionRepository::from_default_db()?,
             compressor: ContextCompressor::new()?,
             token_counter: TokenCounter::new()?,
             config_manager,
@@ -408,29 +413,149 @@ impl PromptGenerator {
     }
 
     /// 使用对话上下文构建完整提示词
+    ///
+    /// 优先级：数据库用户自定义提示词 > optimizer_config.toml 配置文件
     fn build_prompt_with_conversation(
         &self,
         goal: &str,
         conversation: &str,
         language: &str,
     ) -> String {
-        // 从配置获取模板
-        let meta_prompt = self.config_manager.get_meta_prompt(language);
-        let prompt_structure = self.config_manager.get_prompt_structure(language);
+        // 尝试从数据库获取启用版本的组件化提示词
+        match self.get_components_from_db(language, goal, conversation) {
+            Ok(prompt) => {
+                #[cfg(debug_assertions)]
+                eprintln!("[PromptGenerator] 使用数据库中的启用版本提示词组件");
+                prompt
+            },
+            Err(e) => {
+                // 数据库获取失败，回退到配置文件
+                #[cfg(debug_assertions)]
+                eprintln!("[PromptGenerator] 数据库获取组件失败，使用配置文件: {}", e);
+                self.config_manager.get_assembled_prompt(language, goal, conversation)
+            }
+        }
+    }
 
-        // 上下文摘要占位符（当前未实现上下文摘要功能）
-        let context_placeholder = if language == "zh" {
-            "无上下文摘要"
-        } else {
-            "No context summary"
-        };
+    /// 从数据库获取启用版本的提示词组件并组装
+    ///
+    /// 从 `session_analysis` 模板的启用版本中提取组件化数据并组装成完整提示词
+    fn get_components_from_db(
+        &self,
+        language: &str,
+        goal: &str,
+        conversation: &str,
+    ) -> Result<String> {
+        // 验证 language 参数
+        if language.is_empty() {
+            return Err(anyhow::anyhow!("language 参数不能为空"));
+        }
+        let valid_languages = ["zh", "en"];
+        if !valid_languages.contains(&language) {
+            return Err(anyhow::anyhow!(
+                "不支持的语言: '{}', 支持的语言: {:?}",
+                language,
+                valid_languages
+            ));
+        }
 
-        // 组装完整提示词
-        prompt_structure
-            .replace("{{meta_prompt}}", &meta_prompt)
+        // 验证输入参数长度（防止内存溢出）
+        const MAX_GOAL_LENGTH: usize = 10_000;
+        const MAX_CONVERSATION_LENGTH: usize = 1_000_000;
+        if goal.len() > MAX_GOAL_LENGTH {
+            return Err(anyhow::anyhow!(
+                "goal 参数过长 ({} 字节), 最大允许 {} 字节",
+                goal.len(),
+                MAX_GOAL_LENGTH
+            ));
+        }
+        if conversation.len() > MAX_CONVERSATION_LENGTH {
+            return Err(anyhow::anyhow!(
+                "conversation 参数过长 ({} 字节), 最大允许 {} 字节",
+                conversation.len(),
+                MAX_CONVERSATION_LENGTH
+            ));
+        }
+
+        // 获取 session_analysis 模板
+        let template = self.prompt_version_repo.get_template_by_name("session_analysis")
+            .map_err(|e| {
+                #[cfg(debug_assertions)]
+                eprintln!("[PromptGenerator] 数据库查询失败: {}", e);
+                anyhow::anyhow!("获取模板失败: {}", e)
+            })?
+            .ok_or_else(|| {
+                #[cfg(debug_assertions)]
+                eprintln!("[PromptGenerator] session_analysis 模板不存在");
+                anyhow::anyhow!("session_analysis 模板不存在")
+            })?;
+
+        let template_id = template.id
+            .ok_or_else(|| anyhow::anyhow!("模板 ID 缺失"))?;
+
+        // 获取启用版本
+        let version = self.prompt_version_repo.get_active_version(template_id)
+            .map_err(|e| {
+                #[cfg(debug_assertions)]
+                eprintln!("[PromptGenerator] 获取启用版本失败: {}", e);
+                anyhow::anyhow!("获取启用版本失败: {}", e)
+            })?
+            .ok_or_else(|| {
+                #[cfg(debug_assertions)]
+                eprintln!("[PromptGenerator] 无启用版本");
+                anyhow::anyhow!("无启用版本")
+            })?;
+
+        // 解析组件 JSON（添加详细的错误信息）
+        let content: serde_json::Value = serde_json::from_str(&version.content)
+            .map_err(|e| {
+                let preview = &version.content.chars().take(100).collect::<String>();
+                anyhow::anyhow!(
+                    "解析组件数据失败 (template_id={}, version={}): {}\n原始内容前100字符: {}",
+                    template_id,
+                    version.version_number,
+                    e,
+                    preview
+                )
+            })?;
+
+        // 提取对应语言的组件
+        let lang_data = content.get(language)
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| anyhow::anyhow!("语言 '{}' 不存在或格式错误", language))?;
+
+        // 提取三个组件的内容（快速失败，而非静默降级）
+        let meta_prompt = lang_data.get("meta_prompt")
+            .and_then(|v| v.get("content"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("meta_prompt.content 缺失或格式错误"))?;
+
+        let input_template = lang_data.get("input_template")
+            .and_then(|v| v.get("content"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("input_template.content 缺失或格式错误"))?;
+
+        let output_template = lang_data.get("output_template")
+            .and_then(|v| v.get("content"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("output_template.content 缺失或格式错误"))?;
+
+        // 替换占位符并组装
+        let input_section = input_template
             .replace("{{goal}}", goal)
-            .replace("{{sessions}}", conversation)
-            .replace("{{context}}", context_placeholder)
+            .replace("{{sessions}}", conversation);
+
+        // 使用字符串连接避免 format! 的占位符解析问题
+        let mut result = String::with_capacity(
+            meta_prompt.len() + input_section.len() + output_template.len() + 10
+        );
+        result.push_str(meta_prompt);
+        result.push_str("\n\n");
+        result.push_str(&input_section);
+        result.push_str("\n\n");
+        result.push_str(output_template);
+
+        Ok(result)
     }
 
     /// 生成对话开始提示词（会话为空时，使用 LLM 生成）
@@ -509,8 +634,34 @@ impl PromptGenerator {
     /// 注意：此方法无法获取 LLM 提供商信息，因此 llm_provider 和 llm_model 将为 None
     #[deprecated(note = "使用 generate_conversation_starter_with_llm 代替")]
     fn create_conversation_starter_prompt(&self, goal: &str, session_file_path: &str, language: &str) -> EnhancedPrompt {
-        // 从配置获取对话开始模板（默认使用中文）
-        let template = self.config_manager.get_conversation_starter_template(language);
+        // 使用硬编码的对话开始模板
+        let template = if language == "en" {
+            r#"You are a professional prompt expert. The user wants to start a new conversation in an AI coding agent. Please generate a high signal-to-noise ratio prompt to help the user begin the conversation.
+
+## User Goal
+{{goal}}
+
+## Requirements
+1. Understand the user's goal
+2. Supplement any potentially missing parts of the user's goal
+3. Provide clear direction
+4. Keep it concise and clear (within 200 words)
+
+Please generate a conversation-starting prompt."#
+        } else {
+            r#"你是一个专业的提示词专家。用户想要在ai coding agent开始一个新的对话，请生成一段信噪比的提示词来帮助用户开始对话。
+
+## 用户目标
+{{goal}}
+
+## 要求
+1. 理解用户的目标
+2. 补充用户目标中可能缺失的部分
+3. 提供明确的方向
+4. 保持简洁明了（控制在 200 字以内）
+
+请生成一个对话开始的提示词。"#
+        };
 
         let enhanced_prompt = template.replace("{{goal}}", goal);
 
@@ -577,8 +728,34 @@ Requirements:
 
     /// 构建对话开始的完整提示词（使用配置的 conversation_starter_template）
     fn build_conversation_starter_prompt(&self, goal: &str, language: &str) -> String {
-        // 从配置获取对话开始模板
-        let template = self.config_manager.get_conversation_starter_template(language);
+        // 使用硬编码的对话开始模板
+        let template = if language == "en" {
+            r#"You are a professional prompt expert. The user wants to start a new conversation in an AI coding agent. Please generate a high signal-to-noise ratio prompt to help the user begin the conversation.
+
+## User Goal
+{{goal}}
+
+## Requirements
+1. Understand the user's goal
+2. Supplement any potentially missing parts of the user's goal
+3. Provide clear direction
+4. Keep it concise and clear (within 200 words)
+
+Please generate a conversation-starting prompt."#
+        } else {
+            r#"你是一个专业的提示词专家。用户想要在ai coding agent开始一个新的对话，请生成一段信噪比的提示词来帮助用户开始对话。
+
+## 用户目标
+{{goal}}
+
+## 要求
+1. 理解用户的目标
+2. 补充用户目标中可能缺失的部分
+3. 提供明确的方向
+4. 保持简洁明了（控制在 200 字以内）
+
+请生成一个对话开始的提示词。"#
+        };
 
         // 替换变量
         template.replace("{{goal}}", goal)
@@ -642,7 +819,59 @@ Please generate a conversation-starting prompt based on the above information."#
 
         let messages = vec![Message::user(prompt)];
 
+        // Debug: 打印发送给 LLM 的完整提示词
+        // 安全保证：
+        // 1. .lines() 不会 Panic（空字符串返回空迭代器）
+        // 2. eprintln! 可以安全处理任何 UTF-8 字符串
+        // 3. 不使用 .unwrap() 或索引访问
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("╔═══════════════════════════════════════════════════════════════════════════════");
+            eprintln!("║ [PromptGenerator] 发送给 LLM 的完整提示词:");
+            eprintln!("╠═══════════════════════════════════════════════════════════════════════════════");
+            eprintln!("║ 模型: {}", model);
+            eprintln!("║ 温度: {}", llm_params.temperature);
+            eprintln!("║ 最大 Token: {}", llm_params.max_tokens);
+            eprintln!("╠═══════════════════════════════════════════════════════════════════════════════");
+            eprintln!("║ 提示词内容:");
+            eprintln!("╟───────────────────────────────────────────────────────────────────────────────");
+
+            // 安全遍历：.lines() 迭代器保证不会 Panic
+            // 即使 prompt 为空字符串，也只会跳过循环
+            if prompt.is_empty() {
+                eprintln!("║ <空提示词>");
+            } else {
+                for line in prompt.lines() {
+                    // line 是 &str 切片，保证有效 UTF-8
+                    // eprintln! 可以安全处理任何字符串内容
+                    eprintln!("║ {}", line);
+                }
+            }
+            eprintln!("╚═══════════════════════════════════════════════════════════════════════════════");
+        }
+
         let response = client.chat_completion(messages, params).await?;
+
+        // Debug: 打印 LLM 返回的结果
+        // 安全保证同上
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("╔═══════════════════════════════════════════════════════════════════════════════");
+            eprintln!("║ [PromptGenerator] LLM 返回结果:");
+            eprintln!("╠═══════════════════════════════════════════════════════════════════════════════");
+            eprintln!("║ 内容长度: {} 字符", response.content.len());
+            eprintln!("╟───────────────────────────────────────────────────────────────────────────────");
+
+            // 安全遍历，同上
+            if response.content.is_empty() {
+                eprintln!("║ <空响应>");
+            } else {
+                for line in response.content.lines() {
+                    eprintln!("║ {}", line);
+                }
+            }
+            eprintln!("╚═══════════════════════════════════════════════════════════════════════════════");
+        }
 
         Ok(response.content)
     }

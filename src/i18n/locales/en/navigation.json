@@ -4,6 +4,7 @@
     "sessions": "Sessions",
     "settings": "API Settings",
     "promptLab": "Prompt Generation History",
+    "prompts": "Prompt Management",
     "diagnostic": "Diagnostic"
   }
 }
