@@ -53,3 +53,10 @@ tests/
 playwright.config.ts
 prompt-version-manager-preview.html
 postcss.config.js
+
+# Claude Code settings
+.claude/settings.json
+.claude/settings.local.json
+
+# Temporary files
+nul
