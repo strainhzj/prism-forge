@@ -168,21 +168,21 @@ fn test_vector_search(repo: &VectorRepository) -> Result<(), Box<dyn std::error:
 
     // 验证排序
     assert_eq!(results[0].session.session_id, "session-1");
-    println!("   ✅ 第 1 名: {} (相似度: {:.4})",
-        results[0].session.session_id,
-        results[0].similarity_score
+    println!(
+        "   ✅ 第 1 名: {} (相似度: {:.4})",
+        results[0].session.session_id, results[0].similarity_score
     );
 
     assert_eq!(results[1].session.session_id, "session-3");
-    println!("   ✅ 第 2 名: {} (相似度: {:.4})",
-        results[1].session.session_id,
-        results[1].similarity_score
+    println!(
+        "   ✅ 第 2 名: {} (相似度: {:.4})",
+        results[1].session.session_id, results[1].similarity_score
     );
 
     assert_eq!(results[2].session.session_id, "session-2");
-    println!("   ✅ 第 3 名: {} (相似度: {:.4})",
-        results[2].session.session_id,
-        results[2].similarity_score
+    println!(
+        "   ✅ 第 3 名: {} (相似度: {:.4})",
+        results[2].session.session_id, results[2].similarity_score
     );
 
     Ok(())

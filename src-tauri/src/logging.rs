@@ -275,7 +275,7 @@ mod tests {
     fn test_record_metrics() {
         let monitor = PerformanceMonitor::new();
         monitor.record("test_op", Duration::from_millis(100), true);
-        
+
         let metrics = monitor.get_all_metrics();
         assert_eq!(metrics.len(), 1);
         assert_eq!(metrics[0].name, "test_op");
@@ -287,7 +287,7 @@ mod tests {
         let monitor = PerformanceMonitor::new();
         monitor.record("test_op", Duration::from_millis(100), true);
         monitor.record("test_op", Duration::from_millis(200), true);
-        
+
         let avg = monitor.get_average_duration("test_op").unwrap();
         assert_eq!(avg, Duration::from_millis(150));
     }
@@ -297,7 +297,7 @@ mod tests {
         let monitor = PerformanceMonitor::new();
         monitor.record("test_op", Duration::from_millis(100), true);
         monitor.record("test_op", Duration::from_millis(100), false);
-        
+
         let rate = monitor.get_success_rate("test_op").unwrap();
         assert!((rate - 0.5).abs() < 0.001);
     }
@@ -316,7 +316,7 @@ mod tests {
         let timer = Timer::start_with_monitor("test_op", monitor.clone());
         thread::sleep(Duration::from_millis(10));
         timer.stop(true);
-        
+
         let metrics = monitor.get_all_metrics();
         assert_eq!(metrics.len(), 1);
     }
@@ -327,7 +327,7 @@ mod tests {
         monitor.record("op1", Duration::from_millis(100), true);
         monitor.record("op1", Duration::from_millis(200), true);
         monitor.record("op2", Duration::from_millis(50), false);
-        
+
         let summary = monitor.generate_summary();
         assert_eq!(summary.total_operations, 3);
         assert_eq!(summary.operation_stats.len(), 2);

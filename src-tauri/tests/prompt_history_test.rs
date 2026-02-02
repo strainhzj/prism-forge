@@ -69,7 +69,10 @@ mod tests {
         let saved = result.unwrap();
         assert!(saved.id.is_some(), "保存后应自动生成 ID");
         assert_eq!(saved.original_goal, original_goal);
-        assert_eq!(saved.session_id, Some("test-session-uuid-12345".to_string()));
+        assert_eq!(
+            saved.session_id,
+            Some("test-session-uuid-12345".to_string())
+        );
 
         println!("✅ test_create_history 通过: ID = {:?}", saved.id);
     }
@@ -119,7 +122,10 @@ mod tests {
         let histories = result.unwrap();
         assert_eq!(histories.len(), 2, "应有 2 条记录");
 
-        println!("✅ test_get_all_histories 通过: 共 {} 条记录", histories.len());
+        println!(
+            "✅ test_get_all_histories 通过: 共 {} 条记录",
+            histories.len()
+        );
     }
 
     #[test]
@@ -244,7 +250,10 @@ mod tests {
         // 验证 token_stats 可以正确解析
         assert!(retrieved.token_stats.is_some());
         let token_json = retrieved.token_stats.unwrap();
-        assert!(token_json.contains("originalTokens"), "应包含 originalTokens 字段");
+        assert!(
+            token_json.contains("originalTokens"),
+            "应包含 originalTokens 字段"
+        );
 
         println!("✅ test_json_field_serialization 通过: JSON 字段序列化正常");
     }
@@ -255,7 +264,7 @@ mod tests {
         let mut repo = PromptHistoryRepository::with_conn(conn);
 
         let mut history = create_test_history();
-        history.session_id = None;  // 测试空 session_id
+        history.session_id = None; // 测试空 session_id
 
         let result = repo.create_history(history);
         assert!(result.is_ok(), "空 session_id 应允许保存");

@@ -35,9 +35,7 @@ impl XAIProvider {
     /// - `api_key`: X AI API Key
     /// - `base_url`: API 基础 URL
     pub fn new(api_key: SecretString, base_url: String) -> Result<Self> {
-        let client = Client::builder()
-            .build()
-            .context("创建 HTTP 客户端失败")?;
+        let client = Client::builder().build().context("创建 HTTP 客户端失败")?;
 
         Ok(Self {
             client,
@@ -49,9 +47,7 @@ impl XAIProvider {
 
     /// 使用 API Key 引用创建提供商
     pub fn with_ref(api_key: SecretString, base_url: String, api_key_ref: String) -> Result<Self> {
-        let client = Client::builder()
-            .build()
-            .context("创建 HTTP 客户端失败")?;
+        let client = Client::builder().build().context("创建 HTTP 客户端失败")?;
 
         Ok(Self {
             client,
@@ -60,7 +56,6 @@ impl XAIProvider {
             _api_key_ref: Some(api_key_ref),
         })
     }
-
 
     /// 将通用 Message 转换为 X AI 格式 (OpenAI 兼容)
     fn convert_message(msg: &Message) -> XAIMessage {
@@ -98,7 +93,10 @@ impl XAIProvider {
         let response = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key.expose_secret()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.api_key.expose_secret()),
+            )
             .header("Content-Type", "application/json")
             .json(request)
             .send()
@@ -134,7 +132,10 @@ impl XAIProvider {
         let response = self
             .client
             .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key.expose_secret()))
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.api_key.expose_secret()),
+            )
             .header("Content-Type", "application/json")
             .json(&stream_request)
             .send()
@@ -151,47 +152,48 @@ impl XAIProvider {
             ));
         }
 
-        let stream = response.bytes_stream().map(|chunk_result| match chunk_result {
-            Ok(chunk) => {
-                let text = String::from_utf8_lossy(&chunk);
-                // 解析 SSE 格式
-                for line in text.lines() {
-                    if line.starts_with("data:") {
-                        let json_str = line[5..].trim();
-                        if json_str == "[DONE]" {
-                            return Ok(StreamChunk {
-                                delta: String::new(),
-                                is_finish: true,
-                                finish_reason: Some("stop".to_string()),
-                            });
-                        }
-
-                        if let Ok(event) = serde_json::from_str::<XAIStreamResponse>(json_str) {
-                            if let Some(choice) = event.choices.first() {
-                                let delta = choice.delta.content.clone().unwrap_or_default();
-                                let is_finish = choice.finish_reason.is_some();
+        let stream = response
+            .bytes_stream()
+            .map(|chunk_result| match chunk_result {
+                Ok(chunk) => {
+                    let text = String::from_utf8_lossy(&chunk);
+                    // 解析 SSE 格式
+                    for line in text.lines() {
+                        if line.starts_with("data:") {
+                            let json_str = line[5..].trim();
+                            if json_str == "[DONE]" {
                                 return Ok(StreamChunk {
-                                    delta,
-                                    is_finish,
-                                    finish_reason: choice.finish_reason.clone(),
+                                    delta: String::new(),
+                                    is_finish: true,
+                                    finish_reason: Some("stop".to_string()),
                                 });
+                            }
+
+                            if let Ok(event) = serde_json::from_str::<XAIStreamResponse>(json_str) {
+                                if let Some(choice) = event.choices.first() {
+                                    let delta = choice.delta.content.clone().unwrap_or_default();
+                                    let is_finish = choice.finish_reason.is_some();
+                                    return Ok(StreamChunk {
+                                        delta,
+                                        is_finish,
+                                        finish_reason: choice.finish_reason.clone(),
+                                    });
+                                }
                             }
                         }
                     }
+                    Ok(StreamChunk {
+                        delta: String::new(),
+                        is_finish: false,
+                        finish_reason: None,
+                    })
                 }
-                Ok(StreamChunk {
-                    delta: String::new(),
-                    is_finish: false,
-                    finish_reason: None,
-                })
-            }
-            Err(e) => Err(anyhow::anyhow!("流式响应错误: {}", e)),
-        });
+                Err(e) => Err(anyhow::anyhow!("流式响应错误: {}", e)),
+            });
 
         Ok(Box::new(Box::pin(stream)))
     }
 }
-
 
 #[async_trait]
 impl LLMService for XAIProvider {
@@ -203,10 +205,7 @@ impl LLMService for XAIProvider {
         let request = self.build_request(messages, params);
         let response = self.send_request(&request).await?;
 
-        let choice = response
-            .choices
-            .first()
-            .context("X AI 返回空响应")?;
+        let choice = response.choices.first().context("X AI 返回空响应")?;
 
         let content = choice.message.content.clone().unwrap_or_default();
 
@@ -337,12 +336,10 @@ mod tests {
         let provider = XAIProvider::new(
             SecretString::new("test-key".to_string().into()),
             "https://api.x.ai/v1".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
-        let messages = vec![
-            Message::system("You are helpful"),
-            Message::user("Hello"),
-        ];
+        let messages = vec![Message::system("You are helpful"), Message::user("Hello")];
         let params = ModelParams::new("grok-beta");
 
         let request = provider.build_request(messages, params);
@@ -356,7 +353,8 @@ mod tests {
         let provider = XAIProvider::new(
             SecretString::new("test-key".to_string().into()),
             "https://api.x.ai/v1".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let messages = vec![Message::user("test")];
         let params = ModelParams::new("grok-beta")
@@ -378,7 +376,8 @@ mod tests {
         let provider = XAIProvider::new(
             SecretString::new("xai-test-key".to_string().into()),
             "https://api.x.ai/v1".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let messages = vec![Message::user("Hello")];
         let request = provider.build_request(messages, ModelParams::new("grok-beta"));
@@ -389,7 +388,6 @@ mod tests {
         assert_eq!(request.messages[0].content, "Hello");
     }
 }
-
 
 /// Property-based tests for X AI request format
 /// Feature: fix-provider-connection-test, Property 3: X AI Request Format Correctness

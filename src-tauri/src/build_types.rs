@@ -4,35 +4,28 @@ use std::path::PathBuf;
 
 use ts_rs::TS;
 
+use prism_forge::database::models::{
+    ChangeType, ComponentDiff, LineChangeType, LineDiff, MetadataDiff, ParameterDiff, Prompt,
+    PromptChange, PromptComponent, PromptComponentType, PromptGenerationHistory, PromptParameter,
+    PromptParameterType, PromptTemplate, PromptVersion, PromptVersionDiff, RollbackRecord,
+    TokenStats,
+};
 use prism_forge::optimizer::config::{
-    AdvancedConfig,
-    CompressionConfig,
-    ComponentsConfig,
-    ComponentContent,
-    LanguageComponent,
-    LanguageComponentWithMeta,
-    LLMParamsConfig,
-    OptimizerConfig,
-    PromptComponentData,
+    AdvancedConfig, ComponentContent, ComponentsConfig, CompressionConfig, LLMParamsConfig,
+    LanguageComponent, LanguageComponentWithMeta, OptimizerConfig, PromptComponentData,
     SessionContextConfig,
 };
 use prism_forge::optimizer::prompt_generator::{
-    EnhancedPrompt,
-    EnhancedPromptRequest,
-    ReferencedSession,
-    SessionMessage,
-};
-use prism_forge::database::models::{
-    Prompt, PromptGenerationHistory, TokenStats,
-    PromptTemplate, PromptVersion, PromptComponent, PromptComponentType,
-    PromptParameter, PromptParameterType, PromptChange, ChangeType,
-    PromptVersionDiff, ComponentDiff, LineDiff, LineChangeType,
-    ParameterDiff, MetadataDiff, RollbackRecord,
+    EnhancedPrompt, EnhancedPromptRequest, ReferencedSession, SessionMessage,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
-    let output_dir = manifest_dir.join("..").join("src").join("types").join("generated");
+    let output_dir = manifest_dir
+        .join("..")
+        .join("src")
+        .join("types")
+        .join("generated");
     fs::create_dir_all(&output_dir)?;
 
     // Optimizer config types

@@ -8,11 +8,10 @@ use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::llm::interface::{
-    LLMService, Message, MessageRole, ModelParams, ChatCompletionResponse,
-    StreamChunk,
+    ChatCompletionResponse, LLMService, Message, MessageRole, ModelParams, StreamChunk,
 };
 
 /// Google Vertex AI Public Preview 提供商客户端
@@ -37,9 +36,7 @@ impl GoogleVertexProvider {
     /// - `api_key`: Google Cloud API Key
     /// - `base_url`: API 基础 URL
     pub fn new(api_key: SecretString, base_url: String) -> Result<Self> {
-        let client = Client::builder()
-            .build()
-            .context("创建 HTTP 客户端失败")?;
+        let client = Client::builder().build().context("创建 HTTP 客户端失败")?;
 
         Ok(Self {
             client,
@@ -51,9 +48,7 @@ impl GoogleVertexProvider {
 
     /// 使用 API Key 引用创建提供商
     pub fn with_ref(api_key: SecretString, base_url: String, api_key_ref: String) -> Result<Self> {
-        let client = Client::builder()
-            .build()
-            .context("创建 HTTP 客户端失败")?;
+        let client = Client::builder().build().context("创建 HTTP 客户端失败")?;
 
         Ok(Self {
             client,
@@ -91,21 +86,15 @@ impl GoogleVertexProvider {
     ///
     /// 参考 Python 实现：只包含 contents，不包含 generation_config
     /// Google Vertex AI Public Preview API 可能拒绝包含额外参数的请求
-    fn build_request(
-        &self,
-        messages: Vec<Message>,
-        _params: ModelParams,
-    ) -> Result<VertexRequest> {
+    fn build_request(&self, messages: Vec<Message>, _params: ModelParams) -> Result<VertexRequest> {
         // 将所有消息转换为 Google 格式
-        let contents: Vec<GeminiContent> = messages
-            .into_iter()
-            .map(Self::convert_message)
-            .collect();
+        let contents: Vec<GeminiContent> =
+            messages.into_iter().map(Self::convert_message).collect();
 
         // 与 Python 实现保持一致：只包含 contents，不包含 generation_config
         Ok(VertexRequest {
             contents,
-            generation_config: None,  // 暂时禁用，与 Python 版本一致
+            generation_config: None, // 暂时禁用，与 Python 版本一致
         })
     }
 
@@ -161,7 +150,10 @@ impl GoogleVertexProvider {
         {
             eprintln!("[GoogleVertexProvider] Raw response (first 2000 chars):");
             eprintln!("{}", &response_text.chars().take(2000).collect::<String>());
-            eprintln!("[GoogleVertexProvider] Total response length: {} chars", response_text.len());
+            eprintln!(
+                "[GoogleVertexProvider] Total response length: {} chars",
+                response_text.len()
+            );
             eprintln!("[GoogleVertexProvider] Attempting to parse response...");
         }
 
@@ -172,12 +164,19 @@ impl GoogleVertexProvider {
         #[cfg(debug_assertions)]
         {
             if let Some(candidates) = &parsed_response.candidates {
-                eprintln!("[GoogleVertexProvider] Parsed successfully: {} candidate(s)", candidates.len());
+                eprintln!(
+                    "[GoogleVertexProvider] Parsed successfully: {} candidate(s)",
+                    candidates.len()
+                );
                 for (i, candidate) in candidates.iter().enumerate() {
                     if let Some(content) = &candidate.content {
                         if let Some(first_part) = content.parts.first() {
                             if let GeminiPart::Text { text } = first_part {
-                                eprintln!("  - Candidate {} text (first 100 chars): {}...", i, &text.chars().take(100).collect::<String>());
+                                eprintln!(
+                                    "  - Candidate {} text (first 100 chars): {}...",
+                                    i,
+                                    &text.chars().take(100).collect::<String>()
+                                );
                             }
                         }
                     }
@@ -220,54 +219,59 @@ impl GoogleVertexProvider {
             ));
         }
 
-        let stream = response.bytes_stream().map(|chunk_result| match chunk_result {
-            Ok(chunk) => {
-                let text = String::from_utf8_lossy(&chunk);
-                // 解析 SSE 格式
-                for line in text.lines() {
-                    if line.starts_with("data:") {
-                        let json_str = line[5..].trim();
-                        if json_str.is_empty() {
-                            continue;
-                        }
+        let stream = response
+            .bytes_stream()
+            .map(|chunk_result| match chunk_result {
+                Ok(chunk) => {
+                    let text = String::from_utf8_lossy(&chunk);
+                    // 解析 SSE 格式
+                    for line in text.lines() {
+                        if line.starts_with("data:") {
+                            let json_str = line[5..].trim();
+                            if json_str.is_empty() {
+                                continue;
+                            }
 
-                        if let Ok(event) = serde_json::from_str::<StreamResponse>(json_str) {
-                            if let Some(candidates) = event.candidates {
-                                if !candidates.is_empty() {
-                                    if let Some(content) = &candidates[0].content {
-                                        if !content.parts.is_empty() {
-                                            if let GeminiPart::Text { text } = &content.parts[0] {
-                                                return Ok(StreamChunk {
-                                                    delta: text.clone(),
-                                                    is_finish: false,
-                                                    finish_reason: None,
-                                                });
+                            if let Ok(event) = serde_json::from_str::<StreamResponse>(json_str) {
+                                if let Some(candidates) = event.candidates {
+                                    if !candidates.is_empty() {
+                                        if let Some(content) = &candidates[0].content {
+                                            if !content.parts.is_empty() {
+                                                if let GeminiPart::Text { text } = &content.parts[0]
+                                                {
+                                                    return Ok(StreamChunk {
+                                                        delta: text.clone(),
+                                                        is_finish: false,
+                                                        finish_reason: None,
+                                                    });
+                                                }
                                             }
                                         }
-                                    }
-                                    // 检查 finish_reason
-                                    if let Some(finish_reason) = &candidates[0].finish_reason {
-                                        if finish_reason == "STOP" || finish_reason == "MAX_TOKENS" {
-                                            return Ok(StreamChunk {
-                                                delta: String::new(),
-                                                is_finish: true,
-                                                finish_reason: Some(finish_reason.clone()),
-                                            });
+                                        // 检查 finish_reason
+                                        if let Some(finish_reason) = &candidates[0].finish_reason {
+                                            if finish_reason == "STOP"
+                                                || finish_reason == "MAX_TOKENS"
+                                            {
+                                                return Ok(StreamChunk {
+                                                    delta: String::new(),
+                                                    is_finish: true,
+                                                    finish_reason: Some(finish_reason.clone()),
+                                                });
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
+                    Ok(StreamChunk {
+                        delta: String::new(),
+                        is_finish: false,
+                        finish_reason: None,
+                    })
                 }
-                Ok(StreamChunk {
-                    delta: String::new(),
-                    is_finish: false,
-                    finish_reason: None,
-                })
-            }
-            Err(e) => Err(anyhow::anyhow!("流式响应错误: {}", e)),
-        });
+                Err(e) => Err(anyhow::anyhow!("流式响应错误: {}", e)),
+            });
 
         Ok(Box::new(Box::pin(stream)))
     }
@@ -296,7 +300,10 @@ impl LLMService for GoogleVertexProvider {
         // 打印请求体
         #[cfg(debug_assertions)]
         {
-            eprintln!("  - request body: {}", serde_json::to_string_pretty(&request).unwrap_or_default());
+            eprintln!(
+                "  - request body: {}",
+                serde_json::to_string_pretty(&request).unwrap_or_default()
+            );
         }
 
         let response = self.send_request(&model, &request).await?;
@@ -330,9 +337,7 @@ impl LLMService for GoogleVertexProvider {
             .and_then(|candidates| candidates.first())
             .and_then(|c| c.finish_reason.clone());
 
-        let usage_metadata = response
-            .usage_metadata
-            .as_ref();
+        let usage_metadata = response.usage_metadata.as_ref();
 
         Ok(ChatCompletionResponse {
             content,
@@ -373,12 +378,8 @@ struct GeminiContent {
 #[serde(untagged)]
 enum GeminiPart {
     Text { text: String },
-    InlineData {
-        inline_data: InlineData,
-    },
-    FileData {
-        file_data: FileData,
-    },
+    InlineData { inline_data: InlineData },
+    FileData { file_data: FileData },
 }
 
 /// 内联数据（用于图片等）
@@ -468,8 +469,8 @@ impl<'de> Deserialize<'de> for VertexResponse {
             let mut model_name = None;
 
             for item in array {
-                let parsed: ArrayFormatItem = serde_json::from_value(item.clone())
-                    .map_err(serde::de::Error::custom)?;
+                let parsed: ArrayFormatItem =
+                    serde_json::from_value(item.clone()).map_err(serde::de::Error::custom)?;
 
                 // 合并候选结果
                 if let Some(candidates) = parsed.candidates {
@@ -488,14 +489,18 @@ impl<'de> Deserialize<'de> for VertexResponse {
             }
 
             Ok(VertexResponse {
-                candidates: if all_candidates.is_empty() { None } else { Some(all_candidates) },
+                candidates: if all_candidates.is_empty() {
+                    None
+                } else {
+                    Some(all_candidates)
+                },
                 usage_metadata: combined_usage,
                 model: model_name,
             })
         } else {
             // 对象格式
-            let obj: ObjectFormat = serde_json::from_value(value)
-                .map_err(serde::de::Error::custom)?;
+            let obj: ObjectFormat =
+                serde_json::from_value(value).map_err(serde::de::Error::custom)?;
             Ok(VertexResponse {
                 candidates: obj.candidates,
                 usage_metadata: obj.usage_metadata,

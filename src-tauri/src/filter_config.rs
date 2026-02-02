@@ -134,8 +134,7 @@ impl FilterConfigManager {
     pub fn new(config_path: PathBuf) -> Result<Self> {
         // 确保配置目录存在
         if let Some(parent) = config_path.parent() {
-            fs::create_dir_all(parent)
-                .context("创建配置目录失败")?;
+            fs::create_dir_all(parent).context("创建配置目录失败")?;
         }
 
         // 加载配置
@@ -169,12 +168,11 @@ impl FilterConfigManager {
                     #[cfg(debug_assertions)]
                     log::warn!("未找到 APPDATA 环境变量，使用默认路径");
 
-                    let username = std::env::var("USERNAME")
-                        .unwrap_or_else(|_| {
-                            #[cfg(debug_assertions)]
-                            log::warn!("未找到 USERNAME 环境变量，使用默认值");
-                            "Default".to_string()
-                        });
+                    let username = std::env::var("USERNAME").unwrap_or_else(|_| {
+                        #[cfg(debug_assertions)]
+                        log::warn!("未找到 USERNAME 环境变量，使用默认值");
+                        "Default".to_string()
+                    });
 
                     let mut path = PathBuf::from("C:");
                     path.push("Users");
@@ -214,7 +212,10 @@ impl FilterConfigManager {
         // 如果配置文件不存在，创建默认配置
         if !path.exists() {
             #[cfg(debug_assertions)]
-            eprintln!("[FilterConfigManager] 配置文件不存在，创建默认配置: {:?}", path);
+            eprintln!(
+                "[FilterConfigManager] 配置文件不存在，创建默认配置: {:?}",
+                path
+            );
 
             let default_config = FilterConfig::default();
             Self::save_config_to_file(path, &default_config)?;
@@ -222,26 +223,26 @@ impl FilterConfigManager {
         }
 
         // 读取配置文件
-        let content = fs::read_to_string(path)
-            .context("读取配置文件失败")?;
+        let content = fs::read_to_string(path).context("读取配置文件失败")?;
 
         // 解析 JSON
         let config: FilterConfig = serde_json::from_str(&content)
             .with_context(|| format!("解析配置文件失败: {}", path.display()))?;
 
         #[cfg(debug_assertions)]
-        eprintln!("[FilterConfigManager] 加载配置成功，规则数量: {}", config.rules.len());
+        eprintln!(
+            "[FilterConfigManager] 加载配置成功，规则数量: {}",
+            config.rules.len()
+        );
 
         Ok(config)
     }
 
     /// 保存配置到文件
     fn save_config_to_file(path: &PathBuf, config: &FilterConfig) -> Result<()> {
-        let json = serde_json::to_string_pretty(config)
-            .context("序列化配置失败")?;
+        let json = serde_json::to_string_pretty(config).context("序列化配置失败")?;
 
-        fs::write(path, json)
-            .context("写入配置文件失败")?;
+        fs::write(path, json).context("写入配置文件失败")?;
 
         #[cfg(debug_assertions)]
         eprintln!("[FilterConfigManager] 配置已保存: {:?}", path);
@@ -319,11 +320,11 @@ impl FilterConfigManager {
     /// # 返回
     /// 返回 true 表示包含命令系统标签
     fn contains_command_tags(content: &str) -> bool {
-        content.contains("<local-command-caveat>") ||
-        content.contains("<local-command-stdout>") ||
-        content.contains("<command-name>") ||
-        content.contains("<command-message>") ||
-        content.contains("<command-args>")
+        content.contains("<local-command-caveat>")
+            || content.contains("<local-command-stdout>")
+            || content.contains("<command-name>")
+            || content.contains("<command-message>")
+            || content.contains("<command-args>")
     }
 
     /// 检测消息是否为纯系统生成的命令消息
@@ -349,7 +350,9 @@ impl FilterConfigManager {
 
         // 安全检查：如果内容看起来像 JSON 格式，跳过硬编码检测
         // 这样可以避免误过滤包含 caveat 文本的真正用户/助手消息
-        let looks_like_json = content.contains("{\"") || content.contains("\"role\":") || content.contains("\"content\":");
+        let looks_like_json = content.contains("{\"")
+            || content.contains("\"role\":")
+            || content.contains("\"content\":");
         if !looks_like_json {
             // 只有在纯文本格式中才应用硬编码检测
             // 模式 1: local-command-caveat 的完整警告文本
@@ -392,11 +395,16 @@ impl FilterConfigManager {
         #[cfg(debug_assertions)]
         {
             if is_system {
-                eprintln!("[FilterConfigManager] 检测为系统命令消息: 去除标签后剩余 {} 字符: '{}'",
-                    cleaned.len(), cleaned);
+                eprintln!(
+                    "[FilterConfigManager] 检测为系统命令消息: 去除标签后剩余 {} 字符: '{}'",
+                    cleaned.len(),
+                    cleaned
+                );
             } else {
-                eprintln!("[FilterConfigManager] 检测为包含标签的用户消息: 去除标签后剩余 {} 字符",
-                    cleaned.len());
+                eprintln!(
+                    "[FilterConfigManager] 检测为包含标签的用户消息: 去除标签后剩余 {} 字符",
+                    cleaned.len()
+                );
             }
         }
 
@@ -546,7 +554,10 @@ impl FilterConfigManager {
             if let Some(stop_sequence) = parsed.get("stop_sequence") {
                 if !stop_sequence.is_null() {
                     #[cfg(debug_assertions)]
-                    eprintln!("[FilterConfigManager] 检测到消息对象停止序列标记，保护不过滤: {:?}", stop_sequence);
+                    eprintln!(
+                        "[FilterConfigManager] 检测到消息对象停止序列标记，保护不过滤: {:?}",
+                        stop_sequence
+                    );
                     return true;
                 }
             }
@@ -643,12 +654,12 @@ impl FilterConfigManager {
         // assistant 消息中可能包含命令标签示例（如解释、说明），这些都是有用的内容
         if Self::is_assistant_message(content) {
             // 检查是否匹配命令标签过滤规则
-            let matches_command_tag_rule = self.config.rules.iter()
+            let matches_command_tag_rule = self
+                .config
+                .rules
+                .iter()
                 .filter(|r| r.enabled)
-                .any(|r| {
-                    r.match_type == MatchType::Contains &&
-                    content.contains(&r.pattern)
-                });
+                .any(|r| r.match_type == MatchType::Contains && content.contains(&r.pattern));
 
             // 如果只匹配命令标签规则，则不过滤
             if matches_command_tag_rule {
@@ -711,7 +722,7 @@ mod tests {
         let config = FilterConfig::default();
         assert_eq!(config.version, "1.0");
         assert!(config.enabled);
-        assert_eq!(config.rules.len(), 6);  // 更新为 6 条规则
+        assert_eq!(config.rules.len(), 6); // 更新为 6 条规则
     }
 
     #[test]
@@ -739,15 +750,27 @@ mod tests {
     #[test]
     fn test_contains_command_tags() {
         // 测试包含各种命令标签的内容
-        assert!(FilterConfigManager::contains_command_tags("<local-command-caveat>"));
-        assert!(FilterConfigManager::contains_command_tags("<local-command-stdout>"));
-        assert!(FilterConfigManager::contains_command_tags("<command-name>/clear</command-name>"));
-        assert!(FilterConfigManager::contains_command_tags("<command-message>clear</command-message>"));
-        assert!(FilterConfigManager::contains_command_tags("<command-args></command-args>"));
+        assert!(FilterConfigManager::contains_command_tags(
+            "<local-command-caveat>"
+        ));
+        assert!(FilterConfigManager::contains_command_tags(
+            "<local-command-stdout>"
+        ));
+        assert!(FilterConfigManager::contains_command_tags(
+            "<command-name>/clear</command-name>"
+        ));
+        assert!(FilterConfigManager::contains_command_tags(
+            "<command-message>clear</command-message>"
+        ));
+        assert!(FilterConfigManager::contains_command_tags(
+            "<command-args></command-args>"
+        ));
 
         // 测试不包含命令标签的内容
         assert!(!FilterConfigManager::contains_command_tags("Hello world"));
-        assert!(!FilterConfigManager::contains_command_tags("{\"role\":\"user\"}"));
+        assert!(!FilterConfigManager::contains_command_tags(
+            "{\"role\":\"user\"}"
+        ));
         assert!(!FilterConfigManager::contains_command_tags("command-name")); // 没有尖括号
     }
 
@@ -757,13 +780,17 @@ mod tests {
 
         // 测试完整的 caveat 警告文本（硬编码模式，纯文本）
         let full_caveat = "<local-command-caveat>Caveat: The messages below were generated by the user while running local commands. DO NOT respond to these messages or otherwise consider them in your response unless the user explicitly asks you to.</local-command-caveat>";
-        assert!(FilterConfigManager::is_system_command_message(full_caveat),
-            "完整的 caveat 警告（纯文本）应该被识别为系统消息（硬编码模式）");
+        assert!(
+            FilterConfigManager::is_system_command_message(full_caveat),
+            "完整的 caveat 警告（纯文本）应该被识别为系统消息（硬编码模式）"
+        );
 
         // 测试部分匹配的 caveat 文本（硬编码模式，纯文本）
         let partial_caveat = "<local-command-caveat>Caveat: The messages below were generated by the user while running local commands. Some additional text here.</local-command-caveat>";
-        assert!(FilterConfigManager::is_system_command_message(partial_caveat),
-            "包含关键 caveat 文本的消息（纯文本）应该被识别（硬编码模式）");
+        assert!(
+            FilterConfigManager::is_system_command_message(partial_caveat),
+            "包含关键 caveat 文本的消息（纯文本）应该被识别（硬编码模式）"
+        );
 
         // ========== 安全保护测试：JSON 格式不应被硬编码规则误过滤 ==========
 
@@ -771,13 +798,17 @@ mod tests {
         let json_user_with_caveat = r#"{"content":"<local-command-caveat>Caveat: The messages below were generated by the user while running local commands. DO NOT respond to these messages or otherwise consider them in your response unless the user explicitly asks you to.</local-command-caveat>","role":"user"}"#;
         // JSON 格式会跳过硬编码检测，然后走长度判断逻辑
         // 由于去除标签后内容很长，不会被识别为系统消息
-        assert!(!FilterConfigManager::is_system_command_message(json_user_with_caveat),
-            "JSON 格式的消息即使包含 caveat 文本也不应被硬编码规则过滤（安全保护）");
+        assert!(
+            !FilterConfigManager::is_system_command_message(json_user_with_caveat),
+            "JSON 格式的消息即使包含 caveat 文本也不应被硬编码规则过滤（安全保护）"
+        );
 
         // JSON 格式的 assistant 消息包含 caveat 文本（应该被保护）
         let json_assistant_with_caveat = r#"{"message":{"role":"assistant","content":"Warning: <local-command-caveat>Caveat: The messages below were generated by the user while running local commands</local-command-caveat> This is important context."}}"#;
-        assert!(!FilterConfigManager::is_system_command_message(json_assistant_with_caveat),
-            "JSON 格式的 assistant 消息即使包含 caveat 文本也不应被硬编码规则过滤");
+        assert!(
+            !FilterConfigManager::is_system_command_message(json_assistant_with_caveat),
+            "JSON 格式的 assistant 消息即使包含 caveat 文本也不应被硬编码规则过滤"
+        );
 
         // ========== 长度判断测试 ==========
 
@@ -793,15 +824,21 @@ mod tests {
 
         // 测试包含命令标签但有其他内容的消息（不应该被识别为系统消息）
         let user_discussing_command = "请帮我分析 <command-name>/clear</command-name> 命令的作用是什么？它会在什么情况下被触发？";
-        assert!(!FilterConfigManager::is_system_command_message(user_discussing_command),
-            "用户讨论命令标签的消息应该被保护");
+        assert!(
+            !FilterConfigManager::is_system_command_message(user_discussing_command),
+            "用户讨论命令标签的消息应该被保护"
+        );
 
         let long_content_with_tag = "这是一个很长的用户输入内容，虽然包含 <command-name> 标签，但是明显是用户自己输入的文本，应该被保护而不是被过滤掉";
-        assert!(!FilterConfigManager::is_system_command_message(long_content_with_tag),
-            "包含标签但内容丰富的消息应该被保护");
+        assert!(
+            !FilterConfigManager::is_system_command_message(long_content_with_tag),
+            "包含标签但内容丰富的消息应该被保护"
+        );
 
         // 测试不包含命令标签的普通内容
-        assert!(!FilterConfigManager::is_system_command_message("Hello world"));
+        assert!(!FilterConfigManager::is_system_command_message(
+            "Hello world"
+        ));
     }
 
     #[test]
@@ -811,7 +848,8 @@ mod tests {
         assert!(FilterConfigManager::is_simple_user_message(simple_user));
 
         // 测试包含额外字段的简单 user 消息
-        let user_with_extra = r#"{"message":{"role":"user","content":"test","timestamp":"2026-01-20"}}"#;
+        let user_with_extra =
+            r#"{"message":{"role":"user","content":"test","timestamp":"2026-01-20"}}"#;
         assert!(FilterConfigManager::is_simple_user_message(user_with_extra));
 
         // 测试非 user 角色消息（不应该被保护）
@@ -819,7 +857,8 @@ mod tests {
         assert!(!FilterConfigManager::is_simple_user_message(assistant_msg));
 
         // 测试嵌套的 content 数组（不是简单格式）
-        let complex_user = r#"{"message":{"role":"user","content":[{"type":"text","text":"Hello"}]}}"#;
+        let complex_user =
+            r#"{"message":{"role":"user","content":[{"type":"text","text":"Hello"}]}}"#;
         // 这种格式虽然有 role 和 content，但 content 是数组，仍然有 content 字段
         assert!(FilterConfigManager::is_simple_user_message(complex_user));
 
@@ -832,26 +871,36 @@ mod tests {
     fn test_is_simple_user_message_with_command_tags() {
         // 测试纯系统命令消息（不应该被保护）
         let user_with_caveat = r#"{"content":"<local-command-caveat>Caveat: ...</local-command-caveat>","role":"user"}"#;
-        assert!(!FilterConfigManager::is_simple_user_message(user_with_caveat),
-            "纯系统命令消息不应该被保护");
+        assert!(
+            !FilterConfigManager::is_simple_user_message(user_with_caveat),
+            "纯系统命令消息不应该被保护"
+        );
 
         let user_with_stdout = r#"{"message":{"role":"user","content":"<local-command-stdout></local-command-stdout>"}}"#;
-        assert!(!FilterConfigManager::is_simple_user_message(user_with_stdout),
-            "纯系统命令消息不应该被保护");
+        assert!(
+            !FilterConfigManager::is_simple_user_message(user_with_stdout),
+            "纯系统命令消息不应该被保护"
+        );
 
         let user_with_command_name = r#"{"role":"user","content":"<command-name>/clear</command-name>\n            <command-message>clear</command-message>\n            <command-args></command-args>"}"#;
-        assert!(!FilterConfigManager::is_simple_user_message(user_with_command_name),
-            "纯系统命令消息不应该被保护");
+        assert!(
+            !FilterConfigManager::is_simple_user_message(user_with_command_name),
+            "纯系统命令消息不应该被保护"
+        );
 
         // 测试用户讨论命令标签（应该被保护）
         let user_discussing_command = r#"{"message":{"role":"user","content":"请帮我分析 <command-name>/clear</command-name> 命令的作用是什么？它会在什么情况下被触发？这个命令很重要。"}}"#;
-        assert!(FilterConfigManager::is_simple_user_message(user_discussing_command),
-            "用户讨论命令标签的消息应该被保护");
+        assert!(
+            FilterConfigManager::is_simple_user_message(user_discussing_command),
+            "用户讨论命令标签的消息应该被保护"
+        );
 
         // 测试包含少量标签但主要是用户内容的消息（应该被保护）
         let user_with_mixed_content = r#"{"message":{"role":"user","content":"Execute: <command-name>/test</command-name> 后会发生什么？请详细说明。"}}"#;
-        assert!(FilterConfigManager::is_simple_user_message(user_with_mixed_content),
-            "主要是用户内容的消息应该被保护");
+        assert!(
+            FilterConfigManager::is_simple_user_message(user_with_mixed_content),
+            "主要是用户内容的消息应该被保护"
+        );
     }
 
     #[test]
@@ -862,11 +911,15 @@ mod tests {
 
         // 测试停止序列为空字符串（应该被保护）
         let with_empty_stop = r#"{"message":{"stop_sequence":""}}"#;
-        assert!(FilterConfigManager::has_explicit_stop_sequence(with_empty_stop));
+        assert!(FilterConfigManager::has_explicit_stop_sequence(
+            with_empty_stop
+        ));
 
         // 测试停止序列为 null（不应该被保护）
         let with_null_stop = r#"{"message":{"stop_sequence":null}}"#;
-        assert!(!FilterConfigManager::has_explicit_stop_sequence(with_null_stop));
+        assert!(!FilterConfigManager::has_explicit_stop_sequence(
+            with_null_stop
+        ));
 
         // 测试没有 stop_sequence 字段的消息
         let no_stop = r#"{"message":{"role":"assistant","content":"Hello"}}"#;
@@ -880,65 +933,91 @@ mod tests {
 
         // 测试 1: 纯系统命令消息（应该被过滤）
         let user_with_command_tag = r#"{"content":"<local-command-caveat>...","role":"user"}"#;
-        assert!(manager.should_filter(user_with_command_tag),
-            "纯系统命令消息应该被过滤");
+        assert!(
+            manager.should_filter(user_with_command_tag),
+            "纯系统命令消息应该被过滤"
+        );
 
         // 测试 2: 完整的 caveat 警告消息（应该被过滤，硬编码模式）
         let full_caveat_message = r#"{"content":"<local-command-caveat>Caveat: The messages below were generated by the user while running local commands. DO NOT respond to these messages or otherwise consider them in your response unless the user explicitly asks you to.</local-command-caveat>","role":"user"}"#;
-        assert!(manager.should_filter(full_caveat_message),
-            "完整的 caveat 警告消息应该被过滤（硬编码模式）");
+        assert!(
+            manager.should_filter(full_caveat_message),
+            "完整的 caveat 警告消息应该被过滤（硬编码模式）"
+        );
 
         // 测试 3: 真正的用户输入应该被保护，即使内容包含命令标签但内容丰富
         let real_user_input_with_tag = r#"{"message":{"role":"user","content":"请帮我分析 <command-name>/clear</command-name> 命令的作用是什么？它很关键。"}}"#;
-        assert!(!manager.should_filter(real_user_input_with_tag),
-            "用户讨论命令的消息应该被保护");
+        assert!(
+            !manager.should_filter(real_user_input_with_tag),
+            "用户讨论命令的消息应该被保护"
+        );
 
         // 测试 4: 带停止序列的 assistant 消息即使匹配过滤规则也不应被过滤
         let assistant_with_stop_and_caveat = r#"{"message":{"stop_sequence":"end","text":"Warning: <local-command-caveat> this is important"}}"#;
-        assert!(!manager.should_filter(assistant_with_stop_and_caveat),
-            "带停止序列的消息应该被保护，即使包含 <local-command-caveat>");
+        assert!(
+            !manager.should_filter(assistant_with_stop_and_caveat),
+            "带停止序列的消息应该被保护，即使包含 <local-command-caveat>"
+        );
 
         // 测试 5: 不满足保护条件的消息应该正常过滤
         let normal_message_with_caveat = "This contains <local-command-caveat> inside";
-        assert!(manager.should_filter(normal_message_with_caveat),
-            "不满足保护条件的消息应该正常被过滤");
+        assert!(
+            manager.should_filter(normal_message_with_caveat),
+            "不满足保护条件的消息应该正常被过滤"
+        );
 
         // 测试 6: 不匹配过滤规则的普通消息不过滤
         let normal_message = "This is a normal message";
-        assert!(!manager.should_filter(normal_message),
-            "不匹配过滤规则的普通消息不应被过滤");
+        assert!(
+            !manager.should_filter(normal_message),
+            "不匹配过滤规则的普通消息不应被过滤"
+        );
 
         // 测试 7: 普通用户输入（不包含标签）应该被保护
-        let normal_user_input = r#"{"message":{"role":"user","content":"I want to execute a command"}}"#;
-        assert!(!manager.should_filter(normal_user_input),
-            "普通用户输入应该被保护");
+        let normal_user_input =
+            r#"{"message":{"role":"user","content":"I want to execute a command"}}"#;
+        assert!(
+            !manager.should_filter(normal_user_input),
+            "普通用户输入应该被保护"
+        );
 
         // 测试 8: assistant 消息包含命令标签示例不应该被过滤
         // assistant 消息不受命令标签过滤规则的影响
         // 因为这些标签可能是有用的示例或说明
         let assistant_with_command_tag_example = r#"{"message":{"role":"assistant","content":"这是一个示例：<local-command-caveat>Caveat: The messages below were generated by the user while running local commands</local-command-caveat>"}}"#;
-        assert!(!manager.should_filter(assistant_with_command_tag_example),
-            "assistant 消息包含命令标签示例不应该被过滤");
+        assert!(
+            !manager.should_filter(assistant_with_command_tag_example),
+            "assistant 消息包含命令标签示例不应该被过滤"
+        );
 
         // 测试 9: assistant 消息包含多种命令标签不应该被过滤
         let assistant_with_multiple_tags = r#"{"message":{"role":"assistant","content":"命令示例：<command-name>/clear</command-name> 和 <local-command-stdout>output</local-command-stdout>"}}"#;
-        assert!(!manager.should_filter(assistant_with_multiple_tags),
-            "assistant 消息包含多个命令标签不应该被过滤");
+        assert!(
+            !manager.should_filter(assistant_with_multiple_tags),
+            "assistant 消息包含多个命令标签不应该被过滤"
+        );
 
         // 测试 10: assistant 消息（消息对象结构）包含命令标签不应该被过滤
         let assistant_message_obj_with_tag = r#"{"role":"assistant","content":"分析：<local-command-caveat>这是命令警告</local-command-caveat>"}"#;
-        assert!(!manager.should_filter(assistant_message_obj_with_tag),
-            "assistant 消息对象包含命令标签不应该被过滤");
+        assert!(
+            !manager.should_filter(assistant_message_obj_with_tag),
+            "assistant 消息对象包含命令标签不应该被过滤"
+        );
 
         // 测试 11: user 消息包含命令标签且内容丰富应该被保护（确保原有逻辑不受影响）
         let user_with_tag_and_content = r#"{"message":{"role":"user","content":"请帮我分析 <command-name>/clear</command-name> 命令的作用是什么？它很关键。"}}"#;
-        assert!(!manager.should_filter(user_with_tag_and_content),
-            "user 消息包含命令标签但内容丰富应该被保护");
+        assert!(
+            !manager.should_filter(user_with_tag_and_content),
+            "user 消息包含命令标签但内容丰富应该被保护"
+        );
 
         // 测试 12: assistant 消息不包含命令标签应该被过滤（因为不是 user 类型）
-        let assistant_normal = r#"{"message":{"role":"assistant","content":"这是一个正常的助手回复"}}"#;
-        assert!(!manager.should_filter(assistant_normal),
-            "assistant 消息不包含命令标签不应该被过滤");
+        let assistant_normal =
+            r#"{"message":{"role":"assistant","content":"这是一个正常的助手回复"}}"#;
+        assert!(
+            !manager.should_filter(assistant_normal),
+            "assistant 消息不包含命令标签不应该被过滤"
+        );
 
         // 测试 13: 真实的 assistant 消息 summary 格式包含命令标签示例（实际场景测试）
         // 这个测试模拟真实的 summary 格式（从 message 字段序列化而来）
@@ -948,16 +1027,22 @@ mod tests {
 
         // assistant 消息即使包含命令标签（作为示例），也不应该被过滤
         // 因为这些标签出现在 assistant 的回复文本中，是有用的说明内容
-        assert!(!manager.should_filter(real_assistant_summary),
-            "包含命令标签示例的 assistant 消息应该被保留（不过滤）");
+        assert!(
+            !manager.should_filter(real_assistant_summary),
+            "包含命令标签示例的 assistant 消息应该被保留（不过滤）"
+        );
 
         // 测试 14: 验证 is_assistant_message 方法
         let assistant_msg = r#"{"message":{"role":"assistant","content":"回复内容"}}"#;
-        assert!(FilterConfigManager::is_assistant_message(assistant_msg),
-            "应该正确识别 assistant 消息");
+        assert!(
+            FilterConfigManager::is_assistant_message(assistant_msg),
+            "应该正确识别 assistant 消息"
+        );
 
         let user_msg = r#"{"message":{"role":"user","content":"问题内容"}}"#;
-        assert!(!FilterConfigManager::is_assistant_message(user_msg),
-            "user 消息不应该被识别为 assistant 消息");
+        assert!(
+            !FilterConfigManager::is_assistant_message(user_msg),
+            "user 消息不应该被识别为 assistant 消息"
+        );
     }
 }

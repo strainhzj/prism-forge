@@ -6,15 +6,13 @@
 //! **Feature: fix-command-registration**
 //! **Validates: Requirements 1.2, 2.2, 2.4**
 
+use crate::command_registry::errors::{ModuleError, ModuleErrorType};
+use crate::command_registry::{
+    CommandInfo, CommandRegistry, DiagnosticReport, DiagnosticTool, EnhancedErrorHandler,
+    InitState, Module, ModuleInitializer,
+};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::SystemTime;
-use crate::command_registry::{
-    CommandRegistry, CommandInfo,
-    ModuleInitializer, Module, InitState,
-    DiagnosticTool, DiagnosticReport,
-    EnhancedErrorHandler,
-};
-use crate::command_registry::errors::{ModuleError, ModuleErrorType};
 
 /// Startup validation result
 #[derive(Debug, Clone)]
@@ -52,7 +50,7 @@ impl StartupValidationResult {
 }
 
 /// Application startup manager
-/// 
+///
 /// Manages the initialization of modules and registration of commands
 /// during application startup.
 pub struct StartupManager {
@@ -73,9 +71,7 @@ impl StartupManager {
     fn format_module_error(error: &ModuleError) -> String {
         format!(
             "[{:?}] {}: {}",
-            error.error_type,
-            error.module_name,
-            error.message
+            error.error_type, error.module_name, error.message
         )
     }
 
@@ -100,33 +96,38 @@ impl StartupManager {
 
     /// Register a module with the startup manager
     pub fn register_module(&self, module: Box<dyn Module>) -> Result<(), ModuleError> {
-        let mut initializer = self.module_initializer.lock()
-            .map_err(|e| ModuleError::new(
+        let mut initializer = self.module_initializer.lock().map_err(|e| {
+            ModuleError::new(
                 "startup".to_string(),
                 format!("Failed to acquire lock: {}", e),
                 ModuleErrorType::InitializationFailed,
-            ))?;
+            )
+        })?;
         initializer.register_module(module)
     }
 
     /// Initialize all registered modules
     pub fn initialize_modules(&self) -> Result<(), Vec<ModuleError>> {
-        let mut initializer = self.module_initializer.lock()
-            .map_err(|e| vec![ModuleError::new(
+        let mut initializer = self.module_initializer.lock().map_err(|e| {
+            vec![ModuleError::new(
                 "startup".to_string(),
                 format!("Failed to acquire lock: {}", e),
                 ModuleErrorType::InitializationFailed,
-            )])?;
+            )]
+        })?;
         initializer.initialize_all_with_recovery()
     }
 
     /// Register all application commands
-    pub fn register_commands(&self) -> Result<(), Vec<crate::command_registry::errors::CommandError>> {
-        let mut registry = self.command_registry.write()
-            .map_err(|e| vec![crate::command_registry::errors::CommandError::new(
+    pub fn register_commands(
+        &self,
+    ) -> Result<(), Vec<crate::command_registry::errors::CommandError>> {
+        let mut registry = self.command_registry.write().map_err(|e| {
+            vec![crate::command_registry::errors::CommandError::new(
                 format!("Failed to acquire lock: {}", e),
                 crate::command_registry::errors::ErrorType::RegistrationFailed,
-            )])?;
+            )]
+        })?;
 
         let mut errors = Vec::new();
 
@@ -134,9 +135,9 @@ impl StartupManager {
         let commands = get_all_command_definitions();
 
         for (name, dependencies) in commands {
-            let command_info = CommandInfo::with_dependencies(name.clone(), dependencies)
-                .mark_registered();
-            
+            let command_info =
+                CommandInfo::with_dependencies(name.clone(), dependencies).mark_registered();
+
             if let Err(e) = registry.register_command(command_info) {
                 errors.push(e);
             }
@@ -153,10 +154,12 @@ impl StartupManager {
     pub fn verify_commands(&self) -> Vec<crate::command_registry::errors::CommandError> {
         let registry = match self.command_registry.read() {
             Ok(r) => r,
-            Err(_) => return vec![crate::command_registry::errors::CommandError::new(
-                "Failed to acquire lock".to_string(),
-                crate::command_registry::errors::ErrorType::ValidationFailed,
-            )],
+            Err(_) => {
+                return vec![crate::command_registry::errors::CommandError::new(
+                    "Failed to acquire lock".to_string(),
+                    crate::command_registry::errors::ErrorType::ValidationFailed,
+                )]
+            }
         };
         registry.verify_all_commands()
     }
@@ -231,13 +234,13 @@ impl StartupManager {
     pub fn run_diagnostics(&self) -> Option<DiagnosticReport> {
         let registry = self.command_registry.read().ok()?;
         let initializer = self.module_initializer.lock().ok()?;
-        
+
         // Create a diagnostic tool with Arc references
         let registry_arc = Arc::new(registry.clone());
         let initializer_arc = Arc::new(ModuleInitializer::new()); // Create a new one for diagnostics
         drop(registry);
         drop(initializer);
-        
+
         let tool = DiagnosticTool::new(registry_arc, initializer_arc);
         Some(tool.run_full_diagnostic())
     }
@@ -250,29 +253,25 @@ impl Default for StartupManager {
 }
 
 /// Get all command definitions with their dependencies
-/// 
+///
 /// This function returns a list of all Tauri commands that should be registered,
 /// along with their module dependencies.
 pub fn get_all_command_definitions() -> Vec<(String, Vec<String>)> {
     vec![
         // Core commands
         ("greet".to_string(), vec![]),
-
         // Provider management commands - 无模块依赖（内部使用 LLMClientManager）
         ("cmd_get_providers".to_string(), vec![]),
         ("cmd_save_provider".to_string(), vec![]),
         ("cmd_delete_provider".to_string(), vec![]),
         ("cmd_set_active_provider".to_string(), vec![]),
         ("cmd_test_provider_connection".to_string(), vec![]),
-
         // Token counting - 无依赖
         ("count_prompt_tokens".to_string(), vec![]),
-
         // Session management commands - 内部使用数据库，但不需要 Tauri State
         ("scan_sessions".to_string(), vec![]),
         ("scan_directory".to_string(), vec![]),
         ("parse_session_tree".to_string(), vec![]),
-
         // Session metadata commands - 内部使用数据库
         ("set_session_rating".to_string(), vec![]),
         ("set_session_tags".to_string(), vec![]),
@@ -281,38 +280,29 @@ pub fn get_all_command_definitions() -> Vec<(String, Vec<String>)> {
         ("archive_session".to_string(), vec![]),
         ("unarchive_session".to_string(), vec![]),
         ("get_archived_sessions".to_string(), vec![]),
-
         // File monitoring commands - 内部使用 monitor 模块
         ("start_file_watcher".to_string(), vec![]),
-
         // Log extraction commands - 内部使用 parser
         ("extract_session_log".to_string(), vec![]),
         ("export_session_log".to_string(), vec![]),
-
         // Vector search commands - 内部使用 database 和 embedding
         ("vector_search".to_string(), vec![]),
-
         // Optimization commands - 内部使用 optimizer 和 llm
         ("compress_context".to_string(), vec![]),
         ("optimize_prompt".to_string(), vec![]),
-
         // Template commands - 内部使用数据库
         ("get_meta_template".to_string(), vec![]),
         ("update_meta_template".to_string(), vec![]),
-
         // Monitored directory commands - 内部使用数据库
         ("get_monitored_directories".to_string(), vec![]),
         ("add_monitored_directory".to_string(), vec![]),
         ("remove_monitored_directory".to_string(), vec![]),
         ("toggle_monitored_directory".to_string(), vec![]),
         ("update_monitored_directory".to_string(), vec![]),
-
         // Benchmark commands - 内部使用数据库
         ("run_benchmarks".to_string(), vec![]),
-
         // Additional monitored directory commands
         ("get_sessions_by_monitored_directory".to_string(), vec![]),
-
         // Additional vector search commands
         ("semantic_search".to_string(), vec![]),
         ("find_similar_sessions".to_string(), vec![]),
@@ -350,13 +340,11 @@ impl Module for DatabaseModule {
                 eprintln!("[INFO] Database module initialized successfully");
                 Ok(())
             }
-            Err(e) => {
-                Err(ModuleError::new(
-                    "database".to_string(),
-                    format!("Failed to initialize database: {}", e),
-                    ModuleErrorType::InitializationFailed,
-                ))
-            }
+            Err(e) => Err(ModuleError::new(
+                "database".to_string(),
+                format!("Failed to initialize database: {}", e),
+                ModuleErrorType::InitializationFailed,
+            )),
         }
     }
 
@@ -373,19 +361,22 @@ impl Module for DatabaseModule {
         match crate::database::init::get_connection_shared() {
             Ok(conn) => {
                 // Try a simple query
-                let guard = conn.lock().map_err(|e| ModuleError::new(
-                    "database".to_string(),
-                    format!("Failed to acquire lock: {}", e),
-                    ModuleErrorType::HealthCheckFailed,
-                ))?;
-                
-                guard.query_row("SELECT 1", [], |_| Ok(()))
-                    .map_err(|e| ModuleError::new(
+                let guard = conn.lock().map_err(|e| {
+                    ModuleError::new(
+                        "database".to_string(),
+                        format!("Failed to acquire lock: {}", e),
+                        ModuleErrorType::HealthCheckFailed,
+                    )
+                })?;
+
+                guard.query_row("SELECT 1", [], |_| Ok(())).map_err(|e| {
+                    ModuleError::new(
                         "database".to_string(),
                         format!("Health check query failed: {}", e),
                         ModuleErrorType::HealthCheckFailed,
-                    ))?;
-                
+                    )
+                })?;
+
                 Ok(())
             }
             Err(e) => Err(ModuleError::new(
@@ -647,7 +638,7 @@ pub fn create_startup_manager() -> StartupManager {
 }
 
 /// Perform startup validation and return the result
-/// 
+///
 /// This function should be called during application startup to ensure
 /// all modules are initialized and commands are registered correctly.
 pub fn perform_startup_validation() -> StartupValidationResult {
@@ -670,7 +661,7 @@ mod tests {
     fn test_command_definitions() {
         let commands = get_all_command_definitions();
         assert!(!commands.is_empty());
-        
+
         // Verify some key commands are defined
         let command_names: Vec<&str> = commands.iter().map(|(name, _)| name.as_str()).collect();
         assert!(command_names.contains(&"get_monitored_directories"));
@@ -683,11 +674,11 @@ mod tests {
         let mut result = StartupValidationResult::new();
         assert!(result.success);
         assert!(result.errors.is_empty());
-        
+
         result.add_error("Test error".to_string());
         assert!(!result.success);
         assert_eq!(result.errors.len(), 1);
-        
+
         result.add_warning("Test warning".to_string());
         assert_eq!(result.warnings.len(), 1);
     }
@@ -706,19 +697,23 @@ mod property_tests {
     fn arb_module_name() -> impl Strategy<Value = String> {
         "[a-z][a-z0-9_]*"
             .prop_map(|s| s.to_string())
-            .prop_filter("Module name should not be empty", |s| !s.is_empty() && s.len() < 20)
+            .prop_filter("Module name should not be empty", |s| {
+                !s.is_empty() && s.len() < 20
+            })
     }
 
     /// Generate arbitrary command names
     fn arb_command_name() -> impl Strategy<Value = String> {
         "[a-z_][a-z0-9_]*"
             .prop_map(|s| s.to_string())
-            .prop_filter("Command name should not be empty", |s| !s.is_empty() && s.len() < 30)
+            .prop_filter("Command name should not be empty", |s| {
+                !s.is_empty() && s.len() < 30
+            })
     }
 
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(10))]
-        
+
         /// Property 3: Comprehensive startup validation
         /// For any system startup, all registered commands should have their dependencies verified,
         /// modules should be initialized in correct order, and each command's callability should be validated
@@ -729,31 +724,31 @@ mod property_tests {
             command_names in prop::collection::vec(arb_command_name(), 1..10)
         ) {
             let manager = StartupManager::new();
-            
+
             // Register commands with the manager
             {
                 let mut registry = manager.command_registry.write().unwrap();
                 let mut registered = HashSet::new();
-                
+
                 for name in &command_names {
                     if registered.contains(name) {
                         continue; // Skip duplicates
                     }
-                    
+
                     let command_info = CommandInfo::new(name.clone()).mark_registered();
                     let result = registry.register_command(command_info);
-                    
+
                     // Registration should succeed for valid unique names
                     prop_assert!(result.is_ok(), "Failed to register command: {}", name);
                     registered.insert(name.clone());
                 }
             }
-            
+
             // Verify all commands are registered
             {
                 let registry = manager.command_registry.read().unwrap();
                 let available = registry.list_available_commands();
-                
+
                 // All registered commands should be available
                 let registered_set: HashSet<_> = command_names.iter().cloned().collect();
                 for cmd in &registered_set {
@@ -764,19 +759,19 @@ mod property_tests {
                     );
                 }
             }
-            
+
             // Verify commands can be verified
             {
                 let registry = manager.command_registry.read().unwrap();
                 let errors = registry.verify_all_commands();
-                
+
                 // Commands without dependencies should have no verification errors
                 // (since we registered them without dependencies)
                 for cmd in &command_names {
                     let cmd_errors: Vec<_> = errors.iter()
                         .filter(|e| e.message.contains(cmd))
                         .collect();
-                    
+
                     // No errors expected for commands without dependencies
                     prop_assert!(
                         cmd_errors.is_empty(),
@@ -795,30 +790,30 @@ mod property_tests {
             module_count in 2..6usize
         ) {
             let manager = StartupManager::new();
-            
+
             // Create a chain of modules where each depends on the previous
             let module_names: Vec<String> = (0..module_count)
                 .map(|i| format!("test_module_{}", i))
                 .collect();
-            
+
             // Register modules with chain dependencies
             {
                 let mut initializer = manager.module_initializer.lock().unwrap();
-                
+
                 for (i, name) in module_names.iter().enumerate() {
                     let deps = if i > 0 {
                         vec![module_names[i - 1].clone()]
                     } else {
                         vec![]
                     };
-                    
+
                     // Create a mock module
                     struct TestModule {
                         name: String,
                         deps: Vec<String>,
                         initialized: bool,
                     }
-                    
+
                     impl Module for TestModule {
                         fn name(&self) -> &str { &self.name }
                         fn dependencies(&self) -> Vec<String> { self.deps.clone() }
@@ -829,30 +824,30 @@ mod property_tests {
                         fn health_check(&self) -> Result<(), ModuleError> { Ok(()) }
                         fn shutdown(&mut self) -> Result<(), ModuleError> { Ok(()) }
                     }
-                    
+
                     let module = Box::new(TestModule {
                         name: name.clone(),
                         deps,
                         initialized: false,
                     });
-                    
+
                     let result = initializer.register_module(module);
                     prop_assert!(result.is_ok(), "Failed to register module: {}", name);
                 }
-                
+
                 // Get initialization order
                 let order_result = initializer.get_initialization_order();
                 prop_assert!(order_result.is_ok(), "Should be able to get initialization order");
-                
+
                 let order = order_result.unwrap();
-                
+
                 // Verify order respects dependencies
                 for (i, name) in module_names.iter().enumerate() {
                     if i > 0 {
                         let dep_name = &module_names[i - 1];
                         let dep_pos = order.iter().position(|x| x == dep_name);
                         let mod_pos = order.iter().position(|x| x == name);
-                        
+
                         if let (Some(dep_idx), Some(mod_idx)) = (dep_pos, mod_pos) {
                             prop_assert!(
                                 dep_idx < mod_idx,
@@ -874,11 +869,11 @@ mod property_tests {
             dependency_names in prop::collection::vec(arb_command_name(), 1..5)
         ) {
             let manager = StartupManager::new();
-            
+
             // Register command with dependencies (but don't register the dependencies)
             {
                 let mut registry = manager.command_registry.write().unwrap();
-                
+
                 // Filter out self-dependencies and duplicates
                 let filtered_deps: Vec<String> = dependency_names.iter()
                     .filter(|d| *d != &command_name)
@@ -886,18 +881,18 @@ mod property_tests {
                     .collect::<HashSet<_>>()
                     .into_iter()
                     .collect();
-                
+
                 let command_info = CommandInfo::with_dependencies(
                     command_name.clone(),
                     filtered_deps.clone()
                 ).mark_registered();
-                
+
                 let result = registry.register_command(command_info);
                 prop_assert!(result.is_ok(), "Failed to register command with dependencies");
-                
+
                 // Verify the command - should detect missing dependencies
                 let errors = registry.verify_all_commands();
-                
+
                 // Should have errors for missing dependencies
                 if !filtered_deps.is_empty() {
                     prop_assert!(
@@ -905,11 +900,11 @@ mod property_tests {
                         "Should detect missing dependencies for command {}",
                         command_name
                     );
-                    
+
                     // Each missing dependency should be mentioned in errors
                     for dep in &filtered_deps {
-                        let dep_mentioned = errors.iter().any(|e| 
-                            e.message.contains(dep) || 
+                        let dep_mentioned = errors.iter().any(|e|
+                            e.message.contains(dep) ||
                             e.context.as_ref().map_or(false, |ctx| ctx.contains(dep))
                         );
                         prop_assert!(
@@ -931,30 +926,30 @@ mod property_tests {
             num_errors in 0..5usize
         ) {
             let mut result = StartupValidationResult::new();
-            
+
             // Add some registered commands
             for i in 0..num_commands {
                 result.registered_commands.push(format!("command_{}", i));
             }
-            
+
             // Add some errors
             for i in 0..num_errors {
                 result.add_error(format!("Error {}", i));
             }
-            
+
             // Verify consistency
             prop_assert_eq!(
                 result.registered_commands.len(),
                 num_commands,
                 "Registered commands count should match"
             );
-            
+
             prop_assert_eq!(
                 result.errors.len(),
                 num_errors,
                 "Errors count should match"
             );
-            
+
             // Success should be false if there are errors
             if num_errors > 0 {
                 prop_assert!(
@@ -962,7 +957,7 @@ mod property_tests {
                     "Success should be false when there are errors"
                 );
             }
-            
+
             // Timestamp should be valid
             prop_assert!(
                 result.timestamp <= SystemTime::now(),

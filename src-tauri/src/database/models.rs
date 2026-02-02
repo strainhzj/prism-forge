@@ -2,9 +2,9 @@
 //!
 //! 定义 API 提供商的数据结构，支持多种 LLM 服务
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-use anyhow::Result;
 
 /// API 提供商类型枚举
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,11 +152,7 @@ pub struct ApiProvider {
 
 impl ApiProvider {
     /// 创建新的 API 提供商
-    pub fn new(
-        provider_type: ApiProviderType,
-        name: String,
-        base_url: Option<String>,
-    ) -> Self {
+    pub fn new(provider_type: ApiProviderType, name: String, base_url: Option<String>) -> Self {
         Self {
             id: None,
             provider_type,
@@ -265,12 +261,30 @@ mod tests {
 
     #[test]
     fn test_provider_type_default_url() {
-        assert_eq!(ApiProviderType::OpenAI.default_base_url(), "https://api.openai.com/v1");
-        assert_eq!(ApiProviderType::Anthropic.default_base_url(), "https://api.anthropic.com");
-        assert_eq!(ApiProviderType::Ollama.default_base_url(), "http://127.0.0.1:11434");
-        assert_eq!(ApiProviderType::XAI.default_base_url(), "https://api.x.ai/v1");
-        assert_eq!(ApiProviderType::Google.default_base_url(), "https://generativelanguage.googleapis.com");
-        assert_eq!(ApiProviderType::GoogleVertex.default_base_url(), "https://aiplatform.googleapis.com");
+        assert_eq!(
+            ApiProviderType::OpenAI.default_base_url(),
+            "https://api.openai.com/v1"
+        );
+        assert_eq!(
+            ApiProviderType::Anthropic.default_base_url(),
+            "https://api.anthropic.com"
+        );
+        assert_eq!(
+            ApiProviderType::Ollama.default_base_url(),
+            "http://127.0.0.1:11434"
+        );
+        assert_eq!(
+            ApiProviderType::XAI.default_base_url(),
+            "https://api.x.ai/v1"
+        );
+        assert_eq!(
+            ApiProviderType::Google.default_base_url(),
+            "https://generativelanguage.googleapis.com"
+        );
+        assert_eq!(
+            ApiProviderType::GoogleVertex.default_base_url(),
+            "https://aiplatform.googleapis.com"
+        );
     }
 
     #[test]
@@ -285,11 +299,7 @@ mod tests {
 
     #[test]
     fn test_new_provider() {
-        let provider = ApiProvider::new(
-            ApiProviderType::Ollama,
-            "本地 Ollama".to_string(),
-            None,
-        );
+        let provider = ApiProvider::new(ApiProviderType::Ollama, "本地 Ollama".to_string(), None);
         assert_eq!(provider.base_url, "http://127.0.0.1:11434");
         assert!(!provider.is_active);
     }
@@ -319,22 +329,30 @@ mod tests {
         // Feature: provider-model-config, Property 1: Default Model Consistency
         // Validates: Requirements 1.1, 1.2, 1.3, 1.4, 1.5
         assert_eq!(ApiProviderType::OpenAI.default_model(), "gpt-4o-mini");
-        assert_eq!(ApiProviderType::Anthropic.default_model(), "claude-3-5-sonnet-20241022");
+        assert_eq!(
+            ApiProviderType::Anthropic.default_model(),
+            "claude-3-5-sonnet-20241022"
+        );
         assert_eq!(ApiProviderType::Ollama.default_model(), "llama3");
-        assert_eq!(ApiProviderType::XAI.default_model(), "grok-4-1-fast-reasoning");
-        assert_eq!(ApiProviderType::Google.default_model(), "gemini-2.5-flash-lite");
-        assert_eq!(ApiProviderType::GoogleVertex.default_model(), "gemini-2.5-flash-lite");
+        assert_eq!(
+            ApiProviderType::XAI.default_model(),
+            "grok-4-1-fast-reasoning"
+        );
+        assert_eq!(
+            ApiProviderType::Google.default_model(),
+            "gemini-2.5-flash-lite"
+        );
+        assert_eq!(
+            ApiProviderType::GoogleVertex.default_model(),
+            "gemini-2.5-flash-lite"
+        );
     }
 
     #[test]
     fn test_effective_model_with_configured_model() {
         // Feature: provider-model-config, Property 2: Model Fallback Behavior
         // Validates: Requirements 2.2
-        let mut provider = ApiProvider::new(
-            ApiProviderType::OpenAI,
-            "OpenAI".to_string(),
-            None,
-        );
+        let mut provider = ApiProvider::new(ApiProviderType::OpenAI, "OpenAI".to_string(), None);
         provider.model = Some("gpt-4".to_string());
         assert_eq!(provider.effective_model(), "gpt-4");
     }
@@ -343,11 +361,7 @@ mod tests {
     fn test_effective_model_with_none() {
         // Feature: provider-model-config, Property 2: Model Fallback Behavior
         // Validates: Requirements 2.2
-        let provider = ApiProvider::new(
-            ApiProviderType::OpenAI,
-            "OpenAI".to_string(),
-            None,
-        );
+        let provider = ApiProvider::new(ApiProviderType::OpenAI, "OpenAI".to_string(), None);
         assert_eq!(provider.effective_model(), "gpt-4o-mini");
     }
 
@@ -355,11 +369,8 @@ mod tests {
     fn test_effective_model_with_empty_string() {
         // Feature: provider-model-config, Property 2: Model Fallback Behavior
         // Validates: Requirements 2.2
-        let mut provider = ApiProvider::new(
-            ApiProviderType::Anthropic,
-            "Anthropic".to_string(),
-            None,
-        );
+        let mut provider =
+            ApiProvider::new(ApiProviderType::Anthropic, "Anthropic".to_string(), None);
         provider.model = Some("".to_string());
         assert_eq!(provider.effective_model(), "claude-3-5-sonnet-20241022");
     }
@@ -368,11 +379,7 @@ mod tests {
     fn test_effective_model_with_whitespace_only() {
         // Feature: provider-model-config, Property 2: Model Fallback Behavior
         // Validates: Requirements 2.2
-        let mut provider = ApiProvider::new(
-            ApiProviderType::XAI,
-            "XAI".to_string(),
-            None,
-        );
+        let mut provider = ApiProvider::new(ApiProviderType::XAI, "XAI".to_string(), None);
         provider.model = Some("   ".to_string());
         assert_eq!(provider.effective_model(), "grok-4-1-fast-reasoning");
     }
@@ -380,11 +387,7 @@ mod tests {
     #[test]
     fn test_new_provider_model_is_none() {
         // Validates: Requirements 2.1
-        let provider = ApiProvider::new(
-            ApiProviderType::Ollama,
-            "Ollama".to_string(),
-            None,
-        );
+        let provider = ApiProvider::new(ApiProviderType::Ollama, "Ollama".to_string(), None);
         assert!(provider.model.is_none());
     }
 }
@@ -450,8 +453,7 @@ impl Session {
 
     /// 设置标签数组
     pub fn set_tags(&mut self, tags: Vec<String>) -> Result<()> {
-        self.tags = serde_json::to_string(&tags)
-            .unwrap_or_else(|_| "[]".to_string());
+        self.tags = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string());
         Ok(())
     }
 }
@@ -569,11 +571,7 @@ pub struct SessionEmbedding {
 
 impl SessionEmbedding {
     /// 创建新的会话向量
-    pub fn new(
-        session_id: String,
-        embedding: Vec<f32>,
-        summary: String,
-    ) -> Self {
+    pub fn new(session_id: String, embedding: Vec<f32>, summary: String) -> Self {
         let now = chrono::Utc::now().to_rfc3339();
         let dimension = embedding.len() as i32;
 
@@ -806,7 +804,9 @@ mod tests_wave1 {
         assert_eq!(session.get_tags().unwrap().len(), 0);
 
         // 测试设置标签
-        session.set_tags(vec!["bugfix".to_string(), "ui".to_string()]).unwrap();
+        session
+            .set_tags(vec!["bugfix".to_string(), "ui".to_string()])
+            .unwrap();
         assert_eq!(session.get_tags().unwrap(), vec!["bugfix", "ui"]);
     }
 
@@ -891,10 +891,16 @@ mod tests_wave1 {
         assert_eq!(parsed["msgType"], "user", "msgType 的值应该是 'user'");
 
         // 验证旧的 type 字段不存在
-        assert!(parsed.get("type").is_none(), "type 字段不应该存在（已改为 msgType）");
+        assert!(
+            parsed.get("type").is_none(),
+            "type 字段不应该存在（已改为 msgType）"
+        );
 
         // 验证 msg_type 字段不存在（snake_case）
-        assert!(parsed.get("msg_type").is_none(), "msg_type 字段不应该存在（应该是 msgType）");
+        assert!(
+            parsed.get("msg_type").is_none(),
+            "msg_type 字段不应该存在（应该是 msgType）"
+        );
 
         log::info!("✅ Message 序列化测试通过");
         log::info!("   序列化后的 JSON: {}", json);
@@ -1144,12 +1150,7 @@ pub struct Prompt {
 
 impl Prompt {
     /// 创建新的提示词
-    pub fn new(
-        name: String,
-        content: String,
-        scenario: String,
-        language: String,
-    ) -> Self {
+    pub fn new(name: String, content: String, scenario: String, language: String) -> Self {
         let now = chrono::Utc::now().to_rfc3339();
         Self {
             id: None,
@@ -1201,7 +1202,14 @@ impl Prompt {
             return Err(anyhow::anyhow!("提示词内容不能为空"));
         }
 
-        if !["session_analysis", "code_review", "code_generation", "general"].contains(&self.scenario.as_str()) {
+        if ![
+            "session_analysis",
+            "code_review",
+            "code_generation",
+            "general",
+        ]
+        .contains(&self.scenario.as_str())
+        {
             return Err(anyhow::anyhow!(
                 "无效的 scenario: {}（必须是 session_analysis/code_review/code_generation/general 之一）",
                 self.scenario
@@ -1209,7 +1217,10 @@ impl Prompt {
         }
 
         if !["zh", "en"].contains(&self.language.as_str()) {
-            return Err(anyhow::anyhow!("无效的 language: {}（必须是 zh 或 en）", self.language));
+            return Err(anyhow::anyhow!(
+                "无效的 language: {}（必须是 zh 或 en）",
+                self.language
+            ));
         }
 
         Ok(())

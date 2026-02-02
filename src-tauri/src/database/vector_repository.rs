@@ -3,10 +3,10 @@
 //! 负责会话向量的存储和相似度搜索
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use std::sync::{Arc, Mutex};
 
-use crate::database::models::{SessionEmbedding, Session, VectorSearchResult};
+use crate::database::models::{Session, SessionEmbedding, VectorSearchResult};
 
 /// 向量搜索仓库
 pub struct VectorRepository {
@@ -30,9 +30,10 @@ impl VectorRepository {
     where
         F: FnOnce(&rusqlite::Connection) -> Result<R>,
     {
-        let conn = self.conn.lock().map_err(|e| {
-            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
-        })?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e))?;
         f(&conn)
     }
 
@@ -43,7 +44,10 @@ impl VectorRepository {
     ///
     /// # 返回
     /// 返回保存后的向量数据（包含生成的 ID）
-    pub fn upsert_session_embedding(&self, embedding: SessionEmbedding) -> Result<SessionEmbedding> {
+    pub fn upsert_session_embedding(
+        &self,
+        embedding: SessionEmbedding,
+    ) -> Result<SessionEmbedding> {
         self.with_conn_inner(|conn| {
             let now = chrono::Utc::now().to_rfc3339();
 
@@ -317,18 +321,16 @@ impl VectorRepository {
     /// 返回未向量化的会话列表
     pub fn get_non_vectorized_sessions(&self, limit: usize) -> Result<Vec<Session>> {
         self.with_conn_inner(|conn| {
-            let mut stmt = conn.prepare(
-                &format!(
-                    "SELECT s.id, s.session_id, s.project_path, s.project_name, s.file_path,
+            let mut stmt = conn.prepare(&format!(
+                "SELECT s.id, s.session_id, s.project_path, s.project_name, s.file_path,
                             s.rating, s.tags, s.is_archived, s.is_active, s.created_at, s.updated_at
                      FROM sessions s
                      LEFT JOIN session_embeddings e ON s.session_id = e.session_id
                      WHERE e.session_id IS NULL
                      ORDER BY s.created_at DESC
                      LIMIT {}",
-                    limit
-                ),
-            )?;
+                limit
+            ))?;
 
             let sessions = stmt
                 .query_map([], |row| {

@@ -5,9 +5,9 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::command_registry::{CommandRegistry, CommandInfo, CommandStatus};
+    use crate::command_registry::{CommandInfo, CommandRegistry, CommandStatus};
     use proptest::prelude::*;
-    use std::collections::{HashSet, HashMap};
+    use std::collections::{HashMap, HashSet};
 
     /// Generate arbitrary command names
     fn arb_command_name() -> impl Strategy<Value = String> {
@@ -18,7 +18,10 @@ mod tests {
 
     /// Generate arbitrary command info
     fn arb_command_info() -> impl Strategy<Value = CommandInfo> {
-        (arb_command_name(), prop::collection::vec(arb_command_name(), 0..5))
+        (
+            arb_command_name(),
+            prop::collection::vec(arb_command_name(), 0..5),
+        )
             .prop_map(|(name, dependencies)| {
                 CommandInfo::with_dependencies(name, dependencies).mark_registered()
             })
@@ -26,19 +29,18 @@ mod tests {
 
     /// Generate a list of unique command infos
     fn arb_command_list() -> impl Strategy<Value = Vec<CommandInfo>> {
-        prop::collection::vec(arb_command_info(), 1..20)
-            .prop_map(|mut commands| {
-                // Ensure unique command names
-                let mut seen = HashSet::new();
-                commands.retain(|cmd| seen.insert(cmd.name.clone()));
-                commands
-            })
+        prop::collection::vec(arb_command_info(), 1..20).prop_map(|mut commands| {
+            // Ensure unique command names
+            let mut seen = HashSet::new();
+            commands.retain(|cmd| seen.insert(cmd.name.clone()));
+            commands
+        })
     }
 
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(10))]
         /// Property 1: Invalid command error handling
-        /// For any invalid command name, when called by the frontend, the backend should return 
+        /// For any invalid command name, when called by the frontend, the backend should return
         /// an error message that includes a list of available commands
         /// **Feature: fix-command-registration, Property 1: Invalid command error handling**
         /// **Validates: Requirements 1.1**
@@ -48,7 +50,7 @@ mod tests {
             valid_commands in arb_command_list()
         ) {
             let mut registry = CommandRegistry::new();
-            
+
             // Register some valid commands
             let mut expected_available = Vec::new();
             for command in valid_commands {
@@ -56,26 +58,26 @@ mod tests {
                 registry.register_command(command).unwrap();
                 expected_available.push(command_name);
             }
-            
+
             // Ensure the invalid command is not in the registry
             let invalid_name = format!("invalid_{}", invalid_command);
             prop_assume!(!registry.has_command(&invalid_name));
-            
+
             // When we try to get status of an invalid command, it should return None
             let status = registry.get_command_status(&invalid_name);
             prop_assert!(status.is_none(), "Invalid command should not have status");
-            
+
             // When we try to get detailed status of an invalid command, it should return None
             let detailed_status = registry.get_command_status_detailed(&invalid_name);
             prop_assert!(detailed_status.is_none(), "Invalid command should not have detailed status");
-            
+
             // The invalid command should not appear in available commands list
             let available_commands = registry.list_available_commands();
             prop_assert!(
                 !available_commands.contains(&invalid_name),
                 "Invalid command should not appear in available commands list"
             );
-            
+
             // Available commands list should contain all valid commands
             for expected_cmd in &expected_available {
                 prop_assert!(
@@ -84,7 +86,7 @@ mod tests {
                     expected_cmd
                 );
             }
-            
+
             // The registry should be able to provide a list of available commands
             // This simulates what the backend would return to the frontend
             let available_list = registry.list_available_commands();
@@ -92,7 +94,7 @@ mod tests {
                 !available_list.is_empty() || expected_available.is_empty(),
                 "Should provide available commands list (empty only if no commands registered)"
             );
-            
+
             // Verify that all available commands are actually registered and valid
             for cmd in &available_list {
                 prop_assert!(
@@ -100,7 +102,7 @@ mod tests {
                     "Available command should exist in registry: {}",
                     cmd
                 );
-                
+
                 let status = registry.get_command_status(cmd);
                 prop_assert!(
                     matches!(status, Some(CommandStatus::Registered)),
@@ -124,7 +126,7 @@ mod tests {
             for command in commands {
                 let command_name = command.name.clone();
                 let result = registry.register_command(command);
-                
+
                 // Registration should succeed for valid commands
                 prop_assert!(result.is_ok(), "Failed to register command: {}", command_name);
                 expected_commands.push(command_name);
@@ -185,7 +187,7 @@ mod tests {
         #[test]
         fn prop_duplicate_registration_rejection(command_name in arb_command_name()) {
             let mut registry = CommandRegistry::new();
-            
+
             // First registration should succeed
             let command1 = CommandInfo::new(command_name.clone()).mark_registered();
             let result1 = registry.register_command(command1);
@@ -206,7 +208,7 @@ mod tests {
         fn prop_empty_command_name_rejection(whitespace in "\\s*") {
             let mut registry = CommandRegistry::new();
             let command = CommandInfo::new(whitespace.clone());
-            
+
             let result = registry.register_command(command);
             if whitespace.trim().is_empty() {
                 prop_assert!(result.is_err(), "Empty/whitespace command names should be rejected: {:?}", whitespace);
@@ -226,13 +228,13 @@ mod tests {
             for command in commands {
                 let command_name = command.name.clone();
                 let expected_status = command.status.clone();
-                
+
                 registry.register_command(command).unwrap();
 
                 // Status query should return the expected status
                 let retrieved_status = registry.get_command_status(&command_name);
                 prop_assert!(retrieved_status.is_some(), "Status should be retrievable");
-                
+
                 // Status should match what was registered
                 match (&expected_status, retrieved_status.unwrap()) {
                     (CommandStatus::Registered, CommandStatus::Registered) => {},
@@ -254,7 +256,7 @@ mod tests {
             dependencies in prop::collection::vec(arb_command_name(), 1..5)
         ) {
             let mut registry = CommandRegistry::new();
-            
+
             // Register a command with dependencies but don't register the dependencies
             let command = CommandInfo::with_dependencies(command_name.clone(), dependencies.clone())
                 .mark_registered();
@@ -262,14 +264,14 @@ mod tests {
 
             // Verification should detect missing dependencies
             let errors = registry.verify_all_commands();
-            
+
             // Should have at least one error for each missing dependency
             prop_assert!(!errors.is_empty(), "Should detect missing dependencies");
-            
+
             // Each dependency should be mentioned in the errors
             for dep in &dependencies {
-                let dep_mentioned = errors.iter().any(|error| 
-                    error.message.contains(dep) || 
+                let dep_mentioned = errors.iter().any(|error|
+                    error.message.contains(dep) ||
                     error.context.as_ref().map_or(false, |ctx| ctx.contains(dep))
                 );
                 prop_assert!(dep_mentioned, "Missing dependency should be mentioned in errors: {}", dep);
@@ -312,7 +314,7 @@ mod tests {
                 );
 
                 let status_info = detailed_status.unwrap();
-                
+
                 // Verify all required fields are present
                 prop_assert_eq!(
                     status_info.name,
@@ -365,7 +367,7 @@ mod tests {
                 );
 
                 // History should contain at least one registration event
-                let has_registration_event = history_entries.iter().any(|entry| 
+                let has_registration_event = history_entries.iter().any(|entry|
                     matches!(entry.event_type, crate::command_registry::CommandEventType::Registered)
                 );
                 prop_assert!(
@@ -377,10 +379,10 @@ mod tests {
             // Test call tracking updates status information
             if !registered_commands.is_empty() {
                 let test_command = &registered_commands[0];
-                
+
                 // Record a call
                 registry.record_command_call(test_command);
-                
+
                 // Verify status information is updated
                 let updated_status = registry.get_command_status_detailed(test_command).unwrap();
                 prop_assert!(
@@ -410,7 +412,7 @@ mod tests {
         }
 
         /// Property 4: Module initialization order correctness
-        /// For any module with dependencies, the module should only be initialized after 
+        /// For any module with dependencies, the module should only be initialized after
         /// all its dependencies have been successfully initialized
         /// **Feature: fix-command-registration, Property 4: Module initialization order correctness**
         /// **Validates: Requirements 3.1, 3.2, 3.4**
@@ -495,10 +497,10 @@ mod tests {
                 if module_names.contains(&name) {
                     continue; // Skip duplicate names
                 }
-                
+
                 // Remove self-dependencies and non-existent dependencies
                 deps.retain(|dep| dep != &name);
-                
+
                 module_names.insert(name.clone());
                 valid_modules.push((name, deps));
             }
@@ -527,7 +529,7 @@ mod tests {
 
             // Get the initialization order
             let order_result = initializer.get_initialization_order();
-            
+
             // If there are circular dependencies, the order should fail
             if order_result.is_err() {
                 // This is acceptable - circular dependencies should be detected
@@ -539,7 +541,7 @@ mod tests {
 
             // Initialize all modules
             let init_result = initializer.initialize_all();
-            
+
             if init_result.is_err() {
                 // If initialization failed due to dependency issues, that's acceptable
                 // The property is about order correctness, not success guarantee
@@ -548,12 +550,12 @@ mod tests {
 
             // Verify that the actual initialization order respects dependencies
             let actual_order = initialization_order.lock().unwrap().clone();
-            
+
             // Every module that was supposed to be initialized should have been initialized
             for module_name in &expected_order {
                 prop_assert!(
                     actual_order.contains(module_name),
-                    "Module {} should have been initialized", 
+                    "Module {} should have been initialized",
                     module_name
                 );
             }
@@ -620,7 +622,7 @@ mod tests {
         }
 
         /// Property 7: Failure handling with recovery
-        /// For any module initialization failure or critical dependency failure, the system should 
+        /// For any module initialization failure or critical dependency failure, the system should
         /// either provide a degradation strategy or refuse to start with clear error information
         /// **Feature: fix-command-registration, Property 7: Failure handling with recovery**
         /// **Validates: Requirements 2.3, 3.3**
@@ -674,7 +676,7 @@ mod tests {
                         };
 
                         self.initialization_results.lock().unwrap().insert(self.name.clone(), false);
-                        
+
                         return Err(ModuleError::new(
                             self.name.clone(),
                             format!("Initial failure for module {}", self.name),
@@ -719,10 +721,10 @@ mod tests {
                 if module_names.contains(&name) {
                     continue; // Skip duplicate names
                 }
-                
+
                 // Remove self-dependencies
                 deps.retain(|dep| dep != &name);
-                
+
                 module_names.insert(name.clone());
                 valid_modules.push((name, deps, should_fail));
             }
@@ -763,7 +765,7 @@ mod tests {
 
             // Test 1: Basic initialization with recovery
             let init_result = initializer.initialize_all_with_recovery();
-            
+
             // Verify recovery behavior based on module criticality
             let final_states = initializer.get_all_states();
             let final_results = initialization_results.lock().unwrap().clone();
@@ -835,7 +837,7 @@ mod tests {
 
             // Test 2: Health check after initialization
             let health_results = initializer.comprehensive_health_check();
-            
+
             // Verify health check provides meaningful information
             prop_assert!(
                 health_results.timestamp <= std::time::SystemTime::now(),
@@ -849,7 +851,7 @@ mod tests {
                     "Health check should report status for module: {}",
                     module_name
                 );
-                
+
                 prop_assert!(
                     health_results.response_times.contains_key(module_name),
                     "Health check should report response time for module: {}",
@@ -860,7 +862,7 @@ mod tests {
             // Test 3: System should handle dependency failures gracefully
             if init_result.is_err() {
                 let errors = init_result.unwrap_err();
-                
+
                 // All errors should have meaningful messages
                 for error in &errors {
                     prop_assert!(
@@ -886,7 +888,7 @@ mod tests {
 
             // Test 4: Recovery attempts should be tracked for failed modules
             let recovery_log = recovery_attempts.lock().unwrap();
-            
+
             // If there were failures and recoveries, verify they were attempted appropriately
             if !recovery_log.is_empty() {
                 for recovered_module in recovery_log.iter() {
@@ -915,28 +917,28 @@ mod tests {
                 crate::command_registry::SystemHealthStatus::Degraded => {
                     // Some non-critical issues should exist
                     let has_issues = health_results.module_statuses.values().any(|status| {
-                        matches!(status, 
+                        matches!(status,
                             crate::command_registry::HealthStatus::Degraded(_) |
                             crate::command_registry::HealthStatus::Critical(_) |
                             crate::command_registry::HealthStatus::Failed(_)
                         )
                     }) || !health_results.dependency_issues.is_empty();
-                    
+
                     prop_assert!(
                         has_issues,
                         "System marked as degraded should have some module issues or dependency problems"
                     );
                 }
-                crate::command_registry::SystemHealthStatus::Critical | 
+                crate::command_registry::SystemHealthStatus::Critical |
                 crate::command_registry::SystemHealthStatus::Failed => {
                     // Should have critical issues
                     let has_critical_issues = health_results.module_statuses.values().any(|status| {
-                        matches!(status, 
+                        matches!(status,
                             crate::command_registry::HealthStatus::Critical(_) |
                             crate::command_registry::HealthStatus::Failed(_)
                         )
                     });
-                    
+
                     prop_assert!(
                         has_critical_issues,
                         "System marked as critical/failed should have critical module issues"
@@ -946,7 +948,7 @@ mod tests {
         }
 
         /// Property 5: Comprehensive error logging
-        /// For any command registration failure or command execution failure, the system should 
+        /// For any command registration failure or command execution failure, the system should
         /// log detailed error information including failure reasons and call stack where applicable
         /// **Feature: fix-command-registration, Property 5: Comprehensive error logging**
         /// **Validates: Requirements 1.3, 4.1**
@@ -1004,7 +1006,7 @@ mod tests {
             // Test command error logging
             for (i, error_message) in error_messages.iter().enumerate() {
                 let command_name = command_names.get(i % command_names.len()).unwrap();
-                
+
                 // Create different types of command errors
                 let command_error = match i % 4 {
                     0 => CommandError::command_not_found(command_name),
@@ -1025,7 +1027,7 @@ mod tests {
             // Test module error logging
             for (i, error_message) in error_messages.iter().enumerate() {
                 let module_name = module_names.get(i % module_names.len()).unwrap();
-                
+
                 // Create different types of module errors
                 let module_error = match i % 3 {
                     0 => ModuleError::initialization_failed(module_name, error_message),
@@ -1044,7 +1046,7 @@ mod tests {
 
             // Verify comprehensive logging occurred
             let logged_errors = mock_logger.logged_errors.lock().unwrap();
-            
+
             // Should have logged at least one error for each error we handled
             let total_errors = error_messages.len() * 2; // command errors + module errors
             prop_assert!(
@@ -1063,11 +1065,11 @@ mod tests {
             }
 
             // Verify that different error types are logged appropriately
-            let command_not_found_logs = logged_errors.iter().filter(|(msg, _)| 
+            let command_not_found_logs = logged_errors.iter().filter(|(msg, _)|
                 msg.contains("not found") || msg.contains("Command")
             ).count();
-            
-            let module_init_logs = logged_errors.iter().filter(|(msg, _)| 
+
+            let module_init_logs = logged_errors.iter().filter(|(msg, _)|
                 msg.contains("initialization") || msg.contains("Module")
             ).count();
 
@@ -1094,7 +1096,7 @@ mod tests {
         }
 
         /// Property 6: Error categorization accuracy
-        /// For any error that occurs, the logging system should correctly categorize it as either 
+        /// For any error that occurs, the logging system should correctly categorize it as either
         /// a command registration error or command execution error
         /// **Feature: fix-command-registration, Property 6: Error categorization accuracy**
         /// **Validates: Requirements 4.2**
@@ -1201,8 +1203,8 @@ mod tests {
                         }
                         ErrorCategory::ModuleInitializationFailed => {
                             prop_assert!(
-                                suggestions.iter().any(|s| 
-                                    s.to_lowercase().contains("module") || 
+                                suggestions.iter().any(|s|
+                                    s.to_lowercase().contains("module") ||
                                     s.to_lowercase().contains("initialization") ||
                                     s.to_lowercase().contains("dependency")
                                 ),
@@ -1217,8 +1219,8 @@ mod tests {
                         }
                         ErrorCategory::ValidationError => {
                             prop_assert!(
-                                suggestions.iter().any(|s| 
-                                    s.to_lowercase().contains("parameter") || 
+                                suggestions.iter().any(|s|
+                                    s.to_lowercase().contains("parameter") ||
                                     s.to_lowercase().contains("input") ||
                                     s.to_lowercase().contains("valid")
                                 ),
@@ -1227,8 +1229,8 @@ mod tests {
                         }
                         ErrorCategory::PermissionError => {
                             prop_assert!(
-                                suggestions.iter().any(|s| 
-                                    s.to_lowercase().contains("permission") || 
+                                suggestions.iter().any(|s|
+                                    s.to_lowercase().contains("permission") ||
                                     s.to_lowercase().contains("access") ||
                                     s.to_lowercase().contains("privilege")
                                 ),
@@ -1265,7 +1267,7 @@ mod tests {
         }
 
         /// Property 8: Friendly error messages for invalid commands
-        /// For any non-existent command called by the frontend, the backend should return 
+        /// For any non-existent command called by the frontend, the backend should return
         /// a user-friendly error message
         /// **Feature: fix-command-registration, Property 8: Friendly error messages for invalid commands**
         /// **Validates: Requirements 4.3**
@@ -1377,7 +1379,7 @@ mod tests {
 
                 // Severity should be appropriate (not critical for command not found)
                 prop_assert!(
-                    matches!(response.severity, 
+                    matches!(response.severity,
                         crate::command_registry::error_handler::ErrorSeverity::Low |
                         crate::command_registry::error_handler::ErrorSeverity::Medium
                     ),
@@ -1449,7 +1451,7 @@ mod tests {
                 match error_category {
                     ErrorCategory::CommandNotFound => {
                         prop_assert!(
-                            friendly_lower.contains("command") && 
+                            friendly_lower.contains("command") &&
                             (friendly_lower.contains("found") || friendly_lower.contains("exist")),
                             "CommandNotFound friendly message should mention command and found/exist: '{}'",
                             friendly_message
@@ -1464,7 +1466,7 @@ mod tests {
                     }
                     ErrorCategory::ValidationError => {
                         prop_assert!(
-                            friendly_lower.contains("parameter") || 
+                            friendly_lower.contains("parameter") ||
                             friendly_lower.contains("input") ||
                             friendly_lower.contains("invalid"),
                             "ValidationError friendly message should mention parameters/input: '{}'",
@@ -1473,7 +1475,7 @@ mod tests {
                     }
                     ErrorCategory::PermissionError => {
                         prop_assert!(
-                            friendly_lower.contains("access") || 
+                            friendly_lower.contains("access") ||
                             friendly_lower.contains("permission") ||
                             friendly_lower.contains("denied"),
                             "PermissionError friendly message should mention access/permission: '{}'",
@@ -1495,10 +1497,10 @@ mod tests {
             if !technical_errors.is_empty() {
                 let test_error = &technical_errors[0];
                 let category = ErrorCategory::CommandNotFound;
-                
+
                 let message1 = handler.create_friendly_message(test_error, &category);
                 let message2 = handler.create_friendly_message(test_error, &category);
-                
+
                 prop_assert_eq!(
                     message1, message2,
                     "Friendly message generation should be deterministic"
@@ -1540,7 +1542,7 @@ mod tests {
             if !failure_reasons.is_empty() {
                 let test_command = &registered_commands[0];
                 let failure_reason = &failure_reasons[0];
-                
+
                 // Create a status info with failed status
                 let failed_status_info = CommandStatusInfo {
                     name: test_command.clone(),
@@ -1554,7 +1556,7 @@ mod tests {
 
                 // Monitor command status should trigger alerts for failed commands
                 let alerts = error_handler.monitor_command_status(test_command, &failed_status_info);
-                
+
                 prop_assert!(
                     !alerts.is_empty(),
                     "Should trigger alerts for failed command: {}",
@@ -1567,7 +1569,7 @@ mod tests {
                     alert.command_name == *test_command &&
                     alert.message.contains(failure_reason)
                 });
-                
+
                 prop_assert!(
                     has_failure_alert,
                     "Should trigger CommandFailure alert for failed command with reason: {}",
@@ -1578,7 +1580,7 @@ mod tests {
                 let failure_alert = alerts.iter()
                     .find(|alert| alert.alert_type == AlertType::CommandFailure)
                     .unwrap();
-                
+
                 prop_assert!(
                     matches!(failure_alert.severity, AlertSeverity::Critical),
                     "Command failure alert should have Critical severity"
@@ -1588,7 +1590,7 @@ mod tests {
             // Test 2: Alert triggering for disabled commands
             if registered_commands.len() > 1 {
                 let test_command = &registered_commands[1];
-                
+
                 let disabled_status_info = CommandStatusInfo {
                     name: test_command.clone(),
                     status: CommandStatus::Disabled,
@@ -1600,13 +1602,13 @@ mod tests {
                 };
 
                 let alerts = error_handler.monitor_command_status(test_command, &disabled_status_info);
-                
+
                 // Should trigger alert for disabled command
                 let has_disabled_alert = alerts.iter().any(|alert| {
                     alert.alert_type == AlertType::CommandDisabled &&
                     alert.command_name == *test_command
                 });
-                
+
                 prop_assert!(
                     has_disabled_alert,
                     "Should trigger CommandDisabled alert for disabled command: {}",
@@ -1617,7 +1619,7 @@ mod tests {
                 let disabled_alert = alerts.iter()
                     .find(|alert| alert.alert_type == AlertType::CommandDisabled)
                     .unwrap();
-                
+
                 prop_assert!(
                     matches!(disabled_alert.severity, AlertSeverity::Warning),
                     "Command disabled alert should have Warning severity"
@@ -1629,7 +1631,7 @@ mod tests {
                 let test_command = &registered_commands[2];
                 let dependency_name = format!("dep_{}", test_command);
                 let failure_reason = &failure_reasons[0];
-                
+
                 let mut dependency_status = HashMap::new();
                 dependency_status.insert(
                     dependency_name.clone(),
@@ -1647,14 +1649,14 @@ mod tests {
                 };
 
                 let alerts = error_handler.monitor_command_status(test_command, &dependency_failure_info);
-                
+
                 // Should trigger alert for dependency failure
                 let has_dependency_alert = alerts.iter().any(|alert| {
                     alert.alert_type == AlertType::DependencyFailure &&
                     alert.command_name == *test_command &&
                     alert.message.contains(&dependency_name)
                 });
-                
+
                 prop_assert!(
                     has_dependency_alert,
                     "Should trigger DependencyFailure alert for command with failed dependency: {}",
@@ -1665,7 +1667,7 @@ mod tests {
                 let dependency_alert = alerts.iter()
                     .find(|alert| alert.alert_type == AlertType::DependencyFailure)
                     .unwrap();
-                
+
                 prop_assert!(
                     matches!(dependency_alert.severity, AlertSeverity::Critical),
                     "Dependency failure alert should have Critical severity"
@@ -1677,7 +1679,7 @@ mod tests {
                 let test_command = &registered_commands[3];
                 let hours_ago = time_offsets[0].max(3600); // At least 1 hour ago
                 let last_called_time = SystemTime::now() - Duration::from_secs(hours_ago);
-                
+
                 let inactive_status_info = CommandStatusInfo {
                     name: test_command.clone(),
                     status: CommandStatus::Registered,
@@ -1689,13 +1691,13 @@ mod tests {
                 };
 
                 let alerts = error_handler.monitor_command_status(test_command, &inactive_status_info);
-                
+
                 // Should trigger alert for inactive command (not called for over 1 hour)
                 let has_inactive_alert = alerts.iter().any(|alert| {
                     alert.alert_type == AlertType::CommandNotResponding &&
                     alert.command_name == *test_command
                 });
-                
+
                 prop_assert!(
                     has_inactive_alert,
                     "Should trigger CommandNotResponding alert for inactive command: {} (last called {} seconds ago)",
@@ -1706,7 +1708,7 @@ mod tests {
                 let inactive_alert = alerts.iter()
                     .find(|alert| alert.alert_type == AlertType::CommandNotResponding)
                     .unwrap();
-                
+
                 prop_assert!(
                     matches!(inactive_alert.severity, AlertSeverity::Info),
                     "Command not responding alert should have Info severity"
@@ -1716,7 +1718,7 @@ mod tests {
             // Test 5: No alerts for healthy commands
             if registered_commands.len() > 4 {
                 let test_command = &registered_commands[4];
-                
+
                 let healthy_status_info = CommandStatusInfo {
                     name: test_command.clone(),
                     status: CommandStatus::Registered,
@@ -1728,7 +1730,7 @@ mod tests {
                 };
 
                 let alerts = error_handler.monitor_command_status(test_command, &healthy_status_info);
-                
+
                 // Should not trigger alerts for healthy commands
                 prop_assert!(
                     alerts.is_empty(),
@@ -1739,32 +1741,32 @@ mod tests {
 
             // Test 6: Alert manager functionality
             let active_alerts = error_handler.get_active_alerts();
-            
+
             // All alerts should have valid IDs
             for alert in &active_alerts {
                 prop_assert!(
                     !alert.id.is_empty(),
                     "Alert should have non-empty ID"
                 );
-                
+
                 prop_assert!(
                     alert.id.starts_with("ALERT_"),
                     "Alert ID should start with 'ALERT_': {}",
                     alert.id
                 );
-                
+
                 // Alert should have valid timestamp
                 prop_assert!(
                     alert.timestamp <= SystemTime::now(),
                     "Alert timestamp should not be in the future"
                 );
-                
+
                 // Alert should not be resolved initially
                 prop_assert!(
                     !alert.resolved,
                     "New alert should not be resolved initially"
                 );
-                
+
                 prop_assert!(
                     alert.resolution_time.is_none(),
                     "New alert should not have resolution time"
@@ -1773,12 +1775,12 @@ mod tests {
 
             // Test 7: Alert statistics
             let stats = error_handler.get_alert_statistics();
-            
+
             prop_assert!(
                 stats.total_alerts >= stats.active_alerts,
                 "Total alerts should be >= active alerts"
             );
-            
+
             prop_assert!(
                 stats.total_alerts == stats.active_alerts + stats.resolved_alerts,
                 "Total alerts should equal active + resolved alerts"
@@ -1788,14 +1790,14 @@ mod tests {
             if !active_alerts.is_empty() {
                 let alert_to_resolve = &active_alerts[0];
                 let alert_id = alert_to_resolve.id.clone();
-                
+
                 let resolve_result = error_handler.resolve_alert(&alert_id);
                 prop_assert!(
                     resolve_result.is_ok(),
                     "Should be able to resolve existing alert: {}",
                     alert_id
                 );
-                
+
                 // After resolution, active alerts count should decrease
                 let updated_active_alerts = error_handler.get_active_alerts();
                 prop_assert!(
@@ -1806,7 +1808,7 @@ mod tests {
 
             // Test 9: Registry-wide anomaly detection
             let registry_alerts = error_handler.check_command_anomalies(&registry);
-            
+
             // All registry alerts should be valid
             for alert in &registry_alerts {
                 prop_assert!(
@@ -1814,7 +1816,7 @@ mod tests {
                     "Registry alert should reference registered command: {}",
                     alert.command_name
                 );
-                
+
                 prop_assert!(
                     matches!(
                         alert.alert_type,
@@ -1853,11 +1855,11 @@ mod tests {
 
             // Create validator with registry
             let mut validator = CommandValidator::with_registry(Arc::new(registry));
-            
+
             // Auto-generate test cases for all registered commands
             let config = AutoTestConfig::default();
             let generated_count = validator.auto_generate_test_cases(&config).unwrap();
-            
+
             // Verify test suite completeness
             prop_assert!(
                 generated_count > 0,
@@ -1875,7 +1877,7 @@ mod tests {
 
                 // Should have at least an availability test
                 let has_availability_test = test_cases.iter().any(|test| {
-                    test.name.contains("availability") || 
+                    test.name.contains("availability") ||
                     test.name.contains(&format!("{}_", command_name))
                 });
                 prop_assert!(
@@ -1898,7 +1900,7 @@ mod tests {
                         !test_result.test_name.is_empty(),
                         "Test result should have non-empty test name"
                     );
-                    
+
                     prop_assert!(
                         test_result.test_name.contains(command_name) ||
                         test_result.test_name.contains("availability") ||
@@ -1986,7 +1988,7 @@ mod tests {
             // Create validator with initial registry state
             let mut validator = CommandValidator::with_registry(Arc::new(registry.clone()));
             let config = AutoTestConfig::default();
-            
+
             // Generate initial test cases
             let initial_test_count = validator.auto_generate_test_cases(&config).unwrap();
             let initial_tested_commands: HashSet<String> = validator.get_tested_commands().into_iter().collect();
@@ -2011,10 +2013,10 @@ mod tests {
 
             // Update validator with new registry state
             validator.set_registry(Arc::new(registry));
-            
+
             // Clear previous auto-generated tests to simulate fresh generation
             validator.clear_auto_generated_tests();
-            
+
             // Auto-generate test cases for updated registry (should include new commands)
             let updated_test_count = validator.auto_generate_test_cases(&config).unwrap();
             let updated_tested_commands: HashSet<String> = validator.get_tested_commands().into_iter().collect();
@@ -2044,7 +2046,7 @@ mod tests {
 
                 // Should have availability test for new command
                 let has_availability_test = test_cases.iter().any(|test| {
-                    test.name.contains("availability") || 
+                    test.name.contains("availability") ||
                     test.name.contains(&format!("{}_", new_command))
                 });
                 prop_assert!(
@@ -2122,13 +2124,13 @@ mod tests {
                     !test_case.name.is_empty(),
                     "Auto-generated test should have non-empty name"
                 );
-                
+
                 prop_assert!(
                     test_case.name.contains(&new_command_names[0]),
                     "Auto-generated test name should reference the command: '{}'",
                     test_case.name
                 );
-                
+
                 prop_assert!(
                     test_case.timeout.as_secs() > 0,
                     "Auto-generated test should have reasonable timeout"
@@ -2185,10 +2187,10 @@ mod tests {
                 } else {
                     Vec::new()
                 };
-                
+
                 let command = CommandInfo::with_dependencies(command_name.clone(), dependencies.clone())
                     .mark_registered();
-                
+
                 registry.register_command(command).unwrap();
                 command_dependencies.insert(command_name.clone(), dependencies);
                 initial_commands.push(command_name.clone());
@@ -2208,20 +2210,20 @@ mod tests {
                 let empty_deps = Vec::new();
                 let deps = command_dependencies.get(command_name).unwrap_or(&empty_deps);
                 let all_deps_satisfied = deps.iter().all(|dep| registry.has_command(dep));
-                
+
                 if all_deps_satisfied {
                     // Check if the failure is only due to auto-generated invalid parameter tests
                     let only_invalid_param_failures = result.errors.iter().all(|error| {
                         error.contains("invalid_params") && error.contains("Auto-generated test case")
                     });
-                    
+
                     // Debug information for failing tests
                     if !result.passed && !only_invalid_param_failures {
                         log::warn!("Command '{}' failed validation despite satisfied dependencies:", command_name);
                         log::warn!("  Dependencies: {:?}", deps);
                         log::warn!("  Errors: {:?}", result.errors);
                         log::warn!("  Test results: {:?}", result.test_results);
-                        
+
                         // Check if the command exists in registry
                         if !registry.has_command(command_name) {
                             log::warn!("  Command not found in registry");
@@ -2229,7 +2231,7 @@ mod tests {
                             log::warn!("  Command status: {:?}", registry.get_command_status(command_name));
                         }
                     }
-                    
+
                     // Command should pass validation or only fail on expected invalid parameter tests
                     prop_assert!(
                         result.passed || only_invalid_param_failures,
@@ -2268,14 +2270,14 @@ mod tests {
                     if valid_dependencies != *current_deps {
                         // Create updated command with new dependencies
                         let updated_command = CommandInfo::with_dependencies(
-                            command_name.clone(), 
+                            command_name.clone(),
                             valid_dependencies.clone()
                         ).mark_registered();
 
                         // Remove old command and add updated one
                         let _ = registry.unregister_command(&command_name);
                         registry.register_command(updated_command).unwrap();
-                        
+
                         command_dependencies.insert(command_name.clone(), valid_dependencies);
                         modified_commands.insert(command_name);
                     }
@@ -2285,27 +2287,27 @@ mod tests {
             // If no commands were actually modified, try to create a simple modification
             if modified_commands.is_empty() && !initial_commands.is_empty() {
                 let first_command = &initial_commands[0];
-                let second_command = if initial_commands.len() > 1 { 
-                    Some(&initial_commands[1]) 
-                } else { 
-                    None 
+                let second_command = if initial_commands.len() > 1 {
+                    Some(&initial_commands[1])
+                } else {
+                    None
                 };
-                
+
                 // Add a dependency from first command to second command (if exists)
                 if let Some(dep_command) = second_command {
                     let new_deps = vec![dep_command.clone()];
                     let empty_deps = Vec::new();
                     let current_deps = command_dependencies.get(first_command).unwrap_or(&empty_deps);
-                    
+
                     if new_deps != *current_deps {
                         let updated_command = CommandInfo::with_dependencies(
-                            first_command.clone(), 
+                            first_command.clone(),
                             new_deps.clone()
                         ).mark_registered();
 
                         let _ = registry.unregister_command(first_command);
                         registry.register_command(updated_command).unwrap();
-                        
+
                         command_dependencies.insert(first_command.clone(), new_deps);
                         modified_commands.insert(first_command.clone());
                     }
@@ -2330,7 +2332,7 @@ mod tests {
             // Validate each modified command
             for modified_command in &modified_commands {
                 let validation_result = validator.validate_command(modified_command);
-                
+
                 // Command should still have test cases
                 prop_assert!(
                     !validation_result.test_results.is_empty(),
@@ -2354,7 +2356,7 @@ mod tests {
                     // Dependency test should verify all current dependencies
                     for dep in current_deps {
                         let dep_mentioned_in_tests = validation_result.test_results.iter().any(|test| {
-                            test.test_name.contains(dep) || 
+                            test.test_name.contains(dep) ||
                             (test.test_name.contains("dependencies") && registry.has_command(dep))
                         });
                         prop_assert!(
@@ -2382,7 +2384,7 @@ mod tests {
                     let only_invalid_param_failures = validation_result.errors.iter().all(|error| {
                         error.contains("invalid_params") && error.contains("Auto-generated test case")
                     });
-                    
+
                     prop_assert!(
                         validation_result.passed || only_invalid_param_failures,
                         "Command '{}' should pass validation when all dependencies are satisfied, or only fail on expected invalid parameter tests",
@@ -2415,7 +2417,7 @@ mod tests {
             for unmodified_command in &initial_commands {
                 if !modified_commands.contains(unmodified_command) {
                     let validation_result = validator.validate_command(unmodified_command);
-                    
+
                     // Should still have tests
                     prop_assert!(
                         !validation_result.test_results.is_empty(),
@@ -2430,13 +2432,13 @@ mod tests {
                     let empty_deps = Vec::new();
                     let deps = command_dependencies.get(unmodified_command).unwrap_or(&empty_deps);
                     let all_deps_satisfied = deps.iter().all(|dep| registry.has_command(dep));
-                    
+
                     if initial_passed && all_deps_satisfied {
                         // Check if the failure is only due to auto-generated invalid parameter tests
                         let only_invalid_param_failures = validation_result.errors.iter().all(|error| {
                             error.contains("invalid_params") && error.contains("Auto-generated test case")
                         });
-                        
+
                         prop_assert!(
                             validation_result.passed || only_invalid_param_failures,
                             "Unmodified command '{}' should still pass validation if it passed initially and dependencies are satisfied, or only fail on expected invalid parameter tests",
@@ -2448,7 +2450,7 @@ mod tests {
 
             // Integration tests should detect dependency changes
             let integration_result = validator.run_integration_tests();
-            
+
             // Should test all commands including modified ones
             prop_assert_eq!(
                 integration_result.total_tests,
@@ -2491,7 +2493,7 @@ mod tests {
             let commands_with_deps = command_dependencies.iter()
                 .filter(|(_, deps)| !deps.is_empty())
                 .count();
-            
+
             if commands_with_deps > 0 {
                 prop_assert!(
                     final_stats.auto_generated_test_count >= commands_with_deps,
@@ -2504,16 +2506,16 @@ mod tests {
     #[test]
     fn test_basic_command_registry_functionality() {
         let mut registry = CommandRegistry::new();
-        
+
         // Test empty registry
         assert_eq!(registry.command_count(), 0);
         assert_eq!(registry.active_command_count(), 0);
         assert!(registry.list_available_commands().is_empty());
-        
+
         // Test single command registration
         let command = CommandInfo::new("test_command".to_string()).mark_registered();
         registry.register_command(command).unwrap();
-        
+
         assert_eq!(registry.command_count(), 1);
         assert_eq!(registry.active_command_count(), 1);
         assert!(registry.has_command("test_command"));

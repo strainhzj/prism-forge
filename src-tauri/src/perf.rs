@@ -2,11 +2,11 @@
 //!
 //! 测试应用启动和会话扫描的性能指标
 
-use std::time::Instant;
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
-use anyhow::Result;
-use serde::{Serialize, Deserialize};
+use std::time::Instant;
 
 /// 性能测试结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,15 +39,25 @@ impl BenchmarkReport {
     pub fn to_markdown(&self) -> String {
         let mut md = format!("# 性能基准测试报告\n\n");
         md.push_str(&format!("**测试时间**: {}\n\n", self.timestamp));
-        md.push_str(&format!("**总体结果**: {}\n\n",
-            if self.overall_passed { "✅ 通过" } else { "❌ 失败" }));
+        md.push_str(&format!(
+            "**总体结果**: {}\n\n",
+            if self.overall_passed {
+                "✅ 通过"
+            } else {
+                "❌ 失败"
+            }
+        ));
 
         md.push_str("## 测试结果详情\n\n");
         md.push_str("| 测试名称 | 耗时 (ms) | 阈值 (ms) | 结果 | 详情 |\n");
         md.push_str("|---------|----------|----------|------|------|\n");
 
         for result in &self.results {
-            let status = if result.passed { "✅ 通过" } else { "❌ 失败" };
+            let status = if result.passed {
+                "✅ 通过"
+            } else {
+                "❌ 失败"
+            };
             md.push_str(&format!(
                 "| {} | {:.2} | {:.2} | {} | {} |\n",
                 result.name, result.duration_ms, result.threshold_ms, status, result.details
@@ -65,7 +75,10 @@ impl BenchmarkReport {
                 md.push_str(&format!("### {} 未达标\n", result.name));
                 md.push_str(&format!("- 当前耗时: {:.2} ms\n", result.duration_ms));
                 md.push_str(&format!("- 目标阈值: {:.2} ms\n", result.threshold_ms));
-                md.push_str(&format!("- 差距: {:.2} ms\n", result.duration_ms - result.threshold_ms));
+                md.push_str(&format!(
+                    "- 差距: {:.2} ms\n",
+                    result.duration_ms - result.threshold_ms
+                ));
                 md.push_str(&get_optimization_suggestion(&result.name));
                 md.push_str("\n");
             }
@@ -83,25 +96,21 @@ impl BenchmarkReport {
 /// 获取优化建议
 fn get_optimization_suggestion(test_name: &str) -> String {
     match test_name {
-        "应用启动时间" => {
-            String::from(
-                "**优化建议**:\n\
+        "应用启动时间" => String::from(
+            "**优化建议**:\n\
                 - 检查数据库连接池配置\n\
                 - 考虑延迟加载非关键模块\n\
                 - 使用异步初始化避免阻塞主线程\n\
-                - 检查是否有冗余的文件 I/O 操作\n"
-            )
-        }
-        "会话扫描时间" => {
-            String::from(
-                "**优化建议**:\n\
+                - 检查是否有冗余的文件 I/O 操作\n",
+        ),
+        "会话扫描时间" => String::from(
+            "**优化建议**:\n\
                 - 使用并行扫描处理多个项目目录\n\
                 - 增加文件扫描缓存\n\
                 - 优化 glob 模式匹配\n\
-                - 考虑增量扫描策略（仅扫描变更文件）\n"
-            )
-        }
-        _ => String::from("**暂无具体建议**\n")
+                - 考虑增量扫描策略（仅扫描变更文件）\n",
+        ),
+        _ => String::from("**暂无具体建议**\n"),
     }
 }
 
@@ -169,9 +178,7 @@ pub fn benchmark_scan_sessions() -> BenchmarkResult {
 
             let details = format!(
                 "扫描 {} 个会话，耗时 {:.2} ms（目标阈值: {:.2} ms）",
-                count,
-                duration_ms,
-                expected_ms
+                count, duration_ms, expected_ms
             );
 
             (details, passed)
@@ -204,14 +211,19 @@ pub fn benchmark_database_queries() -> BenchmarkResult {
 
     let query_result = (|| -> Result<String> {
         let conn = crate::database::init::get_connection_shared()?;
-        let guard = conn.lock().map_err(|e| anyhow::anyhow!("获取锁失败: {}", e))?;
+        let guard = conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("获取锁失败: {}", e))?;
 
         // 测试查询性能
         let query_start = Instant::now();
         let _version: String = guard.query_row("SELECT sqlite_version()", [], |row| row.get(0))?;
         let query_duration = query_start.elapsed();
 
-        Ok(format!("SQLite 版本查询耗时: {:.2} ms", query_duration.as_millis()))
+        Ok(format!(
+            "SQLite 版本查询耗时: {:.2} ms",
+            query_duration.as_millis()
+        ))
     })();
 
     let duration = start.elapsed();

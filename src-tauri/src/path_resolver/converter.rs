@@ -6,8 +6,8 @@
 //! - C:\software\Java\project → C--software-Java-project
 //! - D:\Projects\My App\v2.0 → D--Projects-My App-v2.0
 
-use std::path::Path;
 use super::{PathConverter, PathResolveError};
+use std::path::Path;
 
 /// Windows 路径转换器
 pub struct WindowsPathConverter;
@@ -22,7 +22,12 @@ impl WindowsPathConverter {
     fn normalize_drive_letter(path: &str) -> String {
         // 匹配 "C:" 模式并替换为 "C-"
         if let Some(idx) = path.find(':') {
-            if idx == 1 && path.chars().next().map_or(false, |c| c.is_ascii_uppercase()) {
+            if idx == 1
+                && path
+                    .chars()
+                    .next()
+                    .map_or(false, |c| c.is_ascii_uppercase())
+            {
                 // 这是驱动器字母格式 (C:, D:, etc.)
                 let mut result = String::from(path);
                 result.remove(idx); // 移除冒号
@@ -49,7 +54,8 @@ impl WindowsPathConverter {
 
 impl PathConverter for WindowsPathConverter {
     fn path_to_folder_name(&self, path: &Path) -> Result<String, PathResolveError> {
-        let path_str = path.to_str()
+        let path_str = path
+            .to_str()
             .ok_or_else(|| PathResolveError::InvalidPath("路径包含无效字符".to_string()))?;
 
         #[cfg(debug_assertions)]
@@ -73,7 +79,10 @@ impl PathConverter for WindowsPathConverter {
         Ok(cleaned)
     }
 
-    fn folder_name_to_path(&self, folder_name: &str) -> Result<std::path::PathBuf, PathResolveError> {
+    fn folder_name_to_path(
+        &self,
+        folder_name: &str,
+    ) -> Result<std::path::PathBuf, PathResolveError> {
         #[cfg(debug_assertions)]
         eprintln!("[PathConverter] 还原文件夹名: {}", folder_name);
 
@@ -81,7 +90,7 @@ impl PathConverter for WindowsPathConverter {
         let first_char = folder_name.chars().next();
         if !first_char.map_or(false, |c| c.is_ascii_uppercase()) {
             return Err(PathResolveError::InvalidFolderName(
-                "文件夹名称必须以大写字母开头".to_string()
+                "文件夹名称必须以大写字母开头".to_string(),
             ));
         }
 

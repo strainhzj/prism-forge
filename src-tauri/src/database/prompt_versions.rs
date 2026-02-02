@@ -4,17 +4,16 @@
 //! 以及版本对比和回滚功能
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
+use similar::{ChangeTag, TextDiff};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use similar::{ChangeTag, TextDiff};
 
 use crate::database::models::{
-    PromptTemplate, PromptVersion, PromptComponent, PromptComponentType,
-    PromptParameter, PromptParameterType, PromptChange, ChangeType,
-    PromptVersionDiff, ComponentDiff, LineDiff, LineChangeType,
-    ParameterDiff, MetadataDiff,
+    ChangeType, ComponentDiff, LineChangeType, LineDiff, MetadataDiff, ParameterDiff, PromptChange,
+    PromptComponent, PromptComponentType, PromptParameter, PromptParameterType, PromptTemplate,
+    PromptVersion, PromptVersionDiff,
 };
 
 /// 提示词版本管理 Repository
@@ -85,9 +84,7 @@ impl PromptVersionRepository {
             match self.conn.try_lock() {
                 Ok(guard) => {
                     // 成功获取锁，执行数据库操作
-                    return f(&guard).map_err(|e| {
-                        anyhow::anyhow!("数据库操作失败: {}", e)
-                    });
+                    return f(&guard).map_err(|e| anyhow::anyhow!("数据库操作失败: {}", e));
                 }
                 Err(e) => {
                     let is_poisoned = matches!(e, std::sync::TryLockError::Poisoned(_));
@@ -100,7 +97,11 @@ impl PromptVersionRepository {
                             attempts,
                             MAX_RETRIES,
                             elapsed,
-                            if is_poisoned { "Mutex 已被毒化" } else { "锁竞争超时" }
+                            if is_poisoned {
+                                "Mutex 已被毒化"
+                            } else {
+                                "锁竞争超时"
+                            }
                         ));
                     }
 
@@ -316,7 +317,11 @@ impl PromptVersionRepository {
     }
 
     /// 根据版本号获取版本
-    pub fn get_version_by_number(&self, template_id: i64, version_number: i32) -> Result<Option<PromptVersion>> {
+    pub fn get_version_by_number(
+        &self,
+        template_id: i64,
+        version_number: i32,
+    ) -> Result<Option<PromptVersion>> {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, template_id, version_number, is_active, content, metadata, created_by, created_at
@@ -677,7 +682,13 @@ impl PromptVersionRepository {
                 "INSERT INTO prompt_versions (
                     template_id, version_number, is_active, content, created_by, created_at
                 ) VALUES (?1, ?2, 0, ?3, ?4, ?5)",
-                params![template_id, version_number, &content, created_by, created_at],
+                params![
+                    template_id,
+                    version_number,
+                    &content,
+                    created_by,
+                    created_at
+                ],
             )?;
 
             let version_id = conn.last_insert_rowid();
@@ -686,7 +697,8 @@ impl PromptVersionRepository {
             if version_id == 0 {
                 return Err(anyhow::anyhow!(
                     "创建版本失败: last_insert_rowid 返回 0, template_id={}, version_number={}",
-                    template_id, version_number
+                    template_id,
+                    version_number
                 ));
             }
 
@@ -703,7 +715,8 @@ impl PromptVersionRepository {
                     #[cfg(debug_assertions)]
                     log::warn!("版本 {} 组件创建失败: {}, 版本记录已存在", version_id, e);
                     return Err(e.context(format!(
-                        "版本 {} 组件创建失败，但版本记录已插入", version_id
+                        "版本 {} 组件创建失败，但版本记录已插入",
+                        version_id
                     )));
                 }
             }
@@ -747,12 +760,11 @@ impl PromptVersionRepository {
         content: &str,
     ) -> Result<usize> {
         // 解析 content JSON
-        let content_data: serde_json::Value = serde_json::from_str(content)
-            .map_err(|e| {
-                #[cfg(debug_assertions)]
-                log::error!("解析 content JSON 失败: {}", e);
-                anyhow::anyhow!("解析 content JSON 失败: {}", e)
-            })?;
+        let content_data: serde_json::Value = serde_json::from_str(content).map_err(|e| {
+            #[cfg(debug_assertions)]
+            log::error!("解析 content JSON 失败: {}", e);
+            anyhow::anyhow!("解析 content JSON 失败: {}", e)
+        })?;
 
         let mut components = Vec::new();
         let mut sort_order = 0;
@@ -776,7 +788,9 @@ impl PromptVersionRepository {
                         };
 
                         // 提取 content 字段
-                        if let Some(content_value) = component_data.as_object().and_then(|d| d.get("content")) {
+                        if let Some(content_value) =
+                            component_data.as_object().and_then(|d| d.get("content"))
+                        {
                             if let Some(content_str) = content_value.as_str() {
                                 components.push((
                                     component_type,
@@ -819,7 +833,7 @@ impl PromptVersionRepository {
                         format!("{:?}", component_type),
                         name,
                         content_str,
-                        None as Option<String>,  // variables
+                        None as Option<String>, // variables
                         language,
                         sort_order,
                     ],
@@ -827,21 +841,24 @@ impl PromptVersionRepository {
                     Ok(_) => inserted_count += 1,
                     Err(e) => {
                         #[cfg(debug_assertions)]
-                        log::error!("插入组件 {} 失败: {}, 已插入 {} 个", name, e, inserted_count);
+                        log::error!(
+                            "插入组件 {} 失败: {}, 已插入 {} 个",
+                            name,
+                            e,
+                            inserted_count
+                        );
                         return Err(anyhow::anyhow!(
                             "插入组件 {} 失败: {}, 已插入 {} 个",
-                            name, e, inserted_count
+                            name,
+                            e,
+                            inserted_count
                         ));
                     }
                 }
             }
 
             #[cfg(debug_assertions)]
-            log::info!(
-                "为版本 {} 创建了 {} 个组件记录",
-                version_id,
-                inserted_count
-            );
+            log::info!("为版本 {} 创建了 {} 个组件记录", version_id, inserted_count);
         }
 
         Ok(inserted_count)
@@ -894,14 +911,14 @@ impl PromptVersionRepository {
             let mut stmt = conn.prepare(
                 "SELECT id, version_id, key, value, parameter_type, description
                  FROM prompt_parameters
-                 WHERE version_id = ?1"
+                 WHERE version_id = ?1",
             )?;
 
             let parameters = stmt.query_map(params![version_id], |row| {
                 let parameter_type_str: String = row.get(4)?;
                 // 使用 FromStr trait 进行安全解析
-                let parameter_type: PromptParameterType = parameter_type_str.parse()
-                    .map_err(|e| {
+                let parameter_type: PromptParameterType =
+                    parameter_type_str.parse().map_err(|e| {
                         rusqlite::Error::InvalidParameterName(format!(
                             "无效的 PromptParameterType '{}': {}",
                             parameter_type_str, e
@@ -918,7 +935,9 @@ impl PromptVersionRepository {
                 })
             })?;
 
-            parameters.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+            parameters
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(Into::into)
         })
     }
 
@@ -976,7 +995,9 @@ impl PromptVersionRepository {
                         };
 
                         // 提取 content 字段
-                        if let Some(content) = component_data.as_object().and_then(|d| d.get("content")) {
+                        if let Some(content) =
+                            component_data.as_object().and_then(|d| d.get("content"))
+                        {
                             if let Some(content_str) = content.as_str() {
                                 components.push(PromptComponent {
                                     id: None,
@@ -1036,10 +1057,12 @@ impl PromptVersionRepository {
         to_version: i32,
     ) -> Result<PromptVersionDiff> {
         // 获取版本数据
-        let from_version_data = self.get_version_by_number(template_id, from_version)?
+        let from_version_data = self
+            .get_version_by_number(template_id, from_version)?
             .ok_or_else(|| anyhow::anyhow!("源版本不存在: v{}", from_version))?;
 
-        let to_version_data = self.get_version_by_number(template_id, to_version)?
+        let to_version_data = self
+            .get_version_by_number(template_id, to_version)?
             .ok_or_else(|| anyhow::anyhow!("目标版本不存在: v{}", to_version))?;
 
         let from_components = if let Some(id) = from_version_data.id {
@@ -1069,7 +1092,8 @@ impl PromptVersionRepository {
         // 执行对比
         let component_changes = Self::compare_components_internal(&from_components, &to_components);
         let parameter_changes = Self::compare_parameters_internal(&from_parameters, &to_parameters);
-        let metadata_changes = Self::compare_metadata_internal(&from_version_data.metadata, &to_version_data.metadata);
+        let metadata_changes =
+            Self::compare_metadata_internal(&from_version_data.metadata, &to_version_data.metadata);
 
         Ok(PromptVersionDiff {
             from_version: from_version_data,
@@ -1101,7 +1125,8 @@ impl PromptVersionRepository {
         for (key, to_component) in &to_map {
             if let Some(from_component) = from_map.get(key) {
                 // 组件存在，检查内容变更
-                let line_diffs = Self::compute_line_diff(&from_component.content, &to_component.content);
+                let line_diffs =
+                    Self::compute_line_diff(&from_component.content, &to_component.content);
 
                 if !line_diffs.is_empty() {
                     changes.push(ComponentDiff {
@@ -1344,7 +1369,9 @@ impl PromptVersionRepository {
             new_value: row.get(8).ok(),
             line_number: row.get(9).ok(),
             change_summary: row.get(10).ok(),
-            changed_at: row.get(11).unwrap_or_else(|_| chrono::Utc::now().to_rfc3339()),
+            changed_at: row
+                .get(11)
+                .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339()),
         }
     }
 
@@ -1489,8 +1516,10 @@ impl PromptVersionRepository {
             )?;
 
             #[cfg(debug_assertions)]
-            eprintln!("[PromptVersionRepository] 删除模板 {} 的 {} 个版本",
-                     template_id, versions_deleted);
+            eprintln!(
+                "[PromptVersionRepository] 删除模板 {} 的 {} 个版本",
+                template_id, versions_deleted
+            );
 
             // 删除模板
             let template_deleted = conn.execute(
@@ -1508,8 +1537,10 @@ impl PromptVersionRepository {
             conn.execute("COMMIT", [])?;
 
             #[cfg(debug_assertions)]
-            eprintln!("[PromptVersionRepository] 成功删除模板 {} 及其 {} 个版本",
-                     template_id, versions_deleted);
+            eprintln!(
+                "[PromptVersionRepository] 成功删除模板 {} 及其 {} 个版本",
+                template_id, versions_deleted
+            );
 
             Ok(())
         })

@@ -3,12 +3,12 @@
 //! Provides comprehensive error handling with pattern matching, categorization,
 //! and recovery suggestions for command registration and execution errors.
 
+use log::{debug, error, info, warn};
+use regex::Regex;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, Duration};
-use regex::Regex;
-use serde::{Serialize, Deserialize};
-use log::{error, warn, info, debug};
+use std::time::{Duration, SystemTime};
 
 use crate::command_registry::errors::{CommandError, ModuleError};
 use crate::command_registry::registry::{CommandRegistry, CommandStatus, CommandStatusInfo};
@@ -34,7 +34,10 @@ pub struct DefaultLogger;
 
 impl Logger for DefaultLogger {
     fn log_error(&self, message: &str, context: &ErrorContext) {
-        error!("[{}] {} - Context: {:?}", context.error_id, message, context);
+        error!(
+            "[{}] {} - Context: {:?}",
+            context.error_id, message, context
+        );
     }
 
     fn log_warning(&self, message: &str) {
@@ -142,7 +145,7 @@ impl EnhancedErrorHandler {
         for rule in &self.anomaly_detector.detection_rules.clone() {
             if let Some(alert) = self.check_anomaly_rule(rule, registry) {
                 triggered_alerts.push(alert.clone());
-                
+
                 // Send alert through notification handlers
                 if let Ok(mut alert_manager) = self.alert_manager.lock() {
                     alert_manager.trigger_alert(alert);
@@ -154,7 +157,11 @@ impl EnhancedErrorHandler {
     }
 
     /// Monitor command status and trigger alerts for anomalies
-    pub fn monitor_command_status(&mut self, command_name: &str, status_info: &CommandStatusInfo) -> Vec<Alert> {
+    pub fn monitor_command_status(
+        &mut self,
+        command_name: &str,
+        status_info: &CommandStatusInfo,
+    ) -> Vec<Alert> {
         let mut alerts = Vec::new();
 
         // Check if command status indicates an anomaly
@@ -167,7 +174,7 @@ impl EnhancedErrorHandler {
                     format!("Command failed: {}", reason),
                 );
                 alerts.push(alert.clone());
-                
+
                 if let Ok(mut alert_manager) = self.alert_manager.lock() {
                     alert_manager.trigger_alert(alert);
                 }
@@ -180,7 +187,7 @@ impl EnhancedErrorHandler {
                     "Command has been disabled".to_string(),
                 );
                 alerts.push(alert.clone());
-                
+
                 if let Ok(mut alert_manager) = self.alert_manager.lock() {
                     alert_manager.trigger_alert(alert);
                 }
@@ -198,7 +205,7 @@ impl EnhancedErrorHandler {
                     format!("Dependency '{}' has failed", dep_name),
                 );
                 alerts.push(alert.clone());
-                
+
                 if let Ok(mut alert_manager) = self.alert_manager.lock() {
                     alert_manager.trigger_alert(alert);
                 }
@@ -208,15 +215,19 @@ impl EnhancedErrorHandler {
         // Check for commands that haven't been called recently
         if let Some(last_called) = status_info.last_called {
             if let Ok(duration) = SystemTime::now().duration_since(last_called) {
-                if duration > Duration::from_secs(3600) { // 1 hour threshold
+                if duration > Duration::from_secs(3600) {
+                    // 1 hour threshold
                     let alert = Alert::new(
                         AlertType::CommandNotResponding,
                         AlertSeverity::Info,
                         command_name.to_string(),
-                        format!("Command hasn't been called for {} minutes", duration.as_secs() / 60),
+                        format!(
+                            "Command hasn't been called for {} minutes",
+                            duration.as_secs() / 60
+                        ),
                     );
                     alerts.push(alert.clone());
-                    
+
                     if let Ok(mut alert_manager) = self.alert_manager.lock() {
                         alert_manager.trigger_alert(alert);
                     }
@@ -282,7 +293,7 @@ impl EnhancedErrorHandler {
                 name: "High Error Rate".to_string(),
                 alert_type: AlertType::HighErrorRate,
                 condition: AlertCondition::ErrorRateExceeded {
-                    rate: 0.5, // 50% error rate
+                    rate: 0.5,                             // 50% error rate
                     time_window: Duration::from_secs(600), // 10 minutes
                 },
                 severity: AlertSeverity::Warning,
@@ -341,7 +352,10 @@ impl EnhancedErrorHandler {
     /// Check a specific anomaly rule
     fn check_anomaly_rule(&self, rule: &AnomalyRule, _registry: &CommandRegistry) -> Option<Alert> {
         for (command_name, metrics) in &self.anomaly_detector.command_metrics {
-            if self.anomaly_detector.evaluate_condition(&rule.condition, metrics) {
+            if self
+                .anomaly_detector
+                .evaluate_condition(&rule.condition, metrics)
+            {
                 return Some(Alert::new(
                     rule.alert_type.clone(),
                     rule.severity.clone(),
@@ -368,7 +382,8 @@ impl EnhancedErrorHandler {
 
         // Module initialization failure pattern
         self.add_pattern(ErrorPattern {
-            pattern: Regex::new(r"Module initialization failed|Failed to initialize module").unwrap(),
+            pattern: Regex::new(r"Module initialization failed|Failed to initialize module")
+                .unwrap(),
             category: ErrorCategory::ModuleInitializationFailed,
             recovery_suggestions: vec![
                 "Check module dependencies are available".to_string(),
@@ -409,7 +424,8 @@ impl EnhancedErrorHandler {
 
         // Validation error pattern
         self.add_pattern(ErrorPattern {
-            pattern: Regex::new(r"Validation failed|Invalid.*parameter|Parameter.*invalid").unwrap(),
+            pattern: Regex::new(r"Validation failed|Invalid.*parameter|Parameter.*invalid")
+                .unwrap(),
             category: ErrorCategory::ValidationError,
             recovery_suggestions: vec![
                 "Check the parameter format and values".to_string(),
@@ -534,17 +550,20 @@ impl EnhancedErrorHandler {
     /// Log error with full context
     pub fn log_error_with_context(&self, error: &CommandError, context: &ErrorContext) {
         self.logger.log_error(&error.message, context);
-        
+
         // Log additional details based on error type
         match error.error_type {
             crate::command_registry::errors::ErrorType::CommandNotFound => {
-                self.logger.log_info("Consider using the diagnostic tool to list available commands");
+                self.logger
+                    .log_info("Consider using the diagnostic tool to list available commands");
             }
             crate::command_registry::errors::ErrorType::DependencyMissing => {
-                self.logger.log_warning("Check module initialization order and dependencies");
+                self.logger
+                    .log_warning("Check module initialization order and dependencies");
             }
             crate::command_registry::errors::ErrorType::RuntimeError => {
-                self.logger.log_error("Runtime error occurred - check system resources", context);
+                self.logger
+                    .log_error("Runtime error occurred - check system resources", context);
             }
             _ => {}
         }
@@ -593,7 +612,11 @@ impl EnhancedErrorHandler {
     }
 
     /// Create user-friendly error message
-    pub fn create_friendly_message(&self, original_message: &str, category: &ErrorCategory) -> String {
+    pub fn create_friendly_message(
+        &self,
+        original_message: &str,
+        category: &ErrorCategory,
+    ) -> String {
         let friendly_message = match category {
             ErrorCategory::CommandNotFound => {
                 "The requested command could not be found. Please check the command name and try again.".to_string()
@@ -634,7 +657,8 @@ impl EnhancedErrorHandler {
 
         // Ensure the message is always descriptive (at least 15 characters)
         if friendly_message.len() < 15 {
-            "An unexpected error occurred. Please try again or contact support for assistance.".to_string()
+            "An unexpected error occurred. Please try again or contact support for assistance."
+                .to_string()
         } else {
             friendly_message
         }
@@ -695,7 +719,9 @@ impl EnhancedErrorHandler {
     pub fn get_error_statistics(&self) -> ErrorStatistics {
         ErrorStatistics {
             total_patterns: self.error_patterns.len(),
-            categories: self.error_patterns.values()
+            categories: self
+                .error_patterns
+                .values()
                 .map(|p| p.category.clone())
                 .collect::<std::collections::HashSet<_>>()
                 .len(),
@@ -768,12 +794,25 @@ pub struct AlertRule {
 /// Conditions that trigger alerts
 #[derive(Debug, Clone)]
 pub enum AlertCondition {
-    CommandFailureCount { threshold: u32, time_window: Duration },
-    CommandNotCalledFor { duration: Duration },
+    CommandFailureCount {
+        threshold: u32,
+        time_window: Duration,
+    },
+    CommandNotCalledFor {
+        duration: Duration,
+    },
     DependencyUnavailable,
-    ErrorRateExceeded { rate: f64, time_window: Duration },
-    CommandStatusChanged { from: CommandStatus, to: CommandStatus },
-    ConsecutiveFailures { count: u32 },
+    ErrorRateExceeded {
+        rate: f64,
+        time_window: Duration,
+    },
+    CommandStatusChanged {
+        from: CommandStatus,
+        to: CommandStatus,
+    },
+    ConsecutiveFailures {
+        count: u32,
+    },
 }
 
 /// Trait for handling alert notifications
@@ -790,13 +829,28 @@ impl NotificationHandler for ConsoleNotificationHandler {
     fn send_alert(&self, alert: &Alert) -> Result<(), String> {
         match alert.severity {
             AlertSeverity::Emergency | AlertSeverity::Critical => {
-                error!("[ALERT] {} - {}: {}", alert.severity_string(), alert.command_name, alert.message);
+                error!(
+                    "[ALERT] {} - {}: {}",
+                    alert.severity_string(),
+                    alert.command_name,
+                    alert.message
+                );
             }
             AlertSeverity::Warning => {
-                warn!("[ALERT] {} - {}: {}", alert.severity_string(), alert.command_name, alert.message);
+                warn!(
+                    "[ALERT] {} - {}: {}",
+                    alert.severity_string(),
+                    alert.command_name,
+                    alert.message
+                );
             }
             AlertSeverity::Info => {
-                info!("[ALERT] {} - {}: {}", alert.severity_string(), alert.command_name, alert.message);
+                info!(
+                    "[ALERT] {} - {}: {}",
+                    alert.severity_string(),
+                    alert.command_name,
+                    alert.message
+                );
             }
         }
         Ok(())
@@ -858,7 +912,7 @@ impl AlertManager {
             notification_handlers: Vec::new(),
             alert_history: HashMap::new(),
         };
-        
+
         // Add default console notification handler
         manager.add_notification_handler(Box::new(ConsoleNotificationHandler));
         manager
@@ -888,14 +942,22 @@ impl AlertManager {
         // Send notifications
         for handler in &self.notification_handlers {
             if let Err(e) = handler.send_alert(&alert) {
-                error!("Failed to send alert via {}: {}", handler.get_handler_name(), e);
+                error!(
+                    "Failed to send alert via {}: {}",
+                    handler.get_handler_name(),
+                    e
+                );
             }
         }
     }
 
     /// Get active alerts
     pub fn get_active_alerts(&self) -> Vec<Alert> {
-        self.alerts.iter().filter(|a| !a.resolved).cloned().collect()
+        self.alerts
+            .iter()
+            .filter(|a| !a.resolved)
+            .cloned()
+            .collect()
     }
 
     /// Resolve an alert
@@ -910,7 +972,10 @@ impl AlertManager {
     }
 
     /// Add notification handler
-    pub fn add_notification_handler(&mut self, handler: Box<dyn NotificationHandler + Send + Sync>) {
+    pub fn add_notification_handler(
+        &mut self,
+        handler: Box<dyn NotificationHandler + Send + Sync>,
+    ) {
         self.notification_handlers.push(handler);
     }
 
@@ -919,7 +984,7 @@ impl AlertManager {
         let total_alerts = self.alerts.len();
         let active_alerts = self.get_active_alerts().len();
         let resolved_alerts = total_alerts - active_alerts;
-        
+
         let mut severity_counts = HashMap::new();
         for alert in &self.alerts {
             *severity_counts.entry(alert.severity.clone()).or_insert(0) += 1;
@@ -939,7 +1004,9 @@ impl AlertManager {
         if let Some(history) = self.alert_history.get(&alert.command_name) {
             for historical_alert in history.iter().rev() {
                 if historical_alert.alert_type == alert.alert_type {
-                    if let Ok(duration) = SystemTime::now().duration_since(historical_alert.timestamp) {
+                    if let Ok(duration) =
+                        SystemTime::now().duration_since(historical_alert.timestamp)
+                    {
                         // Use a default cooldown of 5 minutes if no specific rule found
                         let cooldown = Duration::from_secs(300);
                         return duration < cooldown;
@@ -954,7 +1021,12 @@ impl AlertManager {
 
 impl Alert {
     /// Create a new alert
-    pub fn new(alert_type: AlertType, severity: AlertSeverity, command_name: String, message: String) -> Self {
+    pub fn new(
+        alert_type: AlertType,
+        severity: AlertSeverity,
+        command_name: String,
+        message: String,
+    ) -> Self {
         Self {
             id: Self::generate_id(),
             alert_type,
@@ -1009,8 +1081,13 @@ impl AnomalyDetector {
     }
 
     /// Update metrics for a command
-    pub fn update_command_metrics(&mut self, command_name: &str, info: &crate::command_registry::registry::CommandInfo) {
-        let metrics = self.command_metrics
+    pub fn update_command_metrics(
+        &mut self,
+        command_name: &str,
+        info: &crate::command_registry::registry::CommandInfo,
+    ) {
+        let metrics = self
+            .command_metrics
             .entry(command_name.to_string())
             .or_insert_with(|| CommandMetrics {
                 call_count: 0,
@@ -1028,10 +1105,14 @@ impl AnomalyDetector {
         // Track status changes
         if let Some(last_status) = metrics.status_changes.last() {
             if last_status.1 != info.status {
-                metrics.status_changes.push((SystemTime::now(), info.status.clone()));
+                metrics
+                    .status_changes
+                    .push((SystemTime::now(), info.status.clone()));
             }
         } else {
-            metrics.status_changes.push((SystemTime::now(), info.status.clone()));
+            metrics
+                .status_changes
+                .push((SystemTime::now(), info.status.clone()));
         }
 
         // Update failure count based on status
@@ -1043,7 +1124,11 @@ impl AnomalyDetector {
     }
 
     /// Evaluate an anomaly condition
-    pub fn evaluate_condition(&self, condition: &AnomalyCondition, metrics: &CommandMetrics) -> bool {
+    pub fn evaluate_condition(
+        &self,
+        condition: &AnomalyCondition,
+        metrics: &CommandMetrics,
+    ) -> bool {
         match condition {
             AnomalyCondition::HighFailureRate { threshold } => {
                 if metrics.call_count > 0 {
@@ -1065,7 +1150,8 @@ impl AnomalyDetector {
                 }
             }
             AnomalyCondition::RapidStatusChanges { count, time_window } => {
-                let recent_changes = metrics.status_changes
+                let recent_changes = metrics
+                    .status_changes
                     .iter()
                     .filter(|(timestamp, _)| {
                         if let Ok(duration) = SystemTime::now().duration_since(*timestamp) {
@@ -1100,17 +1186,17 @@ mod tests {
     #[test]
     fn test_error_categorization() {
         let handler = EnhancedErrorHandler::new();
-        
+
         assert_eq!(
             handler.categorize_error("Command 'test_command' not found"),
             ErrorCategory::CommandNotFound
         );
-        
+
         assert_eq!(
             handler.categorize_error("Module initialization failed"),
             ErrorCategory::ModuleInitializationFailed
         );
-        
+
         assert_eq!(
             handler.categorize_error("Missing dependency: database"),
             ErrorCategory::DependencyMissing
@@ -1120,7 +1206,7 @@ mod tests {
     #[test]
     fn test_recovery_suggestions() {
         let handler = EnhancedErrorHandler::new();
-        
+
         let suggestions = handler.get_recovery_suggestions(&ErrorCategory::CommandNotFound);
         assert!(!suggestions.is_empty());
         assert!(suggestions.iter().any(|s| s.contains("command name")));
@@ -1130,9 +1216,9 @@ mod tests {
     fn test_command_error_handling() {
         let handler = EnhancedErrorHandler::new();
         let error = CommandError::command_not_found("test_command");
-        
+
         let response = handler.handle_command_error(&error);
-        
+
         assert_eq!(response.error_type, ErrorCategory::CommandNotFound);
         assert!(!response.recovery_suggestions.is_empty());
         assert!(response.available_commands.is_some());
@@ -1143,10 +1229,13 @@ mod tests {
     fn test_module_error_handling() {
         let handler = EnhancedErrorHandler::new();
         let error = ModuleError::initialization_failed("database", "Connection failed");
-        
+
         let response = handler.handle_module_error(&error);
-        
-        assert_eq!(response.error_type, ErrorCategory::ModuleInitializationFailed);
+
+        assert_eq!(
+            response.error_type,
+            ErrorCategory::ModuleInitializationFailed
+        );
         assert!(!response.recovery_suggestions.is_empty());
         assert_eq!(response.error_code, "MOD_500");
     }
@@ -1154,12 +1243,10 @@ mod tests {
     #[test]
     fn test_friendly_message_generation() {
         let handler = EnhancedErrorHandler::new();
-        
-        let message = handler.create_friendly_message(
-            "Command 'xyz' not found",
-            &ErrorCategory::CommandNotFound
-        );
-        
+
+        let message = handler
+            .create_friendly_message("Command 'xyz' not found", &ErrorCategory::CommandNotFound);
+
         assert!(message.contains("could not be found"));
         assert!(!message.contains("xyz")); // Should be more generic
     }
@@ -1167,12 +1254,12 @@ mod tests {
     #[test]
     fn test_error_severity_assignment() {
         let handler = EnhancedErrorHandler::new();
-        
+
         assert_eq!(
             handler.get_error_severity(&ErrorCategory::CommandNotFound),
             ErrorSeverity::Medium
         );
-        
+
         assert_eq!(
             handler.get_error_severity(&ErrorCategory::ModuleInitializationFailed),
             ErrorSeverity::High
@@ -1214,7 +1301,7 @@ mod tests {
         );
 
         manager.trigger_alert(alert.clone());
-        
+
         let active_alerts = manager.get_active_alerts();
         assert_eq!(active_alerts.len(), 1);
         assert_eq!(active_alerts[0].command_name, "test_command");
@@ -1263,8 +1350,8 @@ mod tests {
         assert!(detector.evaluate_condition(&condition, &metrics));
 
         // Test unusual inactivity condition
-        let condition = AnomalyCondition::UnusualInactivity { 
-            threshold: Duration::from_secs(1800) 
+        let condition = AnomalyCondition::UnusualInactivity {
+            threshold: Duration::from_secs(1800),
         };
         assert!(detector.evaluate_condition(&condition, &metrics));
 

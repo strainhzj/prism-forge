@@ -9,10 +9,10 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use ts_rs::TS;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
+use ts_rs::TS;
 
 /// 优化器配置
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -85,14 +85,20 @@ pub struct ComponentContent {
 impl From<LanguageComponent> for HashMap<String, ComponentContent> {
     fn from(component: LanguageComponent) -> Self {
         let mut map = HashMap::new();
-        map.insert("zh".to_string(), ComponentContent {
-            content: component.zh,
-            last_modified: None,
-        });
-        map.insert("en".to_string(), ComponentContent {
-            content: component.en,
-            last_modified: None,
-        });
+        map.insert(
+            "zh".to_string(),
+            ComponentContent {
+                content: component.zh,
+                last_modified: None,
+            },
+        );
+        map.insert(
+            "en".to_string(),
+            ComponentContent {
+                content: component.en,
+                last_modified: None,
+            },
+        );
         map
     }
 }
@@ -275,7 +281,10 @@ impl ConfigManager {
     fn read_config(&self) -> RwLockReadGuard<'_, OptimizerConfig> {
         self.config.read().unwrap_or_else(|e| {
             #[cfg(debug_assertions)]
-            eprintln!("[ConfigManager] 读取配置读锁失败: {}，忽略 poison 状态继续使用", e);
+            eprintln!(
+                "[ConfigManager] 读取配置读锁失败: {}，忽略 poison 状态继续使用",
+                e
+            );
             e.into_inner()
         })
     }
@@ -303,7 +312,9 @@ impl ConfigManager {
 
         // 手动处理 RwLock 写入
         {
-            let mut guard = self.config.write()
+            let mut guard = self
+                .config
+                .write()
                 .map_err(|e| anyhow::anyhow!("获取写锁失败: {}", e))?;
             *guard = config;
         }
@@ -376,7 +387,10 @@ impl ConfigManager {
             .replace("{{goal}}", goal)
             .replace("{{sessions}}", sessions);
 
-        format!("{}\n\n{}\n\n{}", meta_prompt, input_section, output_template)
+        format!(
+            "{}\n\n{}\n\n{}",
+            meta_prompt, input_section, output_template
+        )
     }
 
     /// 获取会话格式化模板（根据语言）
@@ -430,7 +444,8 @@ pub fn init_config_manager(config_path: PathBuf) -> Result<()> {
     let manager = Arc::new(ConfigManager::new(config_path)?);
     // 手动处理 RwLock 写入
     {
-        let mut guard = CONFIG_MANAGER.write()
+        let mut guard = CONFIG_MANAGER
+            .write()
             .map_err(|e| anyhow::anyhow!("获取写锁失败: {}", e))?;
         *guard = Some(manager);
     }

@@ -2,11 +2,11 @@
 //!
 //! 根据项目路径解析对应的会话目录
 
-use std::path::{Path, PathBuf, Component};
-use std::fs;
-use dirs::home_dir;
 use super::converter::WindowsPathConverter;
-use crate::session_type_detector::{SessionFileType, detect_session_type_by_filename};
+use crate::session_type_detector::{detect_session_type_by_filename, SessionFileType};
+use dirs::home_dir;
+use std::fs;
+use std::path::{Component, Path, PathBuf};
 
 /// 路径解析错误
 #[derive(Debug, thiserror::Error)]
@@ -45,7 +45,10 @@ pub trait PathResolver {
     fn session_dir_exists(&self, project_path: &Path) -> Result<bool, PathResolveError>;
 
     /// 列出会话目录中的所有会话文件（按修改时间倒序）
-    fn list_session_files_sorted(&self, project_path: &Path) -> Result<Vec<SessionFileInfo>, PathResolveError>;
+    fn list_session_files_sorted(
+        &self,
+        project_path: &Path,
+    ) -> Result<Vec<SessionFileInfo>, PathResolveError>;
 }
 
 /// 会话文件信息
@@ -74,8 +77,7 @@ pub struct ClaudePathResolver {
 impl ClaudePathResolver {
     /// 创建新的解析器
     pub fn new() -> Result<Self, PathResolveError> {
-        let home = home_dir()
-            .ok_or(PathResolveError::HomeDirNotFound)?;
+        let home = home_dir().ok_or(PathResolveError::HomeDirNotFound)?;
 
         let projects_base_dir = home.join(".claude").join("projects");
 
@@ -108,7 +110,9 @@ impl ClaudePathResolver {
 
     fn validate_folder_name(&self, folder_name: &str) -> Result<(), PathResolveError> {
         if folder_name.is_empty() {
-            return Err(PathResolveError::InvalidFolderName("会话目录名称为空".to_string()));
+            return Err(PathResolveError::InvalidFolderName(
+                "会话目录名称为空".to_string(),
+            ));
         }
 
         let mut components = Path::new(folder_name).components();
@@ -122,7 +126,10 @@ impl ClaudePathResolver {
     }
 
     /// 列出目录中的所有 .jsonl 文件并按修改时间排序
-    fn list_jsonl_files_sorted(&self, dir: &Path) -> Result<Vec<SessionFileInfo>, PathResolveError> {
+    fn list_jsonl_files_sorted(
+        &self,
+        dir: &Path,
+    ) -> Result<Vec<SessionFileInfo>, PathResolveError> {
         let mut sessions = Vec::new();
 
         if !dir.exists() {
@@ -159,7 +166,8 @@ impl ClaudePathResolver {
                 let modified_time = system_time_to_rfc3339(modified)?;
 
                 // 获取文件名（不含扩展名）
-                let file_name = path.file_stem()
+                let file_name = path
+                    .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("")
                     .to_string();
@@ -211,7 +219,10 @@ impl PathResolver for ClaudePathResolver {
         Ok(session_dir.exists())
     }
 
-    fn list_session_files_sorted(&self, project_path: &Path) -> Result<Vec<SessionFileInfo>, PathResolveError> {
+    fn list_session_files_sorted(
+        &self,
+        project_path: &Path,
+    ) -> Result<Vec<SessionFileInfo>, PathResolveError> {
         let session_dir = self.resolve_session_dir(project_path)?;
         self.list_jsonl_files_sorted(&session_dir)
     }

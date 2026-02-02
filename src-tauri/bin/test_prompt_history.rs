@@ -80,7 +80,12 @@ fn main() {
         Ok(histories) => {
             println!("✅ 查询成功，共 {} 条记录", histories.len());
             for (i, h) in histories.iter().enumerate() {
-                println!("   - 记录 {}: {} (语言: {})", i + 1, h.original_goal, h.language);
+                println!(
+                    "   - 记录 {}: {} (语言: {})",
+                    i + 1,
+                    h.original_goal,
+                    h.language
+                );
             }
         }
         Err(e) => {

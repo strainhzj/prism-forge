@@ -6,8 +6,8 @@
 //!
 //! 参考文档: Cherry Studio MODEL_SERVICE_ARCHITECTURE.md
 
-use anyhow::{Context, Result};
 use crate::database::ApiProviderType;
+use anyhow::{Context, Result};
 
 /// 模型分隔符
 const MODEL_SEPARATOR: &str = ":";

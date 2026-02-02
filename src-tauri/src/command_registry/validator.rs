@@ -2,10 +2,10 @@
 //!
 //! 验证命令的可用性和正确性
 
+use crate::command_registry::{CommandRegistry, CommandStatus};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use serde::{Serialize, Deserialize};
-use crate::command_registry::{CommandRegistry, CommandStatus};
 
 /// Command validator for testing command availability and correctness
 pub struct CommandValidator {
@@ -126,7 +126,9 @@ impl CommandValidator {
 
     /// Auto-generate test cases for all registered commands
     pub fn auto_generate_test_cases(&mut self, config: &AutoTestConfig) -> Result<usize, String> {
-        let registry = self.command_registry.as_ref()
+        let registry = self
+            .command_registry
+            .as_ref()
             .ok_or("Command registry not set")?;
 
         let mut generated_count = 0;
@@ -141,8 +143,9 @@ impl CommandValidator {
                     format!("{}_availability", command_name),
                     serde_json::json!({}),
                     TestExpectation::Success,
-                ).with_timeout(config.test_timeout);
-                
+                )
+                .with_timeout(config.test_timeout);
+
                 generated_tests.push(availability_test);
                 generated_count += 1;
             }
@@ -154,8 +157,9 @@ impl CommandValidator {
                     format!("{}_empty_params", command_name),
                     serde_json::json!({}),
                     TestExpectation::Success, // Assuming empty params are valid
-                ).with_timeout(config.test_timeout);
-                
+                )
+                .with_timeout(config.test_timeout);
+
                 generated_tests.push(empty_params_test);
                 generated_count += 1;
 
@@ -164,8 +168,9 @@ impl CommandValidator {
                     format!("{}_invalid_params", command_name),
                     serde_json::json!({"invalid": "parameter"}),
                     TestExpectation::Error("Invalid parameter".to_string()),
-                ).with_timeout(config.test_timeout);
-                
+                )
+                .with_timeout(config.test_timeout);
+
                 generated_tests.push(invalid_params_test);
                 generated_count += 1;
             }
@@ -178,8 +183,9 @@ impl CommandValidator {
                             format!("{}_dependencies", command_name),
                             serde_json::json!({}),
                             TestExpectation::Success,
-                        ).with_timeout(config.test_timeout);
-                        
+                        )
+                        .with_timeout(config.test_timeout);
+
                         generated_tests.push(dependency_test);
                         generated_count += 1;
                     }
@@ -188,9 +194,10 @@ impl CommandValidator {
 
             // Limit the number of generated tests per command
             generated_tests.truncate(config.max_test_cases_per_command);
-            
+
             if !generated_tests.is_empty() {
-                self.auto_generated_tests.insert(command_name, generated_tests);
+                self.auto_generated_tests
+                    .insert(command_name, generated_tests);
             }
         }
 
@@ -199,7 +206,9 @@ impl CommandValidator {
 
     /// Verify command availability using the registry
     pub fn verify_command_availability(&self, command: &str) -> Result<bool, String> {
-        let registry = self.command_registry.as_ref()
+        let registry = self
+            .command_registry
+            .as_ref()
             .ok_or("Command registry not set")?;
 
         // Check if command exists in registry
@@ -263,7 +272,10 @@ impl CommandValidator {
             for test_case in auto_tests {
                 let result = self.run_test_case(command, test_case);
                 if !result.passed {
-                    errors.push(format!("Auto-generated test case '{}' failed", test_case.name));
+                    errors.push(format!(
+                        "Auto-generated test case '{}' failed",
+                        test_case.name
+                    ));
                 }
                 test_results.push(result);
             }
@@ -283,17 +295,17 @@ impl CommandValidator {
 
         // Get all unique command names from test cases and registry
         let mut all_commands = std::collections::HashSet::new();
-        
+
         // Add commands from manual test cases
         for command_name in self.test_cases.keys() {
             all_commands.insert(command_name.clone());
         }
-        
+
         // Add commands from auto-generated tests
         for command_name in self.auto_generated_tests.keys() {
             all_commands.insert(command_name.clone());
         }
-        
+
         // Add commands from registry if available
         if let Some(registry) = &self.command_registry {
             for command_name in registry.list_available_commands() {
@@ -330,7 +342,10 @@ impl CommandValidator {
     }
 
     /// Generate coverage report
-    fn generate_coverage_report(&self, results: &HashMap<String, ValidationResult>) -> CoverageReport {
+    fn generate_coverage_report(
+        &self,
+        results: &HashMap<String, ValidationResult>,
+    ) -> CoverageReport {
         let total_commands = if let Some(registry) = &self.command_registry {
             registry.command_count()
         } else {
@@ -366,27 +381,39 @@ impl CommandValidator {
     /// Run a single test case with enhanced logic
     fn run_test_case(&self, command: &str, test_case: &TestCase) -> TestResult {
         let start_time = std::time::Instant::now();
-        
+
         // Enhanced test execution logic
         let (passed, error_message) = match &test_case.expected_result {
             TestExpectation::Success => {
                 // For success expectation, verify command is available and callable
                 match self.verify_command_availability(command) {
                     Ok(true) => (true, None),
-                    Ok(false) => (false, Some(format!("Command '{}' is not available", command))),
+                    Ok(false) => (
+                        false,
+                        Some(format!("Command '{}' is not available", command)),
+                    ),
                     Err(e) => (false, Some(e)),
                 }
             }
             TestExpectation::Error(expected_error) => {
                 // For error expectation, check if command fails as expected
                 match self.verify_command_availability(command) {
-                    Ok(true) => (false, Some("Expected error but command is available".to_string())),
+                    Ok(true) => (
+                        false,
+                        Some("Expected error but command is available".to_string()),
+                    ),
                     Ok(false) => (true, None), // Command unavailable as expected
                     Err(actual_error) => {
                         if actual_error.contains(expected_error) {
                             (true, None)
                         } else {
-                            (false, Some(format!("Expected error '{}' but got '{}'", expected_error, actual_error)))
+                            (
+                                false,
+                                Some(format!(
+                                    "Expected error '{}' but got '{}'",
+                                    expected_error, actual_error
+                                )),
+                            )
                         }
                     }
                 }
@@ -397,7 +424,10 @@ impl CommandValidator {
                 if duration >= test_case.timeout {
                     (true, None)
                 } else {
-                    (false, Some("Expected timeout but test completed quickly".to_string()))
+                    (
+                        false,
+                        Some("Expected timeout but test completed quickly".to_string()),
+                    )
                 }
             }
         };
@@ -415,34 +445,34 @@ impl CommandValidator {
     /// Get test cases for a command (including auto-generated)
     pub fn get_test_cases(&self, command: &str) -> Vec<&TestCase> {
         let mut all_tests = Vec::new();
-        
+
         // Add manual test cases
         if let Some(manual_tests) = self.test_cases.get(command) {
             all_tests.extend(manual_tests.iter());
         }
-        
+
         // Add auto-generated test cases
         if let Some(auto_tests) = self.auto_generated_tests.get(command) {
             all_tests.extend(auto_tests.iter());
         }
-        
+
         all_tests
     }
 
     /// Get all commands with test cases
     pub fn get_tested_commands(&self) -> Vec<String> {
         let mut commands = std::collections::HashSet::new();
-        
+
         // Add commands from manual tests
         for command in self.test_cases.keys() {
             commands.insert(command.clone());
         }
-        
+
         // Add commands from auto-generated tests
         for command in self.auto_generated_tests.keys() {
             commands.insert(command.clone());
         }
-        
+
         commands.into_iter().collect()
     }
 
@@ -461,7 +491,7 @@ impl CommandValidator {
         let manual_test_count: usize = self.test_cases.values().map(|v| v.len()).sum();
         let auto_test_count: usize = self.auto_generated_tests.values().map(|v| v.len()).sum();
         let total_commands = self.get_tested_commands().len();
-        
+
         TestStatistics {
             total_commands,
             manual_test_count,
@@ -500,7 +530,7 @@ impl TestCase {
 
 impl ValidationRule {
     /// Create a new validation rule
-    pub fn new<F>(name: String, rule: F) -> Self 
+    pub fn new<F>(name: String, rule: F) -> Self
     where
         F: Fn(&str) -> bool + Send + Sync + 'static,
     {
@@ -559,10 +589,7 @@ mod tests {
     #[test]
     fn test_validation_rule() {
         let mut validator = CommandValidator::new();
-        let rule = ValidationRule::new(
-            "non_empty_name".to_string(),
-            |name| !name.is_empty(),
-        );
+        let rule = ValidationRule::new("non_empty_name".to_string(), |name| !name.is_empty());
 
         validator.add_validation_rule(rule);
         assert_eq!(validator.validation_rules.len(), 1);
@@ -576,8 +603,8 @@ mod tests {
 
     #[test]
     fn test_auto_test_generation() {
-        use crate::command_registry::CommandRegistry;
         use crate::command_registry::CommandInfo;
+        use crate::command_registry::CommandRegistry;
         use std::sync::Arc;
 
         let mut registry = CommandRegistry::new();
@@ -586,7 +613,7 @@ mod tests {
 
         let mut validator = CommandValidator::with_registry(Arc::new(registry));
         let config = AutoTestConfig::default();
-        
+
         let generated_count = validator.auto_generate_test_cases(&config).unwrap();
         assert!(generated_count > 0);
         assert!(!validator.auto_generated_tests.is_empty());
@@ -595,8 +622,8 @@ mod tests {
 
     #[test]
     fn test_command_availability_verification() {
-        use crate::command_registry::CommandRegistry;
         use crate::command_registry::CommandInfo;
+        use crate::command_registry::CommandRegistry;
         use std::sync::Arc;
 
         let mut registry = CommandRegistry::new();
@@ -604,12 +631,12 @@ mod tests {
         registry.register_command(command).unwrap();
 
         let validator = CommandValidator::with_registry(Arc::new(registry));
-        
+
         // Test available command
         let result = validator.verify_command_availability("available_command");
         assert!(result.is_ok());
         assert!(result.unwrap());
-        
+
         // Test unavailable command
         let result = validator.verify_command_availability("unavailable_command");
         assert!(result.is_ok());
@@ -618,8 +645,8 @@ mod tests {
 
     #[test]
     fn test_coverage_report() {
-        use crate::command_registry::CommandRegistry;
         use crate::command_registry::CommandInfo;
+        use crate::command_registry::CommandRegistry;
         use std::sync::Arc;
 
         let mut registry = CommandRegistry::new();
@@ -634,7 +661,7 @@ mod tests {
 
         let integration_result = validator.run_integration_tests();
         let coverage = integration_result.coverage_report;
-        
+
         assert_eq!(coverage.total_commands, 2);
         assert_eq!(coverage.tested_commands, 2);
         assert!(coverage.untested_commands.is_empty());

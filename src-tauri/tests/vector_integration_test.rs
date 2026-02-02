@@ -23,7 +23,8 @@ mod integration_tests {
         prism_forge::database::migrations::migrate_v6_impl(&mut conn).unwrap();
 
         let shared_conn = Arc::new(Mutex::new(conn));
-        let repo = prism_forge::database::vector_repository::VectorRepository::with_conn(shared_conn);
+        let repo =
+            prism_forge::database::vector_repository::VectorRepository::with_conn(shared_conn);
 
         // 测试：保存向量
         let embedding = prism_forge::database::models::SessionEmbedding::new(
@@ -75,19 +76,31 @@ mod integration_tests {
         let a = vec![1.0, 2.0, 3.0];
         let b = vec![1.0, 2.0, 3.0];
         let sim = cosine_similarity(&a, &b);
-        assert!((sim - 1.0).abs() < 0.001, "相同向量相似度应该为 1.0，实际: {}", sim);
+        assert!(
+            (sim - 1.0).abs() < 0.001,
+            "相同向量相似度应该为 1.0，实际: {}",
+            sim
+        );
 
         // 正交向量：相似度 = 0.0
         let c = vec![1.0, 0.0, 0.0];
         let d = vec![0.0, 1.0, 0.0];
         let sim2 = cosine_similarity(&c, &d);
-        assert!((sim2 - 0.0).abs() < 0.001, "正交向量相似度应该为 0.0，实际: {}", sim2);
+        assert!(
+            (sim2 - 0.0).abs() < 0.001,
+            "正交向量相似度应该为 0.0，实际: {}",
+            sim2
+        );
 
         // 相反向量：相似度 = -1.0
         let e = vec![1.0, 2.0, 3.0];
         let f = vec![-1.0, -2.0, -3.0];
         let sim3 = cosine_similarity(&e, &f);
-        assert!((sim3 - (-1.0)).abs() < 0.001, "相反向量相似度应该为 -1.0，实际: {}", sim3);
+        assert!(
+            (sim3 - (-1.0)).abs() < 0.001,
+            "相反向量相似度应该为 -1.0，实际: {}",
+            sim3
+        );
 
         println!("✅ 余弦相似度计算测试通过");
     }
@@ -101,7 +114,8 @@ mod integration_tests {
         prism_forge::database::migrations::migrate_v6_impl(&mut conn).unwrap();
 
         let shared_conn = Arc::new(Mutex::new(conn));
-        let repo = prism_forge::database::vector_repository::VectorRepository::with_conn(shared_conn);
+        let repo =
+            prism_forge::database::vector_repository::VectorRepository::with_conn(shared_conn);
 
         // 插入测试向量
         let embeddings = vec![
@@ -240,16 +254,15 @@ mod performance_tests {
         prism_forge::database::migrations::migrate_v6_impl(&mut conn).unwrap();
 
         let shared_conn = Arc::new(Mutex::new(conn));
-        let repo = prism_forge::database::vector_repository::VectorRepository::with_conn(shared_conn);
+        let repo =
+            prism_forge::database::vector_repository::VectorRepository::with_conn(shared_conn);
 
         // 生成 100 个随机向量
         let count = 100;
         println!("正在生成 {} 个测试向量...", count);
 
         for i in 0..count {
-            let vector: Vec<f32> = (0..1536)
-                .map(|_| rand::random::<f32>())
-                .collect();
+            let vector: Vec<f32> = (0..1536).map(|_| rand::random::<f32>()).collect();
 
             let embedding = prism_forge::database::models::SessionEmbedding::new(
                 format!("session-{}", i),

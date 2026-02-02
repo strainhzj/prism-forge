@@ -10,8 +10,8 @@
 
 use anyhow::{Context, Result};
 use rusqlite::Connection;
-use std::path::PathBuf;
 use serde_json::json;
+use std::path::PathBuf;
 
 /// 会话分析场景模板定义
 ///
@@ -43,8 +43,8 @@ const DEFAULT_TEMPLATE: SessionAnalysisTemplate = SessionAnalysisTemplate {
 pub fn resolve_config_path() -> Result<PathBuf> {
     use std::env;
 
-    let exe_path = env::current_exe()
-        .map_err(|e| anyhow::anyhow!("无法获取可执行文件路径: {}", e))?;
+    let exe_path =
+        env::current_exe().map_err(|e| anyhow::anyhow!("无法获取可执行文件路径: {}", e))?;
 
     let exe_dir = exe_path
         .parent()
@@ -71,7 +71,11 @@ pub fn resolve_config_path() -> Result<PathBuf> {
 
         if config_path.exists() {
             #[cfg(debug_assertions)]
-            log::debug!("[InitDefaultPrompts] 找到开发环境配置（向上查找 {} 层）: {:?}", depth, config_path);
+            log::debug!(
+                "[InitDefaultPrompts] 找到开发环境配置（向上查找 {} 层）: {:?}",
+                depth,
+                config_path
+            );
             return Ok(config_path);
         }
 
@@ -145,8 +149,7 @@ pub fn import_default_prompts(conn: &mut Connection) -> Result<()> {
     log::info!("开始导入默认提示词（会话分析场景）...");
 
     // 解析配置文件路径
-    let config_path = resolve_config_path()
-        .context("无法解析配置文件路径")?;
+    let config_path = resolve_config_path().context("无法解析配置文件路径")?;
 
     log::info!("配置文件路径: {:?}", config_path);
 
@@ -198,8 +201,7 @@ pub fn import_default_prompts(conn: &mut Connection) -> Result<()> {
         }
     });
 
-    let content_str = serde_json::to_string_pretty(&content_json)
-        .context("序列化组件数据失败")?;
+    let content_str = serde_json::to_string_pretty(&content_json).context("序列化组件数据失败")?;
 
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -216,7 +218,10 @@ pub fn import_default_prompts(conn: &mut Connection) -> Result<()> {
         // 模板已存在：如果当前版本是 v1，覆盖内容
         Some((template_id, max_version)) => {
             if max_version == 1 {
-                log::info!("模板 '{}' 的 v1 已存在，检查配置文件是否更新", DEFAULT_TEMPLATE.name);
+                log::info!(
+                    "模板 '{}' 的 v1 已存在，检查配置文件是否更新",
+                    DEFAULT_TEMPLATE.name
+                );
 
                 // 获取当前 v1 的内容
                 let current_content: Option<String> = tx.query_row(
@@ -258,7 +263,11 @@ pub fn import_default_prompts(conn: &mut Connection) -> Result<()> {
                     }
                 }
             } else {
-                log::info!("模板 '{}' 已存在且当前版本为 v{}，保留用户修改", DEFAULT_TEMPLATE.name, max_version);
+                log::info!(
+                    "模板 '{}' 已存在且当前版本为 v{}，保留用户修改",
+                    DEFAULT_TEMPLATE.name,
+                    max_version
+                );
             }
         }
         // 模板不存在：创建新模板和初始版本 v1
@@ -289,7 +298,11 @@ pub fn import_default_prompts(conn: &mut Connection) -> Result<()> {
                 [&template_id as &dyn rusqlite::ToSql, &content_str as &dyn rusqlite::ToSql, &now as &dyn rusqlite::ToSql],
             )?;
 
-            log::info!("已创建模板 '{}' (ID: {}) 版本 v1", DEFAULT_TEMPLATE.name, template_id);
+            log::info!(
+                "已创建模板 '{}' (ID: {}) 版本 v1",
+                DEFAULT_TEMPLATE.name,
+                template_id
+            );
         }
     }
 
@@ -305,10 +318,10 @@ pub fn import_default_prompts(conn: &mut Connection) -> Result<()> {
 ///
 /// 这是一个便捷函数，使用全局共享连接执行导入
 pub fn import_default_prompts_shared() -> Result<()> {
-    let conn = crate::database::init::get_connection_shared()
-        .context("获取数据库连接失败")?;
+    let conn = crate::database::init::get_connection_shared().context("获取数据库连接失败")?;
 
-    let mut guard = conn.lock()
+    let mut guard = conn
+        .lock()
         .map_err(|e| anyhow::anyhow!("获取数据库锁失败: {}", e))?;
 
     import_default_prompts(&mut guard)

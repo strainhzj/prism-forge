@@ -4,9 +4,9 @@
 //! 检测会话快照文件（file-history-snapshot）
 
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::Path;
 
 // ==================== 类型定义 ====================
 
@@ -55,7 +55,8 @@ impl SessionFileType {
 /// assert_eq!(agent_type, SessionFileType::Agent);
 /// ```
 pub fn detect_session_type_by_filename(file_path: impl AsRef<Path>) -> SessionFileType {
-    let file_name = file_path.as_ref()
+    let file_name = file_path
+        .as_ref()
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("");
@@ -83,9 +84,9 @@ fn is_uuid_filename(file_name: &str) -> bool {
 
     // 使用正则表达式匹配 UUID 格式
     // UUID 格式：8-4-4-4-12 个十六进制字符
-    let uuid_pattern = regex::Regex::new(
-        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-    ).unwrap();
+    let uuid_pattern =
+        regex::Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+            .unwrap();
 
     uuid_pattern.is_match(name_without_ext)
 }
@@ -152,10 +153,7 @@ mod tests {
     #[test]
     fn test_detect_main_session() {
         let path = "7149f370-067c-447e-a7dc-dc161d3f8de7.jsonl";
-        assert_eq!(
-            detect_session_type_by_filename(path),
-            SessionFileType::Main
-        );
+        assert_eq!(detect_session_type_by_filename(path), SessionFileType::Main);
     }
 
     #[test]
@@ -179,8 +177,12 @@ mod tests {
     #[test]
     fn test_uuid_validation() {
         // 有效的 UUID
-        assert!(is_uuid_filename("7149f370-067c-447e-a7dc-dc161d3f8de7.jsonl"));
-        assert!(is_uuid_filename("0bf43974-daf7-4ff1-957a-de72f79556e2.jsonl"));
+        assert!(is_uuid_filename(
+            "7149f370-067c-447e-a7dc-dc161d3f8de7.jsonl"
+        ));
+        assert!(is_uuid_filename(
+            "0bf43974-daf7-4ff1-957a-de72f79556e2.jsonl"
+        ));
 
         // 无效的 UUID
         assert!(!is_uuid_filename("agent-eb95d9a3.jsonl"));

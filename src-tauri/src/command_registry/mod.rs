@@ -2,12 +2,12 @@
 //!
 //! 提供增强的命令注册和验证功能
 
-pub mod registry;
-pub mod errors;
-pub mod initializer;
-pub mod validator;
 pub mod diagnostic;
 pub mod error_handler;
+pub mod errors;
+pub mod initializer;
+pub mod registry;
+pub mod validator;
 
 #[cfg(test)]
 mod tests;
@@ -15,19 +15,19 @@ mod tests;
 #[cfg(test)]
 mod integration_tests;
 
-pub use registry::{
-    CommandRegistry, CommandInfo, CommandStatus, CommandStatusInfo, 
-    CommandHistoryEntry, CommandEventType
+pub use diagnostic::{DiagnosticReport, DiagnosticTool};
+pub use error_handler::{
+    DefaultLogger, EnhancedErrorHandler, ErrorCategory, ErrorContext, ErrorPattern, ErrorResponse,
+    ErrorSeverity, ErrorStatistics, Logger,
 };
-pub use errors::{CommandError as RegistryCommandError, ModuleError, DiagnosticError};
+pub use errors::{CommandError as RegistryCommandError, DiagnosticError, ModuleError};
 pub use initializer::{
-    ModuleInitializer, Module, InitState, DependencyGraph, ModuleNode, DependencyEdge,
-    ModuleType, DependencyType, RecoveryStrategy, HealthStatus, HealthCheckReport,
-    DependencyIssue, SystemHealthStatus
+    DependencyEdge, DependencyGraph, DependencyIssue, DependencyType, HealthCheckReport,
+    HealthStatus, InitState, Module, ModuleInitializer, ModuleNode, ModuleType, RecoveryStrategy,
+    SystemHealthStatus,
+};
+pub use registry::{
+    CommandEventType, CommandHistoryEntry, CommandInfo, CommandRegistry, CommandStatus,
+    CommandStatusInfo,
 };
 pub use validator::CommandValidator;
-pub use diagnostic::{DiagnosticTool, DiagnosticReport};
-pub use error_handler::{
-    EnhancedErrorHandler, ErrorCategory, ErrorSeverity, ErrorContext, ErrorResponse,
-    ErrorPattern, Logger, DefaultLogger, ErrorStatistics
-};

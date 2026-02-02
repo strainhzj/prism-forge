@@ -2,11 +2,13 @@
 //!
 //! 从消息树中提取工具调用、错误消息、代码变更等关键信息，生成摘要。
 
-use anyhow::{Result, Context};
-use serde::{Serialize, Deserialize};
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::tree::{MessageNode, MessageMetadata, ToolCall, ErrorMessage, CodeChange, ConversationTree};
+use super::tree::{
+    CodeChange, ConversationTree, ErrorMessage, MessageMetadata, MessageNode, ToolCall,
+};
 
 /// 关键信息提取器
 ///
@@ -82,10 +84,10 @@ impl MetadataExtractor {
 
         // 方法1: 直接是 tool_use 类型的消息
         if msg_type == "tool_use" {
-            if let Some(tool_name) = node.message_data.get("name")
-                .and_then(|v| v.as_str())
-            {
-                let input = node.message_data.get("input")
+            if let Some(tool_name) = node.message_data.get("name").and_then(|v| v.as_str()) {
+                let input = node
+                    .message_data
+                    .get("input")
                     .cloned()
                     .unwrap_or(Value::Object(serde_json::Map::new()));
 
@@ -104,20 +106,17 @@ impl MetadataExtractor {
         if let Some(content) = node.message_data.get("content") {
             if let Some(content_array) = content.as_array() {
                 for item in content_array {
-                    if let Some(item_type) = item.get("type")
-                        .and_then(|v| v.as_str())
-                    {
+                    if let Some(item_type) = item.get("type").and_then(|v| v.as_str()) {
                         if item_type == "tool_use" {
-                            if let Some(tool_name) = item.get("name")
-                                .and_then(|v| v.as_str())
-                            {
-                                let input = item.get("input")
+                            if let Some(tool_name) = item.get("name").and_then(|v| v.as_str()) {
+                                let input = item
+                                    .get("input")
                                     .cloned()
                                     .unwrap_or(Value::Object(serde_json::Map::new()));
 
                                 // 从 tool_use 内容中提取状态
-                                let status = if let Some(content_text) = item.get("content")
-                                    .and_then(|v| v.as_str())
+                                let status = if let Some(content_text) =
+                                    item.get("content").and_then(|v| v.as_str())
                                 {
                                     Self::parse_tool_status(content_text)
                                 } else {
@@ -159,10 +158,11 @@ impl MetadataExtractor {
             // 如果 content 是数组
             if let Some(content_array) = content.as_array() {
                 for item in content_array {
-                    if let Some(text) = item.get("text")
-                        .and_then(|v| v.as_str())
-                    {
-                        if text.contains("Error:") || text.contains("error:") || text.contains("失败") {
+                    if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
+                        if text.contains("Error:")
+                            || text.contains("error:")
+                            || text.contains("失败")
+                        {
                             return "error".to_string();
                         }
                     }
@@ -197,12 +197,14 @@ impl MetadataExtractor {
         if let Some(tool_calls) = node.message_data.get("tool_calls") {
             if let Some(calls_array) = tool_calls.as_array() {
                 for call in calls_array {
-                    if let Some(tool_name) = call.get("name")
-                        .and_then(|v| v.as_str())
-                    {
+                    if let Some(tool_name) = call.get("name").and_then(|v| v.as_str()) {
                         // 检查工具调用结果中的错误
                         if let Some(result) = call.get("result") {
-                            Self::extract_errors_from_value(result, &mut errors, Some(tool_name.to_string()));
+                            Self::extract_errors_from_value(
+                                result,
+                                &mut errors,
+                                Some(tool_name.to_string()),
+                            );
                         }
                     }
                 }
@@ -213,7 +215,11 @@ impl MetadataExtractor {
     }
 
     /// 从 JSON 值中递归提取错误
-    fn extract_errors_from_value(value: &Value, errors: &mut Vec<ErrorMessage>, related_tool: Option<String>) {
+    fn extract_errors_from_value(
+        value: &Value,
+        errors: &mut Vec<ErrorMessage>,
+        related_tool: Option<String>,
+    ) {
         match value {
             Value::String(text) => {
                 if text.contains("Error:") || text.contains("error:") || text.contains("失败") {
@@ -222,11 +228,13 @@ impl MetadataExtractor {
                     for line in lines {
                         if line.contains("Error:") || line.contains("error:") {
                             let parts: Vec<&str> = line.splitn(2, ':').collect();
-                            let error_type = parts.get(0)
+                            let error_type = parts
+                                .get(0)
                                 .map(|s| s.trim().to_string())
                                 .unwrap_or_else(|| "Error".to_string());
 
-                            let message = parts.get(1)
+                            let message = parts
+                                .get(1)
                                 .map(|s| s.trim().to_string())
                                 .unwrap_or_else(|| text.trim().to_string());
 
@@ -252,9 +260,7 @@ impl MetadataExtractor {
             }
             Value::Object(obj) => {
                 // 检查 error 字段
-                if let Some(error_msg) = obj.get("error")
-                    .and_then(|v| v.as_str())
-                {
+                if let Some(error_msg) = obj.get("error").and_then(|v| v.as_str()) {
                     errors.push(ErrorMessage {
                         error_type: "ToolError".to_string(),
                         message: error_msg.to_string(),
@@ -283,7 +289,9 @@ impl MetadataExtractor {
         for tool_call in &tool_calls {
             match tool_call.name.as_str() {
                 "read_file" | "Read" => {
-                    if let Some(file_path) = tool_call.input.get("file_path")
+                    if let Some(file_path) = tool_call
+                        .input
+                        .get("file_path")
                         .or_else(|| tool_call.input.get("path"))
                         .and_then(|v| v.as_str())
                     {
@@ -295,22 +303,30 @@ impl MetadataExtractor {
                     }
                 }
                 "write_file" | "Write" | "edit_file" | "Edit" => {
-                    if let Some(file_path) = tool_call.input.get("file_path")
+                    if let Some(file_path) = tool_call
+                        .input
+                        .get("file_path")
                         .or_else(|| tool_call.input.get("path"))
                         .and_then(|v| v.as_str())
                     {
                         // 估算变更行数
-                        let lines_changed = tool_call.input.get("content")
+                        let lines_changed = tool_call
+                            .input
+                            .get("content")
                             .and_then(|v| v.as_str())
                             .map(|s| s.lines().count())
                             .or_else(|| {
-                                tool_call.input.get("diff")
+                                tool_call
+                                    .input
+                                    .get("diff")
                                     .and_then(|v| v.as_str())
                                     .map(|s| s.lines().count())
                             });
 
                         code_changes.push(CodeChange {
-                            operation: if tool_call.name.contains("edit") || tool_call.name.contains("Edit") {
+                            operation: if tool_call.name.contains("edit")
+                                || tool_call.name.contains("Edit")
+                            {
                                 "Edit".to_string()
                             } else {
                                 "Write".to_string()
@@ -328,13 +344,9 @@ impl MetadataExtractor {
         if let Some(content) = node.message_data.get("content") {
             if let Some(content_array) = content.as_array() {
                 for item in content_array {
-                    if let Some(item_type) = item.get("type")
-                        .and_then(|v| v.as_str())
-                    {
+                    if let Some(item_type) = item.get("type").and_then(|v| v.as_str()) {
                         if item_type == "text" {
-                            if let Some(text) = item.get("text")
-                                .and_then(|v| v.as_str())
-                            {
+                            if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
                                 // 简单匹配：Read file: xxx 或 Write file: xxx
                                 if let Some(caps) = Self::extract_file_operation(text) {
                                     code_changes.push(caps);
@@ -407,15 +419,14 @@ impl MetadataExtractor {
 
         // 添加工具调用摘要
         if !tool_calls.is_empty() {
-            let tool_names: Vec<&str> = tool_calls.iter()
-                .map(|tc| tc.name.as_str())
-                .collect();
+            let tool_names: Vec<&str> = tool_calls.iter().map(|tc| tc.name.as_str()).collect();
             summary_parts.push(format!("工具: {}", tool_names.join(", ")));
         }
 
         // 添加代码变更摘要
         if !code_changes.is_empty() {
-            let ops: Vec<String> = code_changes.iter()
+            let ops: Vec<String> = code_changes
+                .iter()
                 .map(|cc| format!("{} {}", cc.operation, Self::truncate_path(&cc.file_path)))
                 .collect();
             summary_parts.push(format!("文件: {}", ops.join(", ")));
@@ -458,13 +469,9 @@ impl MetadataExtractor {
             Value::Array(arr) => {
                 let mut texts = Vec::new();
                 for item in arr {
-                    if let Some(item_type) = item.get("type")
-                        .and_then(|v| v.as_str())
-                    {
+                    if let Some(item_type) = item.get("type").and_then(|v| v.as_str()) {
                         if item_type == "text" {
-                            if let Some(text) = item.get("text")
-                                .and_then(|v| v.as_str())
-                            {
+                            if let Some(text) = item.get("text").and_then(|v| v.as_str()) {
                                 texts.push(text);
                             }
                         }
@@ -628,7 +635,10 @@ impl ExtractionEngine {
             if !metadata.errors.is_empty() {
                 output.push_str(&format!("{}  错误:\n", indent));
                 for error in &metadata.errors {
-                    output.push_str(&format!("{}    - {}: {}\n", indent, error.error_type, error.message));
+                    output.push_str(&format!(
+                        "{}    - {}: {}\n",
+                        indent, error.error_type, error.message
+                    ));
                 }
             }
         }
@@ -652,7 +662,11 @@ impl ExtractionEngine {
         if node.message_type().as_deref() == Some("tool_result") {
             if let Some(metadata) = &node.metadata {
                 let has_errors = !metadata.errors.is_empty();
-                output.push_str(&format!("{}✅ {}\n", indent, if has_errors { "失败" } else { "成功" }));
+                output.push_str(&format!(
+                    "{}✅ {}\n",
+                    indent,
+                    if has_errors { "失败" } else { "成功" }
+                ));
                 return;
             }
         }
@@ -735,8 +749,7 @@ impl ExtractionEngine {
     /// # 返回
     /// 返回写入的字节数或错误
     pub fn export_markdown(content: &str, path: &std::path::Path) -> Result<()> {
-        std::fs::write(path, content)
-            .context(format!("写入 Markdown 文件失败: {:?}", path))
+        std::fs::write(path, content).context(format!("写入 Markdown 文件失败: {:?}", path))
     }
 
     /// 导出为 JSON 文件
@@ -748,7 +761,11 @@ impl ExtractionEngine {
     ///
     /// # 返回
     /// 返回写入的字节数或错误
-    pub fn export_json(tree: &ConversationTree, level: ExtractionLevel, path: &std::path::Path) -> Result<()> {
+    pub fn export_json(
+        tree: &ConversationTree,
+        level: ExtractionLevel,
+        path: &std::path::Path,
+    ) -> Result<()> {
         #[derive(Debug, serde::Serialize)]
         struct ExportedSession {
             level: String,
@@ -766,11 +783,9 @@ impl ExtractionEngine {
             content,
         };
 
-        let json = serde_json::to_string_pretty(&exported)
-            .context("序列化为 JSON 失败")?;
+        let json = serde_json::to_string_pretty(&exported).context("序列化为 JSON 失败")?;
 
-        std::fs::write(path, json)
-            .context(format!("写入 JSON 文件失败: {:?}", path))
+        std::fs::write(path, json).context(format!("写入 JSON 文件失败: {:?}", path))
     }
 }
 
@@ -791,11 +806,7 @@ mod tests {
             "content": "Successfully read file"
         });
 
-        let node = MessageNode::new(
-            "test-id".to_string(),
-            None,
-            message_data,
-        );
+        let node = MessageNode::new("test-id".to_string(), None, message_data);
 
         let tool_calls = MetadataExtractor::extract_tool_calls(&node);
         assert_eq!(tool_calls.len(), 1);
@@ -810,11 +821,7 @@ mod tests {
             "content": "Error: File not found\nFailed to read file"
         });
 
-        let node = MessageNode::new(
-            "test-id".to_string(),
-            None,
-            message_data,
-        );
+        let node = MessageNode::new("test-id".to_string(), None, message_data);
 
         let errors = MetadataExtractor::extract_errors(&node);
         assert!(!errors.is_empty());
@@ -832,11 +839,7 @@ mod tests {
             }
         });
 
-        let node = MessageNode::new(
-            "test-id".to_string(),
-            None,
-            message_data,
-        );
+        let node = MessageNode::new("test-id".to_string(), None, message_data);
 
         let code_changes = MetadataExtractor::extract_code_changes(&node);
         assert_eq!(code_changes.len(), 1);
@@ -853,22 +856,14 @@ mod tests {
             "content": "请帮我读取文件"
         });
 
-        let node = MessageNode::new(
-            "test-id".to_string(),
-            None,
-            message_data,
-        );
+        let node = MessageNode::new("test-id".to_string(), None, message_data);
 
         let tool_calls = vec![];
         let errors = vec![];
         let code_changes = vec![];
 
-        let summary = MetadataExtractor::generate_summary(
-            &node,
-            &tool_calls,
-            &errors,
-            &code_changes,
-        );
+        let summary =
+            MetadataExtractor::generate_summary(&node, &tool_calls, &errors, &code_changes);
 
         assert!(summary.is_some());
         assert!(summary.unwrap().contains("请帮我读取文件"));

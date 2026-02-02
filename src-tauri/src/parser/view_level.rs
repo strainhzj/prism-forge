@@ -17,9 +17,9 @@
 //! - **流式解析支持**: 利用现有的 JsonlParser，在解析时应用过滤逻辑
 //! - **状态持久化**: 新增 view_level_preferences 表存储每个会话的等级选择
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use anyhow::Result;
 
 use crate::database::models::Message;
 
@@ -207,10 +207,7 @@ impl MessageFilter {
         match self.view_level {
             ViewLevel::Full => true,
             ViewLevel::Conversation => {
-                matches!(
-                    message.msg_type.as_str(),
-                    "user" | "assistant" | "thinking"
-                )
+                matches!(message.msg_type.as_str(), "user" | "assistant" | "thinking")
             }
             ViewLevel::QAPairs => {
                 // QAPairs 需要特殊处理，在 extract_qa_pairs 中实现
@@ -389,7 +386,8 @@ impl MessageFilter {
                 // 检查 message.content 数组
                 if let Some(content) = parsed.get("content").and_then(|v| v.as_array()) {
                     if !content.is_empty() {
-                        if let Some(content_type) = content[0].get("type").and_then(|v| v.as_str()) {
+                        if let Some(content_type) = content[0].get("type").and_then(|v| v.as_str())
+                        {
                             return content_type == "tool_use";
                         }
                     }
@@ -416,7 +414,8 @@ impl MessageFilter {
                 // 检查 message.content 数组
                 if let Some(content) = parsed.get("content").and_then(|v| v.as_array()) {
                     if !content.is_empty() {
-                        if let Some(content_type) = content[0].get("type").and_then(|v| v.as_str()) {
+                        if let Some(content_type) = content[0].get("type").and_then(|v| v.as_str())
+                        {
                             return content_type == "tool_result";
                         }
                     }
@@ -432,8 +431,7 @@ impl MessageFilter {
     /// 检查消息内容是否包含 <tool_use_error> 或 <system-reminder> 标签。
     fn contains_system_tags(&self, msg: &Message) -> bool {
         if let Some(ref summary) = msg.summary {
-            return summary.contains("<tool_use_error>") ||
-                   summary.contains("<system-reminder>");
+            return summary.contains("<tool_use_error>") || summary.contains("<system-reminder>");
         }
         false
     }
@@ -550,10 +548,19 @@ mod tests {
     #[test]
     fn test_view_level_from_str() {
         assert_eq!(ViewLevel::from_str("full").unwrap(), ViewLevel::Full);
-        assert_eq!(ViewLevel::from_str("conversation").unwrap(), ViewLevel::Conversation);
+        assert_eq!(
+            ViewLevel::from_str("conversation").unwrap(),
+            ViewLevel::Conversation
+        );
         assert_eq!(ViewLevel::from_str("qa_pairs").unwrap(), ViewLevel::QAPairs);
-        assert_eq!(ViewLevel::from_str("assistant_only").unwrap(), ViewLevel::AssistantOnly);
-        assert_eq!(ViewLevel::from_str("user_only").unwrap(), ViewLevel::UserOnly);
+        assert_eq!(
+            ViewLevel::from_str("assistant_only").unwrap(),
+            ViewLevel::AssistantOnly
+        );
+        assert_eq!(
+            ViewLevel::from_str("user_only").unwrap(),
+            ViewLevel::UserOnly
+        );
         assert!(ViewLevel::from_str("invalid").is_err());
     }
 
@@ -607,7 +614,7 @@ mod tests {
         let user_msg_with_tool_result = create_test_message_with_summary(
             "user",
             "uuid2",
-            r#"{"type":"tool_result","content":"some content"}"#
+            r#"{"type":"tool_result","content":"some content"}"#,
         );
         assert!(!filter.should_include(&user_msg_with_tool_result));
 
@@ -615,16 +622,13 @@ mod tests {
         let user_msg_with_tool_result_spaced = create_test_message_with_summary(
             "user",
             "uuid3",
-            r#"{"type": "tool_result","content":"some content"}"#
+            r#"{"type": "tool_result","content":"some content"}"#,
         );
         assert!(!filter.should_include(&user_msg_with_tool_result_spaced));
 
         // 包含 tool_result 字符串的用户消息应该被过滤
-        let user_msg_with_tool_result_text = create_test_message_with_summary(
-            "user",
-            "uuid4",
-            "some text with tool_result inside"
-        );
+        let user_msg_with_tool_result_text =
+            create_test_message_with_summary("user", "uuid4", "some text with tool_result inside");
         assert!(!filter.should_include(&user_msg_with_tool_result_text));
     }
 
@@ -647,17 +651,28 @@ mod tests {
         let assistant_msg2 = create_test_message("assistant", "uuid4", None);
 
         // 顺序：user1, assistant1, user2, assistant2
-        let messages = vec![user_msg1.clone(), assistant_msg1.clone(), user_msg2.clone(), assistant_msg2.clone()];
+        let messages = vec![
+            user_msg1.clone(),
+            assistant_msg1.clone(),
+            user_msg2.clone(),
+            assistant_msg2.clone(),
+        ];
         let qa_pairs = filter.extract_qa_pairs(messages);
 
         // 从后向前：assistant2 -> user2, assistant1 -> user1
         assert_eq!(qa_pairs.len(), 2);
         assert_eq!(qa_pairs[0].question.uuid, user_msg1.uuid);
         assert!(qa_pairs[0].answer.is_some());
-        assert_eq!(qa_pairs[0].answer.as_ref().unwrap().uuid, assistant_msg1.uuid);
+        assert_eq!(
+            qa_pairs[0].answer.as_ref().unwrap().uuid,
+            assistant_msg1.uuid
+        );
         assert_eq!(qa_pairs[1].question.uuid, user_msg2.uuid);
         assert!(qa_pairs[1].answer.is_some());
-        assert_eq!(qa_pairs[1].answer.as_ref().unwrap().uuid, assistant_msg2.uuid);
+        assert_eq!(
+            qa_pairs[1].answer.as_ref().unwrap().uuid,
+            assistant_msg2.uuid
+        );
     }
 
     #[test]
@@ -675,7 +690,10 @@ mod tests {
         assert_eq!(qa_pairs.len(), 2);
         assert_eq!(qa_pairs[0].question.uuid, user_msg1.uuid);
         assert!(qa_pairs[0].answer.is_some());
-        assert_eq!(qa_pairs[0].answer.as_ref().unwrap().uuid, assistant_msg1.uuid);
+        assert_eq!(
+            qa_pairs[0].answer.as_ref().unwrap().uuid,
+            assistant_msg1.uuid
+        );
         assert_eq!(qa_pairs[1].question.uuid, user_msg2.uuid);
         assert!(qa_pairs[1].answer.is_none());
     }
@@ -689,7 +707,12 @@ mod tests {
         let assistant_msg = create_test_message("assistant", "uuid4", None);
 
         // 顺序：user1, thinking, user2, assistant
-        let messages = vec![user_msg1.clone(), thinking_msg, user_msg2.clone(), assistant_msg.clone()];
+        let messages = vec![
+            user_msg1.clone(),
+            thinking_msg,
+            user_msg2.clone(),
+            assistant_msg.clone(),
+        ];
         let qa_pairs = filter.extract_qa_pairs(messages);
 
         // 新逻辑：thinking 被预过滤，过滤后序列：[user1, user2, assistant]
@@ -700,7 +723,10 @@ mod tests {
 
         assert_eq!(qa_pairs[1].question.uuid, user_msg2.uuid);
         assert!(qa_pairs[1].answer.is_some());
-        assert_eq!(qa_pairs[1].answer.as_ref().unwrap().uuid, assistant_msg.uuid);
+        assert_eq!(
+            qa_pairs[1].answer.as_ref().unwrap().uuid,
+            assistant_msg.uuid
+        );
     }
 
     #[test]
@@ -713,7 +739,13 @@ mod tests {
         let assistant2 = create_test_message("assistant", "uuid5", None);
 
         // 典型的对话模式：user -> assistant -> user -> thinking -> assistant
-        let messages = vec![user1.clone(), assistant1.clone(), user2.clone(), thinking, assistant2.clone()];
+        let messages = vec![
+            user1.clone(),
+            assistant1.clone(),
+            user2.clone(),
+            thinking,
+            assistant2.clone(),
+        ];
         let qa_pairs = filter.extract_qa_pairs(messages);
 
         // 从后向前：assistant2 -> user2（跳过 thinking），assistant1 -> user1
@@ -735,7 +767,12 @@ mod tests {
         let user2 = create_test_message("user", "uuid4", None);
 
         // 连续的 assistant：user -> assistant -> assistant -> user
-        let messages = vec![user1.clone(), assistant1.clone(), assistant2.clone(), user2.clone()];
+        let messages = vec![
+            user1.clone(),
+            assistant1.clone(),
+            assistant2.clone(),
+            user2.clone(),
+        ];
         let qa_pairs = filter.extract_qa_pairs(messages);
 
         // 从后向前：user2 没有答案，连续的 assistant 只取最后一个（assistant2）-> user1

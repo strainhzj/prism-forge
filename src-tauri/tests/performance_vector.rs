@@ -5,9 +5,9 @@
 //! - 1000 会话检索 < 100ms
 //! - 10000 会话检索 < 500ms
 
-use std::time::Instant;
 use std::fs;
 use std::path::PathBuf;
+use std::time::Instant;
 
 /// 性能测试结果
 #[derive(Debug)]
@@ -53,8 +53,13 @@ impl PerfTestReport {
             ));
         }
 
-        md.push_str(&format!("\n**总体结果**: {}\n\n",
-            if self.overall_passed { "✅ 全部通过" } else { "❌ 部分未通过" }
+        md.push_str(&format!(
+            "\n**总体结果**: {}\n\n",
+            if self.overall_passed {
+                "✅ 全部通过"
+            } else {
+                "❌ 部分未通过"
+            }
         ));
 
         // 添加优化建议
@@ -81,8 +86,8 @@ impl PerfTestReport {
 ///
 /// 在临时目录创建包含指定数量会话的测试数据库
 pub fn setup_test_database(session_count: usize) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    use std::env;
     use prism_forge::database::migrations::get_db_path;
+    use std::env;
 
     // 注意：这个测试使用现有数据库，仅用于演示
     // 实际生产环境应在隔离的测试数据库中运行
@@ -124,13 +129,16 @@ pub fn run_vector_search_perf_test() -> Result<PerfTestReport, Box<dyn std::erro
         // 执行向量检索
         match repo.vector_search_sessions(&query_embedding, limit) {
             Ok(search_results) => {
-                let search_results: Vec<prism_forge::database::models::VectorSearchResult> = search_results;
+                let search_results: Vec<prism_forge::database::models::VectorSearchResult> =
+                    search_results;
                 let duration = start.elapsed().as_secs_f64() * 1000.0;
                 let passed = duration < threshold;
 
                 println!("  返回结果: {} 条", search_results.len());
-                println!("  耗时: {:.2} ms (阈值: {:.0} ms) - {}",
-                    duration, threshold,
+                println!(
+                    "  耗时: {:.2} ms (阈值: {:.0} ms) - {}",
+                    duration,
+                    threshold,
                     if passed { "通过" } else { "未通过" }
                 );
 
@@ -159,7 +167,9 @@ pub fn run_vector_search_perf_test() -> Result<PerfTestReport, Box<dyn std::erro
     let overall_passed = results.iter().all(|r| r.passed);
 
     Ok(PerfTestReport {
-        timestamp: chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+        timestamp: chrono::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S UTC")
+            .to_string(),
         results,
         overall_passed,
     })

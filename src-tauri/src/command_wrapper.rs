@@ -6,12 +6,12 @@
 //! **Feature: fix-command-registration**
 //! **Validates: Requirements 2.1**
 
-use std::sync::{Arc, RwLock};
 use crate::command_registry::{CommandRegistry, CommandStatus};
 use crate::startup::StartupManager;
+use std::sync::{Arc, RwLock};
 
 /// Command execution tracker
-/// 
+///
 /// Tracks command executions and updates the command registry
 pub struct CommandTracker {
     registry: Arc<RwLock<CommandRegistry>>,
@@ -62,7 +62,7 @@ impl CommandTracker {
 }
 
 /// Macro to wrap a command with tracking
-/// 
+///
 /// This macro creates a wrapper function that:
 /// 1. Records the command call in the registry
 /// 2. Executes the original command
@@ -87,10 +87,10 @@ pub struct CommandValidationResult {
 /// Validate all registered commands
 pub fn validate_all_commands(manager: &StartupManager) -> Vec<CommandValidationResult> {
     let mut results = Vec::new();
-    
+
     if let Ok(registry) = manager.get_registry().read() {
         let commands = registry.get_all_commands();
-        
+
         for (name, info) in commands {
             let is_valid = matches!(info.status, CommandStatus::Registered);
             let error_message = match &info.status {
@@ -99,7 +99,7 @@ pub fn validate_all_commands(manager: &StartupManager) -> Vec<CommandValidationR
                 CommandStatus::Disabled => Some("Command disabled".to_string()),
                 CommandStatus::Registered => None,
             };
-            
+
             results.push(CommandValidationResult {
                 command_name: name.clone(),
                 is_valid,
@@ -108,7 +108,7 @@ pub fn validate_all_commands(manager: &StartupManager) -> Vec<CommandValidationR
             });
         }
     }
-    
+
     results
 }
 
@@ -119,7 +119,7 @@ pub fn get_command_not_found_error(command_name: &str, manager: &StartupManager)
     } else {
         Vec::new()
     };
-    
+
     format!(
         "Command '{}' not found. Available commands: {}",
         command_name,
@@ -141,7 +141,7 @@ mod tests {
     fn test_command_tracker_creation() {
         let manager = create_startup_manager();
         let tracker = CommandTracker::from_startup_manager(&manager);
-        
+
         // Should be able to get available commands
         let commands = tracker.get_available_commands();
         // Initially empty since we haven't registered commands
@@ -152,7 +152,7 @@ mod tests {
     fn test_command_not_found_error() {
         let manager = create_startup_manager();
         let error = get_command_not_found_error("nonexistent_command", &manager);
-        
+
         assert!(error.contains("nonexistent_command"));
         assert!(error.contains("not found"));
     }
@@ -168,12 +168,12 @@ mod tests {
             let command_info = CommandInfo::new("test_command".to_string()).mark_registered();
             registry.register_command(command_info).unwrap();
         }
-        
+
         let results = validate_all_commands(&manager);
-        
+
         // Should have at least one result
         assert!(!results.is_empty());
-        
+
         // Find our test command
         let test_result = results.iter().find(|r| r.command_name == "test_command");
         assert!(test_result.is_some());

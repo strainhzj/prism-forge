@@ -3,11 +3,11 @@
 //! 支持增量读取 Claude Code 的 JSONL 会话文件，记录每条消息的偏移量和长度。
 //! 支持 Windows FileShare 模式，允许在文件被占用时读取。
 
+use anyhow::{Context, Result};
+use serde_json::Value;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
 use std::path::PathBuf;
-use anyhow::{Result, Context};
-use serde_json::Value;
 
 /// JSONL 条目
 ///
@@ -188,11 +188,10 @@ impl JsonlParser {
             .context(format!("无法读取偏移量 {} 处的 {} 字节", offset, length))?;
 
         // 转换为字符串并解析 JSON
-        let json_str = String::from_utf8(buffer)
-            .context("偏移量处的数据不是有效的 UTF-8 字符串")?;
+        let json_str =
+            String::from_utf8(buffer).context("偏移量处的数据不是有效的 UTF-8 字符串")?;
 
-        serde_json::from_str(&json_str)
-            .context(format!("偏移量 {} 处的 JSON 解析失败", offset))
+        serde_json::from_str(&json_str).context(format!("偏移量 {} 处的 JSON 解析失败", offset))
     }
 
     /// 从文件中提取消息内容
@@ -232,8 +231,7 @@ impl JsonlParser {
 
         #[cfg(not(target_os = "windows"))]
         {
-            File::open(&self.file_path)
-                .context(format!("无法打开文件: {:?}", self.file_path))
+            File::open(&self.file_path).context(format!("无法打开文件: {:?}", self.file_path))
         }
     }
 
@@ -251,14 +249,16 @@ impl JsonlParser {
             line_buffer.clear();
 
             // 读取一行
-            let bytes_read = reader.read_line(&mut line_buffer)
-                .context("读取文件失败")?;
+            let bytes_read = reader.read_line(&mut line_buffer).context("读取文件失败")?;
 
             // 文件结束
             if bytes_read == 0 {
                 // 处理缓冲区中剩余的数据
                 if !self.buffer.trim().is_empty() {
-                    eprintln!("警告: 文件末尾有未完成的数据，已丢弃: {} 字节", self.buffer.len());
+                    eprintln!(
+                        "警告: 文件末尾有未完成的数据，已丢弃: {} 字节",
+                        self.buffer.len()
+                    );
                 }
                 break;
             }
@@ -294,7 +294,11 @@ impl JsonlParser {
                         "警告: 偏移量 {} 处的 JSON 解析失败: {}，内容: {}",
                         current_offset,
                         e,
-                        if line.len() > 100 { &line[..100] } else { &line }
+                        if line.len() > 100 {
+                            &line[..100]
+                        } else {
+                            &line
+                        }
                     );
                 }
             }
@@ -428,9 +432,11 @@ not a json at all
         let mut parser = JsonlParser::new(file_path.clone()).unwrap();
 
         let mut count = 0;
-        parser.parse_stream(|_| {
-            count += 1;
-        }).unwrap();
+        parser
+            .parse_stream(|_| {
+                count += 1;
+            })
+            .unwrap();
 
         assert_eq!(count, 3);
 

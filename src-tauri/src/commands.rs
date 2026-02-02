@@ -2,24 +2,28 @@
 //!
 //! 暴露给前端调用的命令接口
 
-use tauri::State;
-use secrecy::{SecretString, ExposeSecret};
+use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
-use std::time::Instant;
 use std::fs;
 use std::path::PathBuf;
+use std::time::Instant;
+use tauri::State;
 
-use crate::llm::LLMClientManager;
-use crate::llm::interface::TestConnectionResult;
-use crate::database::{ApiProvider, ApiProviderType, ApiProviderRepository};
-use crate::llm::security::ApiKeyStorage;
-use crate::embedding::{EmbeddingSyncManager, OpenAIEmbeddings};
 use crate::database::vector_repository::VectorRepository;
-use crate::tokenizer::{TokenCounter, TokenEncodingType};
+use crate::database::{ApiProvider, ApiProviderRepository, ApiProviderType};
+use crate::embedding::{EmbeddingSyncManager, OpenAIEmbeddings};
+use crate::llm::interface::TestConnectionResult;
+use crate::llm::security::ApiKeyStorage;
+use crate::llm::LLMClientManager;
 use crate::optimizer::compressor::CompressionResult;
-use crate::optimizer::prompt_generator::{EnhancedPromptRequest, EnhancedPrompt};
-use crate::parser::{jsonl::JsonlParser, tree::{MessageTreeBuilder, ConversationTree}, extractor::{ExtractionLevel, ExportFormat, ExtractionEngine}};
+use crate::optimizer::prompt_generator::{EnhancedPrompt, EnhancedPromptRequest};
+use crate::parser::{
+    extractor::{ExportFormat, ExtractionEngine, ExtractionLevel},
+    jsonl::JsonlParser,
+    tree::{ConversationTree, MessageTreeBuilder},
+};
 use crate::session_type_detector::SessionFileType;
+use crate::tokenizer::{TokenCounter, TokenEncodingType};
 
 // ==================== 性能基准测试模块（内联） ====================
 
@@ -54,15 +58,25 @@ impl BenchmarkReport {
     pub fn to_markdown(&self) -> String {
         let mut md = format!("# 性能基准测试报告\n\n");
         md.push_str(&format!("**测试时间**: {}\n\n", self.timestamp));
-        md.push_str(&format!("**总体结果**: {}\n\n",
-            if self.overall_passed { "✅ 通过" } else { "❌ 失败" }));
+        md.push_str(&format!(
+            "**总体结果**: {}\n\n",
+            if self.overall_passed {
+                "✅ 通过"
+            } else {
+                "❌ 失败"
+            }
+        ));
 
         md.push_str("## 测试结果详情\n\n");
         md.push_str("| 测试名称 | 耗时 (ms) | 阈值 (ms) | 结果 | 详情 |\n");
         md.push_str("|---------|----------|----------|------|------|\n");
 
         for result in &self.results {
-            let status = if result.passed { "✅ 通过" } else { "❌ 失败" };
+            let status = if result.passed {
+                "✅ 通过"
+            } else {
+                "❌ 失败"
+            };
             md.push_str(&format!(
                 "| {} | {:.2} | {:.2} | {} | {} |\n",
                 result.name, result.duration_ms, result.threshold_ms, status, result.details
@@ -80,7 +94,10 @@ impl BenchmarkReport {
                 md.push_str(&format!("### {} 未达标\n", result.name));
                 md.push_str(&format!("- 当前耗时: {:.2} ms\n", result.duration_ms));
                 md.push_str(&format!("- 目标阈值: {:.2} ms\n", result.threshold_ms));
-                md.push_str(&format!("- 差距: {:.2} ms\n", result.duration_ms - result.threshold_ms));
+                md.push_str(&format!(
+                    "- 差距: {:.2} ms\n",
+                    result.duration_ms - result.threshold_ms
+                ));
                 md.push_str(&get_optimization_suggestion(&result.name));
                 md.push_str("\n");
             }
@@ -98,34 +115,28 @@ impl BenchmarkReport {
 /// 获取优化建议
 fn get_optimization_suggestion(test_name: &str) -> String {
     match test_name {
-        "应用启动时间" => {
-            String::from(
-                "**优化建议**:\n\
+        "应用启动时间" => String::from(
+            "**优化建议**:\n\
                 - 检查数据库连接池配置\n\
                 - 考虑延迟加载非关键模块\n\
                 - 使用异步初始化避免阻塞主线程\n\
-                - 检查是否有冗余的文件 I/O 操作\n"
-            )
-        }
-        "会话扫描时间" => {
-            String::from(
-                "**优化建议**:\n\
+                - 检查是否有冗余的文件 I/O 操作\n",
+        ),
+        "会话扫描时间" => String::from(
+            "**优化建议**:\n\
                 - 使用并行扫描处理多个项目目录\n\
                 - 增加文件扫描缓存\n\
                 - 优化 glob 模式匹配\n\
-                - 考虑增量扫描策略（仅扫描变更文件）\n"
-            )
-        }
-        "数据库查询性能" => {
-            String::from(
-                "**优化建议**:\n\
+                - 考虑增量扫描策略（仅扫描变更文件）\n",
+        ),
+        "数据库查询性能" => String::from(
+            "**优化建议**:\n\
                 - 添加适当的索引\n\
                 - 使用查询预编译语句\n\
                 - 考虑使用连接池\n\
-                - 优化复杂查询的 SQL 结构\n"
-            )
-        }
-        _ => String::from("**暂无具体建议**\n")
+                - 优化复杂查询的 SQL 结构\n",
+        ),
+        _ => String::from("**暂无具体建议**\n"),
     }
 }
 
@@ -182,9 +193,7 @@ fn benchmark_scan_sessions() -> BenchmarkResult {
 
             let details = format!(
                 "扫描 {} 个会话，耗时 {:.2} ms（目标阈值: {:.2} ms）",
-                count,
-                duration_ms,
-                expected_ms
+                count, duration_ms, expected_ms
             );
 
             (details, passed)
@@ -215,14 +224,19 @@ fn benchmark_database_queries() -> BenchmarkResult {
 
     let query_result = (|| -> anyhow::Result<String> {
         let conn = crate::database::init::get_connection_shared()?;
-        let guard = conn.lock().map_err(|e| anyhow::anyhow!("获取锁失败: {}", e))?;
+        let guard = conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("获取锁失败: {}", e))?;
 
         // 测试查询性能
         let query_start = Instant::now();
         let _version: String = guard.query_row("SELECT sqlite_version()", [], |row| row.get(0))?;
         let query_duration = query_start.elapsed();
 
-        Ok(format!("SQLite 版本查询耗时: {:.2} ms", query_duration.as_millis()))
+        Ok(format!(
+            "SQLite 版本查询耗时: {:.2} ms",
+            query_duration.as_millis()
+        ))
     })();
 
     let duration = start.elapsed();
@@ -272,7 +286,10 @@ fn run_all_benchmarks_internal() -> BenchmarkReport {
 }
 
 /// 保存性能测试报告到文件
-fn save_benchmark_report_internal(report: &BenchmarkReport, output_path: &PathBuf) -> anyhow::Result<()> {
+fn save_benchmark_report_internal(
+    report: &BenchmarkReport,
+    output_path: &PathBuf,
+) -> anyhow::Result<()> {
     // 创建输出目录
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
@@ -511,10 +528,15 @@ pub async fn cmd_save_provider(
     // 处理 API Key
     if let Some(api_key_str) = request.api_key {
         if !api_key_str.is_empty() {
-            let provider_id = provider.id.ok_or_else(|| anyhow::anyhow!("提供商 ID 无效"))?;
+            let provider_id = provider
+                .id
+                .ok_or_else(|| anyhow::anyhow!("提供商 ID 无效"))?;
 
             #[cfg(debug_assertions)]
-            eprintln!("[cmd_save_provider] Saving API Key for provider_id={}", provider_id);
+            eprintln!(
+                "[cmd_save_provider] Saving API Key for provider_id={}",
+                provider_id
+            );
 
             // 验证 API Key 格式
             let api_key = SecretString::new(api_key_str.into());
@@ -708,7 +730,6 @@ pub fn count_prompt_tokens(
     })
 }
 
-
 /// 扫描会话响应
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -729,16 +750,16 @@ pub struct SessionMeta {
 pub async fn scan_sessions(
     _manager: State<'_, LLMClientManager>,
 ) -> std::result::Result<Vec<SessionMeta>, CommandError> {
+    use crate::database::repository::{MonitoredDirectoryRepository, SessionRepository};
     use crate::monitor::scanner;
-    use crate::database::repository::{SessionRepository, MonitoredDirectoryRepository};
 
     // 获取用户配置的监控目录列表
-    let dir_repo = MonitoredDirectoryRepository::from_default_db()
-        .map_err(|e| CommandError {
-            message: format!("创建目录仓库失败: {}", e),
-        })?;
+    let dir_repo = MonitoredDirectoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建目录仓库失败: {}", e),
+    })?;
 
-    let directories = dir_repo.get_active_directories()
+    let directories = dir_repo
+        .get_active_directories()
         .map_err(|e| CommandError {
             message: format!("获取监控目录失败: {}", e),
         })?;
@@ -764,10 +785,9 @@ pub async fn scan_sessions(
     }
 
     // 获取数据库连接并创建 SessionRepository
-    let conn = crate::database::init::get_connection_shared()
-        .map_err(|e| CommandError {
-            message: format!("获取数据库连接失败: {}", e),
-        })?;
+    let conn = crate::database::init::get_connection_shared().map_err(|e| CommandError {
+        message: format!("获取数据库连接失败: {}", e),
+    })?;
     let session_repo = SessionRepository::with_conn(conn);
 
     // 将扫描结果存入数据库
@@ -812,18 +832,18 @@ pub async fn scan_sessions(
 pub async fn scan_directory(
     directory: String,
 ) -> std::result::Result<Vec<SessionMeta>, CommandError> {
-    use crate::monitor::scanner;
     use crate::database::repository::SessionRepository;
+    use crate::monitor::scanner;
 
     let path = PathBuf::from(&directory);
-    
+
     // 验证目录存在
     if !path.exists() {
         return Err(CommandError {
             message: format!("目录不存在: {}", directory),
         });
     }
-    
+
     if !path.is_dir() {
         return Err(CommandError {
             message: format!("路径不是目录: {}", directory),
@@ -831,16 +851,14 @@ pub async fn scan_directory(
     }
 
     // 扫描指定目录的会话文件
-    let sessions_metadata = scanner::scan_directory(&path)
-        .map_err(|e| CommandError {
-            message: format!("扫描目录失败: {}", e),
-        })?;
+    let sessions_metadata = scanner::scan_directory(&path).map_err(|e| CommandError {
+        message: format!("扫描目录失败: {}", e),
+    })?;
 
     // 获取数据库连接并创建 SessionRepository
-    let conn = crate::database::init::get_connection_shared()
-        .map_err(|e| CommandError {
-            message: format!("获取数据库连接失败: {}", e),
-        })?;
+    let conn = crate::database::init::get_connection_shared().map_err(|e| CommandError {
+        message: format!("获取数据库连接失败: {}", e),
+    })?;
     let session_repo = SessionRepository::with_conn(conn);
 
     // 将扫描结果存入数据库
@@ -871,7 +889,6 @@ pub async fn scan_directory(
 
     Ok(result)
 }
-
 
 // ==================== 性能基准测试命令 ====================
 
@@ -963,7 +980,6 @@ pub fn run_benchmarks(
     Ok(report.into())
 }
 
-
 // ==================== 消息树解析命令 ====================
 
 /// 解析会话文件响应
@@ -1026,21 +1042,18 @@ pub async fn parse_session_tree(
     let start = std::time::Instant::now();
 
     // 创建 JSONL 解析器并解析所有条目
-    let mut parser = JsonlParser::new(path)
-        .map_err(|e| CommandError {
-            message: format!("创建 JSONL 解析器失败: {}", e),
-        })?;
+    let mut parser = JsonlParser::new(path).map_err(|e| CommandError {
+        message: format!("创建 JSONL 解析器失败: {}", e),
+    })?;
 
-    let entries = parser.parse_all()
-        .map_err(|e| CommandError {
-            message: format!("解析 JSONL 文件失败: {}", e),
-        })?;
+    let entries = parser.parse_all().map_err(|e| CommandError {
+        message: format!("解析 JSONL 文件失败: {}", e),
+    })?;
 
     // 构建消息树
-    let tree = MessageTreeBuilder::build_from_entries(&entries)
-        .map_err(|e| CommandError {
-            message: format!("构建消息树失败: {}", e),
-        })?;
+    let tree = MessageTreeBuilder::build_from_entries(&entries).map_err(|e| CommandError {
+        message: format!("构建消息树失败: {}", e),
+    })?;
 
     let duration = start.elapsed();
 
@@ -1138,20 +1151,26 @@ pub struct SessionMetadataResponse {
 pub async fn set_session_rating(
     request: SetSessionRatingRequest,
 ) -> std::result::Result<SessionMetadataResponse, CommandError> {
-    let conn = crate::database::init::get_connection_shared()
-        .map_err(|e| CommandError {
-            message: format!("获取数据库连接失败: {}", e),
-        })?;
+    let conn = crate::database::init::get_connection_shared().map_err(|e| CommandError {
+        message: format!("获取数据库连接失败: {}", e),
+    })?;
 
     let repo = crate::database::repository::SessionRepository::with_conn(conn);
 
-    let rows_affected = repo.set_session_rating(&request.session_id, request.rating)
+    let rows_affected = repo
+        .set_session_rating(&request.session_id, request.rating)
         .map_err(|e| CommandError {
             message: format!("设置会话评分失败: {}", e),
         })?;
 
     let message = if rows_affected > 0 {
-        format!("会话评分已{}", request.rating.map(|r| format!("更新为 {} 星", r)).unwrap_or_else(|| "清除".to_string()))
+        format!(
+            "会话评分已{}",
+            request
+                .rating
+                .map(|r| format!("更新为 {} 星", r))
+                .unwrap_or_else(|| "清除".to_string())
+        )
     } else {
         "会话不存在".to_string()
     };
@@ -1191,16 +1210,16 @@ pub async fn set_session_rating(
 pub async fn set_session_tags(
     request: SetSessionTagsRequest,
 ) -> std::result::Result<SessionMetadataResponse, CommandError> {
-    let conn = crate::database::init::get_connection_shared()
-        .map_err(|e| CommandError {
-            message: format!("获取数据库连接失败: {}", e),
-        })?;
+    let conn = crate::database::init::get_connection_shared().map_err(|e| CommandError {
+        message: format!("获取数据库连接失败: {}", e),
+    })?;
 
     let repo = crate::database::repository::SessionRepository::with_conn(conn);
 
     // 克隆 tags 以便后续使用
     let tags_clone = request.tags.clone();
-    let rows_affected = repo.set_session_tags(&request.session_id, request.tags)
+    let rows_affected = repo
+        .set_session_tags(&request.session_id, request.tags)
         .map_err(|e| CommandError {
             message: format!("设置会话标签失败: {}", e),
         })?;
@@ -1239,10 +1258,9 @@ pub async fn set_session_tags(
 pub async fn get_session_rating(
     session_id: String,
 ) -> std::result::Result<Option<i32>, CommandError> {
-    let conn = crate::database::init::get_connection_shared()
-        .map_err(|e| CommandError {
-            message: format!("获取数据库连接失败: {}", e),
-        })?;
+    let conn = crate::database::init::get_connection_shared().map_err(|e| CommandError {
+        message: format!("获取数据库连接失败: {}", e),
+    })?;
 
     let repo = crate::database::repository::SessionRepository::with_conn(conn);
 
@@ -1273,10 +1291,9 @@ pub async fn get_session_rating(
 pub async fn get_session_tags(
     session_id: String,
 ) -> std::result::Result<Vec<String>, CommandError> {
-    let conn = crate::database::init::get_connection_shared()
-        .map_err(|e| CommandError {
-            message: format!("获取数据库连接失败: {}", e),
-        })?;
+    let conn = crate::database::init::get_connection_shared().map_err(|e| CommandError {
+        message: format!("获取数据库连接失败: {}", e),
+    })?;
 
     let repo = crate::database::repository::SessionRepository::with_conn(conn);
 
@@ -1308,14 +1325,14 @@ pub async fn get_session_tags(
 pub async fn archive_session(
     session_id: String,
 ) -> std::result::Result<SessionMetadataResponse, CommandError> {
-    let conn = crate::database::init::get_connection_shared()
-        .map_err(|e| CommandError {
-            message: format!("获取数据库连接失败: {}", e),
-        })?;
+    let conn = crate::database::init::get_connection_shared().map_err(|e| CommandError {
+        message: format!("获取数据库连接失败: {}", e),
+    })?;
 
     let repo = crate::database::repository::SessionRepository::with_conn(conn);
 
-    let rows_affected = repo.archive_session(&session_id)
+    let rows_affected = repo
+        .archive_session(&session_id)
         .map_err(|e| CommandError {
             message: format!("归档会话失败: {}", e),
         })?;
@@ -1353,14 +1370,14 @@ pub async fn archive_session(
 pub async fn unarchive_session(
     session_id: String,
 ) -> std::result::Result<SessionMetadataResponse, CommandError> {
-    let conn = crate::database::init::get_connection_shared()
-        .map_err(|e| CommandError {
-            message: format!("获取数据库连接失败: {}", e),
-        })?;
+    let conn = crate::database::init::get_connection_shared().map_err(|e| CommandError {
+        message: format!("获取数据库连接失败: {}", e),
+    })?;
 
     let repo = crate::database::repository::SessionRepository::with_conn(conn);
 
-    let rows_affected = repo.unarchive_session(&session_id)
+    let rows_affected = repo
+        .unarchive_session(&session_id)
         .map_err(|e| CommandError {
             message: format!("取消归档会话失败: {}", e),
         })?;
@@ -1393,17 +1410,15 @@ pub async fn unarchive_session(
 #[tauri::command]
 pub async fn get_archived_sessions(
 ) -> std::result::Result<Vec<crate::database::models::Session>, CommandError> {
-    let conn = crate::database::init::get_connection_shared()
-        .map_err(|e| CommandError {
-            message: format!("获取数据库连接失败: {}", e),
-        })?;
+    let conn = crate::database::init::get_connection_shared().map_err(|e| CommandError {
+        message: format!("获取数据库连接失败: {}", e),
+    })?;
 
     let repo = crate::database::repository::SessionRepository::with_conn(conn);
 
-    repo.get_archived_sessions()
-        .map_err(|e| CommandError {
-            message: format!("获取已归档会话列表失败: {}", e),
-        })
+    repo.get_archived_sessions().map_err(|e| CommandError {
+        message: format!("获取已归档会话列表失败: {}", e),
+    })
 }
 
 // ==================== 文件监控命令 ====================
@@ -1444,12 +1459,11 @@ pub struct StartWatcherResponse {
 pub async fn start_file_watcher(
     app_handle: tauri::AppHandle,
 ) -> std::result::Result<StartWatcherResponse, CommandError> {
-    use crate::monitor::watcher::{SessionWatcher, get_claude_projects_dir};
+    use crate::monitor::watcher::{get_claude_projects_dir, SessionWatcher};
 
-    let projects_dir = get_claude_projects_dir()
-        .map_err(|e| CommandError {
-            message: format!("获取 Claude 项目目录失败: {}", e),
-        })?;
+    let projects_dir = get_claude_projects_dir().map_err(|e| CommandError {
+        message: format!("获取 Claude 项目目录失败: {}", e),
+    })?;
 
     // 检查目录是否存在
     if !projects_dir.exists() {
@@ -1460,16 +1474,15 @@ pub async fn start_file_watcher(
     }
 
     // 创建监控器
-    let watcher = SessionWatcher::new(projects_dir.clone(), app_handle)
-        .map_err(|e| CommandError {
+    let watcher =
+        SessionWatcher::new(projects_dir.clone(), app_handle).map_err(|e| CommandError {
             message: format!("创建文件监控器失败: {}", e),
         })?;
 
     // 启动监控（在后台线程）
-    watcher.start()
-        .map_err(|e| CommandError {
-            message: format!("启动文件监控器失败: {}", e),
-        })?;
+    watcher.start().map_err(|e| CommandError {
+        message: format!("启动文件监控器失败: {}", e),
+    })?;
 
     Ok(StartWatcherResponse {
         success: true,
@@ -1561,39 +1574,39 @@ pub async fn extract_session_log(
         "l3_prompt_only" => ExtractionLevel::L3PromptOnly,
         _ => {
             return Err(CommandError {
-                message: format!("无效的提取等级: {}，可选值：l1_full_trace, l2_clean_flow, l3_prompt_only", level),
+                message: format!(
+                    "无效的提取等级: {}，可选值：l1_full_trace, l2_clean_flow, l3_prompt_only",
+                    level
+                ),
             });
         }
     };
 
     // 创建 JSONL 解析器并解析
-    let mut parser = JsonlParser::new(path)
-        .map_err(|e| CommandError {
-            message: format!("创建 JSONL 解析器失败: {}", e),
-        })?;
+    let mut parser = JsonlParser::new(path).map_err(|e| CommandError {
+        message: format!("创建 JSONL 解析器失败: {}", e),
+    })?;
 
-    let entries = parser.parse_all()
-        .map_err(|e| CommandError {
-            message: format!("解析 JSONL 文件失败: {}", e),
-        })?;
+    let entries = parser.parse_all().map_err(|e| CommandError {
+        message: format!("解析 JSONL 文件失败: {}", e),
+    })?;
 
     // 构建消息树
-    let mut tree = MessageTreeBuilder::build_from_entries(&entries)
-        .map_err(|e| CommandError {
-            message: format!("构建消息树失败: {}", e),
-        })?;
+    let mut tree = MessageTreeBuilder::build_from_entries(&entries).map_err(|e| CommandError {
+        message: format!("构建消息树失败: {}", e),
+    })?;
 
     // 提取元数据
-    crate::parser::extractor::MetadataExtractor::extract_tree_metadata(&mut tree)
-        .map_err(|e| CommandError {
+    crate::parser::extractor::MetadataExtractor::extract_tree_metadata(&mut tree).map_err(|e| {
+        CommandError {
             message: format!("提取元数据失败: {}", e),
-        })?;
+        }
+    })?;
 
     // 提取内容
-    let content = ExtractionEngine::extract(&tree, extraction_level)
-        .map_err(|e| CommandError {
-            message: format!("提取会话内容失败: {}", e),
-        })?;
+    let content = ExtractionEngine::extract(&tree, extraction_level).map_err(|e| CommandError {
+        message: format!("提取会话内容失败: {}", e),
+    })?;
 
     Ok(ExtractSessionResponse {
         content,
@@ -1676,36 +1689,34 @@ pub async fn export_session_log(
     };
 
     // 确保输出目录存在
-    fs::create_dir_all(&output_dir)
-        .map_err(|e| CommandError {
-            message: format!("创建输出目录失败: {}", e),
-        })?;
+    fs::create_dir_all(&output_dir).map_err(|e| CommandError {
+        message: format!("创建输出目录失败: {}", e),
+    })?;
 
     // 创建 JSONL 解析器并解析
-    let mut parser = JsonlParser::new(path.clone())
-        .map_err(|e| CommandError {
-            message: format!("创建 JSONL 解析器失败: {}", e),
-        })?;
+    let mut parser = JsonlParser::new(path.clone()).map_err(|e| CommandError {
+        message: format!("创建 JSONL 解析器失败: {}", e),
+    })?;
 
-    let entries = parser.parse_all()
-        .map_err(|e| CommandError {
-            message: format!("解析 JSONL 文件失败: {}", e),
-        })?;
+    let entries = parser.parse_all().map_err(|e| CommandError {
+        message: format!("解析 JSONL 文件失败: {}", e),
+    })?;
 
     // 构建消息树
-    let mut tree = MessageTreeBuilder::build_from_entries(&entries)
-        .map_err(|e| CommandError {
-            message: format!("构建消息树失败: {}", e),
-        })?;
+    let mut tree = MessageTreeBuilder::build_from_entries(&entries).map_err(|e| CommandError {
+        message: format!("构建消息树失败: {}", e),
+    })?;
 
     // 提取元数据
-    crate::parser::extractor::MetadataExtractor::extract_tree_metadata(&mut tree)
-        .map_err(|e| CommandError {
+    crate::parser::extractor::MetadataExtractor::extract_tree_metadata(&mut tree).map_err(|e| {
+        CommandError {
             message: format!("提取元数据失败: {}", e),
-        })?;
+        }
+    })?;
 
     // 确定输出文件名
-    let file_stem = path.file_stem()
+    let file_stem = path
+        .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("session");
 
@@ -1719,21 +1730,23 @@ pub async fn export_session_log(
     // 导出文件
     match export_format {
         ExportFormat::Markdown => {
-            let content = ExtractionEngine::extract(&tree, extraction_level)
-                .map_err(|e| CommandError {
+            let content =
+                ExtractionEngine::extract(&tree, extraction_level).map_err(|e| CommandError {
                     message: format!("提取会话内容失败: {}", e),
                 })?;
 
-            ExtractionEngine::export_markdown(&content, &output_path)
-                .map_err(|e| CommandError {
+            ExtractionEngine::export_markdown(&content, &output_path).map_err(|e| {
+                CommandError {
                     message: format!("导出 Markdown 文件失败: {}", e),
-                })?;
+                }
+            })?;
         }
         ExportFormat::Json => {
-            ExtractionEngine::export_json(&tree, extraction_level, &output_path)
-                .map_err(|e| CommandError {
+            ExtractionEngine::export_json(&tree, extraction_level, &output_path).map_err(|e| {
+                CommandError {
                     message: format!("导出 JSON 文件失败: {}", e),
-                })?;
+                }
+            })?;
         }
     }
 
@@ -1824,9 +1837,9 @@ pub struct VectorSearchRequest {
 pub async fn vector_search(
     request: VectorSearchRequest,
 ) -> std::result::Result<Vec<crate::database::models::VectorSearchResult>, CommandError> {
-    use crate::embedding::EmbeddingGenerator;
     use crate::database::init::get_connection_shared;
     use crate::database::repository::SessionRepository;
+    use crate::embedding::EmbeddingGenerator;
 
     // 参数验证
     let query = request.query.trim();
@@ -1840,12 +1853,12 @@ pub async fn vector_search(
     let use_weighted = request.weighted.unwrap_or(false); // 默认不使用加权
 
     // 生成查询向量
-    let generator = EmbeddingGenerator::new()
-        .map_err(|e| CommandError {
-            message: format!("初始化向量生成器失败: {}", e),
-        })?;
+    let generator = EmbeddingGenerator::new().map_err(|e| CommandError {
+        message: format!("初始化向量生成器失败: {}", e),
+    })?;
 
-    let query_embedding = generator.generate_for_message(query)
+    let query_embedding = generator
+        .generate_for_message(query)
         .map_err(|e| CommandError {
             message: format!("生成查询向量失败: {}", e),
         })?;
@@ -1856,10 +1869,9 @@ pub async fn vector_search(
     }
 
     // 执行向量检索
-    let conn = get_connection_shared()
-        .map_err(|e| CommandError {
-            message: format!("获取数据库连接失败: {}", e),
-        })?;
+    let conn = get_connection_shared().map_err(|e| CommandError {
+        message: format!("获取数据库连接失败: {}", e),
+    })?;
 
     let repo = SessionRepository::with_conn(conn);
 
@@ -1900,10 +1912,9 @@ pub async fn compress_context(
     use crate::optimizer::compressor::ContextCompressor;
 
     // 创建压缩器
-    let compressor = ContextCompressor::new()
-        .map_err(|e| CommandError {
-            message: format!("创建压缩器失败: {}", e),
-        })?;
+    let compressor = ContextCompressor::new().map_err(|e| CommandError {
+        message: format!("创建压缩器失败: {}", e),
+    })?;
 
     // 执行压缩
     let result = compressor
@@ -1955,10 +1966,9 @@ pub async fn optimize_prompt(
     }
 
     // 创建提示词生成器
-    let generator = PromptGenerator::new()
-        .map_err(|e| CommandError {
-            message: format!("创建提示词生成器失败: {}", e),
-        })?;
+    let generator = PromptGenerator::new().map_err(|e| CommandError {
+        message: format!("创建提示词生成器失败: {}", e),
+    })?;
 
     // 生成增强提示词
     let result = generator
@@ -1987,36 +1997,28 @@ pub async fn optimize_prompt(
 ///
 /// 根据类别获取元提示词模板内容
 #[tauri::command]
-pub fn get_meta_template(
-    category: String,
-) -> Result<String, CommandError> {
+pub fn get_meta_template(category: String) -> Result<String, CommandError> {
     use crate::database::repository::SessionRepository;
 
-    let repo = SessionRepository::from_default_db()
-        .map_err(|e| CommandError {
-            message: format!("创建仓库失败: {}", e),
-        })?;
+    let repo = SessionRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
 
-    repo.get_meta_template(&category)
-        .map_err(|e| CommandError {
-            message: format!("获取模板失败: {}", e),
-        })
+    repo.get_meta_template(&category).map_err(|e| CommandError {
+        message: format!("获取模板失败: {}", e),
+    })
 }
 
 /// 更新 Meta-Prompt 模板
 ///
 /// 根据类别更新元提示词模板内容
 #[tauri::command]
-pub fn update_meta_template(
-    category: String,
-    content: String,
-) -> Result<(), CommandError> {
+pub fn update_meta_template(category: String, content: String) -> Result<(), CommandError> {
     use crate::database::repository::SessionRepository;
 
-    let repo = SessionRepository::from_default_db()
-        .map_err(|e| CommandError {
-            message: format!("创建仓库失败: {}", e),
-        })?;
+    let repo = SessionRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建仓库失败: {}", e),
+    })?;
 
     repo.update_meta_template(&category, &content)
         .map_err(|e| CommandError {
@@ -2033,9 +2035,6 @@ pub fn update_meta_template(
 /// 从 optimizer_config.toml 重新加载配置文件，支持运行时热更新
 #[tauri::command]
 pub fn reload_optimizer_config() -> Result<String, CommandError> {
-    
-    
-
     // 创建临时生成器来重新加载配置
     let config_path = std::env::current_dir()
         .map_err(|e| CommandError {
@@ -2045,30 +2044,29 @@ pub fn reload_optimizer_config() -> Result<String, CommandError> {
         .join("optimizer_config.toml");
 
     // 验证配置文件可以成功解析
-    let content = std::fs::read_to_string(&config_path)
-        .map_err(|e| CommandError {
-            message: format!("无法读取配置文件: {}", e),
-        })?;
+    let content = std::fs::read_to_string(&config_path).map_err(|e| CommandError {
+        message: format!("无法读取配置文件: {}", e),
+    })?;
 
     // 尝试解析以验证配置正确性
-    toml::from_str::<toml::Value>(&content)
-        .map_err(|e| CommandError {
-            message: format!("配置文件解析失败: {}", e),
-        })?;
+    toml::from_str::<toml::Value>(&content).map_err(|e| CommandError {
+        message: format!("配置文件解析失败: {}", e),
+    })?;
 
     // 配置验证通过
-    eprintln!("[reload_optimizer_config] 配置文件验证成功: {:?}", config_path);
+    eprintln!(
+        "[reload_optimizer_config] 配置文件验证成功: {:?}",
+        config_path
+    );
 
     // 获取全局配置管理器并重新加载配置
-    let manager = crate::optimizer::config::get_config_manager()
-        .ok_or_else(|| CommandError {
-            message: "配置管理器未初始化".to_string(),
-        })?;
+    let manager = crate::optimizer::config::get_config_manager().ok_or_else(|| CommandError {
+        message: "配置管理器未初始化".to_string(),
+    })?;
 
-    manager.reload()
-        .map_err(|e| CommandError {
-            message: format!("重新加载配置失败: {}", e),
-        })?;
+    manager.reload().map_err(|e| CommandError {
+        message: format!("重新加载配置失败: {}", e),
+    })?;
 
     eprintln!("[reload_optimizer_config] 配置已成功应用到运行时");
 
@@ -2081,16 +2079,14 @@ pub fn reload_optimizer_config() -> Result<String, CommandError> {
 #[tauri::command]
 pub fn get_optimizer_config() -> Result<String, CommandError> {
     // 使用全局配置管理器
-    let manager = crate::optimizer::config::get_config_manager()
-        .ok_or_else(|| CommandError {
-            message: "配置管理器未初始化".to_string(),
-        })?;
+    let manager = crate::optimizer::config::get_config_manager().ok_or_else(|| CommandError {
+        message: "配置管理器未初始化".to_string(),
+    })?;
 
     let config = manager.get_config();
-    let config_json = serde_json::to_string_pretty(&config)
-        .map_err(|e| CommandError {
-            message: format!("序列化配置失败: {}", e),
-        })?;
+    let config_json = serde_json::to_string_pretty(&config).map_err(|e| CommandError {
+        message: format!("序列化配置失败: {}", e),
+    })?;
 
     Ok(config_json)
 }
@@ -2107,15 +2103,13 @@ pub fn get_monitored_directories(
 ) -> Result<Vec<crate::database::models::MonitoredDirectory>, CommandError> {
     use crate::database::repository::MonitoredDirectoryRepository;
 
-    let repo = MonitoredDirectoryRepository::from_default_db()
-        .map_err(|e| CommandError {
-            message: format!("创建目录仓库失败: {}", e),
-        })?;
+    let repo = MonitoredDirectoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建目录仓库失败: {}", e),
+    })?;
 
-    repo.get_all_directories()
-        .map_err(|e| CommandError {
-            message: format!("获取监控目录失败: {}", e),
-        })
+    repo.get_all_directories().map_err(|e| CommandError {
+        message: format!("获取监控目录失败: {}", e),
+    })
 }
 
 /// 添加监控目录
@@ -2128,36 +2122,30 @@ pub fn add_monitored_directory(
 ) -> Result<crate::database::models::MonitoredDirectory, CommandError> {
     use crate::database::repository::MonitoredDirectoryRepository;
 
-    let mut repo = MonitoredDirectoryRepository::from_default_db()
-        .map_err(|e| CommandError {
-            message: format!("创建目录仓库失败: {}", e),
-        })?;
+    let mut repo = MonitoredDirectoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建目录仓库失败: {}", e),
+    })?;
 
     let directory = crate::database::models::MonitoredDirectory::new(path, name);
-    repo.create_directory(directory)
-        .map_err(|e| CommandError {
-            message: format!("添加监控目录失败: {}", e),
-        })
+    repo.create_directory(directory).map_err(|e| CommandError {
+        message: format!("添加监控目录失败: {}", e),
+    })
 }
 
 /// 删除监控目录
 ///
 /// 从配置列表中删除指定的监控目录
 #[tauri::command]
-pub fn remove_monitored_directory(
-    id: i64,
-) -> Result<(), CommandError> {
+pub fn remove_monitored_directory(id: i64) -> Result<(), CommandError> {
     use crate::database::repository::MonitoredDirectoryRepository;
 
-    let repo = MonitoredDirectoryRepository::from_default_db()
-        .map_err(|e| CommandError {
-            message: format!("创建目录仓库失败: {}", e),
-        })?;
+    let repo = MonitoredDirectoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建目录仓库失败: {}", e),
+    })?;
 
-    repo.delete_directory(id)
-        .map_err(|e| CommandError {
-            message: format!("删除监控目录失败: {}", e),
-        })?;
+    repo.delete_directory(id).map_err(|e| CommandError {
+        message: format!("删除监控目录失败: {}", e),
+    })?;
 
     Ok(())
 }
@@ -2166,20 +2154,16 @@ pub fn remove_monitored_directory(
 ///
 /// 启用或禁用指定的监控目录
 #[tauri::command]
-pub fn toggle_monitored_directory(
-    id: i64,
-) -> Result<bool, CommandError> {
+pub fn toggle_monitored_directory(id: i64) -> Result<bool, CommandError> {
     use crate::database::repository::MonitoredDirectoryRepository;
 
-    let mut repo = MonitoredDirectoryRepository::from_default_db()
-        .map_err(|e| CommandError {
-            message: format!("创建目录仓库失败: {}", e),
-        })?;
+    let mut repo = MonitoredDirectoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建目录仓库失败: {}", e),
+    })?;
 
-    let is_active = repo.toggle_directory_active(id)
-        .map_err(|e| CommandError {
-            message: format!("切换目录状态失败: {}", e),
-        })?;
+    let is_active = repo.toggle_directory_active(id).map_err(|e| CommandError {
+        message: format!("切换目录状态失败: {}", e),
+    })?;
 
     Ok(is_active)
 }
@@ -2193,10 +2177,9 @@ pub fn update_monitored_directory(
 ) -> Result<(), CommandError> {
     use crate::database::repository::MonitoredDirectoryRepository;
 
-    let mut repo = MonitoredDirectoryRepository::from_default_db()
-        .map_err(|e| CommandError {
-            message: format!("创建目录仓库失败: {}", e),
-        })?;
+    let mut repo = MonitoredDirectoryRepository::from_default_db().map_err(|e| CommandError {
+        message: format!("创建目录仓库失败: {}", e),
+    })?;
 
     repo.update_directory(&directory)
         .map_err(|e| CommandError {
@@ -2252,7 +2235,7 @@ pub async fn get_sessions_by_monitored_directory(
     offset: Option<usize>,
 ) -> Result<Vec<SessionFileInfo>, CommandError> {
     use crate::path_resolver::list_session_files;
-    use crate::session_reader::{SessionDisplayName, load_default_history_cache};
+    use crate::session_reader::{load_default_history_cache, SessionDisplayName};
     use std::path::Path;
 
     // 提供默认值
@@ -2268,13 +2251,15 @@ pub async fn get_sessions_by_monitored_directory(
     let project_path = Path::new(&monitored_path);
 
     // 使用路径解析器获取会话文件列表（已按修改时间倒序排序）
-    let all_session_files = list_session_files(project_path)
-        .map_err(|e| CommandError {
-            message: format!("获取会话文件失败: {}", e),
-        })?;
+    let all_session_files = list_session_files(project_path).map_err(|e| CommandError {
+        message: format!("获取会话文件失败: {}", e),
+    })?;
 
     #[cfg(debug_assertions)]
-    eprintln!("[get_sessions_by_monitored_directory] 总共找到 {} 个会话文件", all_session_files.len());
+    eprintln!(
+        "[get_sessions_by_monitored_directory] 总共找到 {} 个会话文件",
+        all_session_files.len()
+    );
 
     // 先应用类型筛选，再分页
     let filtered_session_files: Vec<_> = all_session_files
@@ -2283,7 +2268,10 @@ pub async fn get_sessions_by_monitored_directory(
             // 如果不包含 Agent，则过滤掉 Agent 类型的会话
             if !include_agent && info.file_type.is_agent() {
                 #[cfg(debug_assertions)]
-                eprintln!("[get_sessions_by_monitored_directory] 过滤掉 Agent 会话: {}", info.file_name);
+                eprintln!(
+                    "[get_sessions_by_monitored_directory] 过滤掉 Agent 会话: {}",
+                    info.file_name
+                );
                 false
             } else {
                 true
@@ -2292,7 +2280,10 @@ pub async fn get_sessions_by_monitored_directory(
         .collect();
 
     #[cfg(debug_assertions)]
-    eprintln!("[get_sessions_by_monitored_directory] 类型筛选后剩余 {} 个会话", filtered_session_files.len());
+    eprintln!(
+        "[get_sessions_by_monitored_directory] 类型筛选后剩余 {} 个会话",
+        filtered_session_files.len()
+    );
 
     // 应用分页：跳过 offset，取 limit 个
     let session_files: Vec<_> = filtered_session_files
@@ -2302,12 +2293,18 @@ pub async fn get_sessions_by_monitored_directory(
         .collect();
 
     #[cfg(debug_assertions)]
-    eprintln!("[get_sessions_by_monitored_directory] 本批处理 {} 个会话文件", session_files.len());
+    eprintln!(
+        "[get_sessions_by_monitored_directory] 本批处理 {} 个会话文件",
+        session_files.len()
+    );
 
     // 预加载 history.jsonl 缓存
     let history_cache = load_default_history_cache().await.unwrap_or_default();
     #[cfg(debug_assertions)]
-    eprintln!("[get_sessions_by_monitored_directory] history 缓存加载完成，共 {} 个条目", history_cache.len());
+    eprintln!(
+        "[get_sessions_by_monitored_directory] history 缓存加载完成，共 {} 个条目",
+        history_cache.len()
+    );
 
     // 并行加载会话显示名称（使用并发控制和超时机制）
     use futures::stream::{self, StreamExt};
@@ -2320,8 +2317,9 @@ pub async fn get_sessions_by_monitored_directory(
                 // 添加超时机制：单个会话名称获取最多 100ms
                 let timeout_result = tokio::time::timeout(
                     Duration::from_millis(100),
-                    SessionDisplayName::get_display_name(&info.full_path, Some(history_cache))
-                ).await;
+                    SessionDisplayName::get_display_name(&info.full_path, Some(history_cache)),
+                )
+                .await;
 
                 match timeout_result {
                     Ok(Ok(display)) => (info, Some(display)),
@@ -2331,7 +2329,10 @@ pub async fn get_sessions_by_monitored_directory(
         })
         .buffer_unordered(10); // 限制并发数为 10
 
-    let display_names: Vec<(crate::path_resolver::SessionFileInfo, Option<SessionDisplayName>)> = name_stream.collect().await;
+    let display_names: Vec<(
+        crate::path_resolver::SessionFileInfo,
+        Option<SessionDisplayName>,
+    )> = name_stream.collect().await;
 
     // 转换为前端格式（类型筛选已在前面完成）
     let mut result: Vec<SessionFileInfo> = display_names
@@ -2353,7 +2354,7 @@ pub async fn get_sessions_by_monitored_directory(
                 file_size: info.file_size,
                 modified_time: info.modified_time.clone(),
                 project_path: monitored_path.clone(), // 添加项目路径
-                summary, // 向后兼容
+                summary,                              // 向后兼容
                 display_name,
                 name_source,
                 file_type: info.file_type,
@@ -2365,10 +2366,16 @@ pub async fn get_sessions_by_monitored_directory(
     result.sort_by(|a, b| b.modified_time.cmp(&a.modified_time));
 
     #[cfg(debug_assertions)]
-    eprintln!("[get_sessions_by_monitored_directory] 排序完成，返回 {} 个会话", result.len());
+    eprintln!(
+        "[get_sessions_by_monitored_directory] 排序完成，返回 {} 个会话",
+        result.len()
+    );
 
     #[cfg(debug_assertions)]
-    eprintln!("[get_sessions_by_monitored_directory] 返回 {} 个会话（筛选后）", result.len());
+    eprintln!(
+        "[get_sessions_by_monitored_directory] 返回 {} 个会话（筛选后）",
+        result.len()
+    );
 
     Ok(result)
 }
@@ -2435,10 +2442,13 @@ pub async fn semantic_search(
     }
 
     // 获取 API Key（从活跃的 LLM provider）
-    let active_provider = manager.get_active_provider_config()
+    let active_provider = manager
+        .get_active_provider_config()
         .map_err(|e| format!("获取活跃提供商失败: {}", e))?;
 
-    let provider_id = active_provider.id.ok_or_else(|| "提供商 ID 无效".to_string())?;
+    let provider_id = active_provider
+        .id
+        .ok_or_else(|| "提供商 ID 无效".to_string())?;
 
     let api_key = crate::llm::security::ApiKeyStorage::get_api_key(provider_id)
         .map_err(|e| format!("获取 API Key 失败: {}", e))?;
@@ -2446,20 +2456,18 @@ pub async fn semantic_search(
     let api_key = api_key.expose_secret().to_string();
 
     // 生成查询向量
-    let embedding_client = OpenAIEmbeddings::new(
-        &api_key,
-        Some(settings.embedding_model.clone()),
-    ).map_err(|e| format!("创建 Embedding 客户端失败: {}", e))?;
+    let embedding_client = OpenAIEmbeddings::new(&api_key, Some(settings.embedding_model.clone()))
+        .map_err(|e| format!("创建 Embedding 客户端失败: {}", e))?;
 
-    let query_vector = embedding_client.generate_embedding(&request.query).await
+    let query_vector = embedding_client
+        .generate_embedding(&request.query)
+        .await
         .map_err(|e| format!("生成查询向量失败: {}", e))?;
 
     // 执行向量搜索
-    let search_results = repo.vector_search_sessions(
-        &query_vector,
-        top_k,
-        min_similarity,
-    ).map_err(|e| format!("向量搜索失败: {}", e))?;
+    let search_results = repo
+        .vector_search_sessions(&query_vector, top_k, min_similarity)
+        .map_err(|e| format!("向量搜索失败: {}", e))?;
 
     // 转换结果格式
     let results: Vec<SemanticSearchResult> = search_results
@@ -2510,19 +2518,23 @@ pub async fn find_similar_sessions(
     }
 
     // 获取目标会话的向量
-    let target_embedding = repo.get_session_embedding(&session_id)
+    let target_embedding = repo
+        .get_session_embedding(&session_id)
         .map_err(|e| format!("查询会话向量失败: {}", e))?
         .ok_or_else(|| format!("未找到会话 {} 的向量", session_id))?;
 
-    let target_vector = target_embedding.get_embedding()
+    let target_vector = target_embedding
+        .get_embedding()
         .map_err(|e| format!("解析向量失败: {}", e))?;
 
     // 执行向量搜索
-    let search_results = repo.vector_search_sessions(
-        &target_vector,
-        top_k + 1, // +1 因为结果会包含自己
-        min_similarity,
-    ).map_err(|e| format!("向量搜索失败: {}", e))?;
+    let search_results = repo
+        .vector_search_sessions(
+            &target_vector,
+            top_k + 1, // +1 因为结果会包含自己
+            min_similarity,
+        )
+        .map_err(|e| format!("向量搜索失败: {}", e))?;
 
     // 过滤掉自己并转换结果格式
     let results: Vec<SemanticSearchResult> = search_results
@@ -2575,9 +2587,7 @@ pub async fn get_vector_settings() -> Result<VectorSettings, String> {
 
 /// 更新向量设置
 #[tauri::command]
-pub async fn update_vector_settings(
-    settings: VectorSettings,
-) -> Result<(), String> {
+pub async fn update_vector_settings(settings: VectorSettings) -> Result<(), String> {
     let mut repo_settings = crate::database::repository::SettingsRepository::new()
         .get_settings()
         .map_err(|e| format!("获取当前设置失败: {}", e))?;
@@ -2587,7 +2597,8 @@ pub async fn update_vector_settings(
     repo_settings.embedding_model = settings.embedding_model;
     repo_settings.embedding_batch_size = settings.embedding_batch_size;
 
-    repo_settings.validate()
+    repo_settings
+        .validate()
         .map_err(|e| format!("设置验证失败: {}", e))?;
 
     crate::database::repository::SettingsRepository::new()
@@ -2599,9 +2610,7 @@ pub async fn update_vector_settings(
 
 /// 手动触发向量同步
 #[tauri::command]
-pub async fn sync_embeddings_now(
-    manager: State<'_, LLMClientManager>,
-) -> Result<usize, String> {
+pub async fn sync_embeddings_now(manager: State<'_, LLMClientManager>) -> Result<usize, String> {
     use crate::database::get_connection_shared;
 
     let conn = get_connection_shared().map_err(|e| format!("获取数据库连接失败: {}", e))?;
@@ -2616,10 +2625,13 @@ pub async fn sync_embeddings_now(
     }
 
     // 获取 API Key
-    let active_provider = manager.get_active_provider_config()
+    let active_provider = manager
+        .get_active_provider_config()
         .map_err(|e| format!("获取活跃提供商失败: {}", e))?;
 
-    let provider_id = active_provider.id.ok_or_else(|| "提供商 ID 无效".to_string())?;
+    let provider_id = active_provider
+        .id
+        .ok_or_else(|| "提供商 ID 无效".to_string())?;
 
     let api_key = crate::llm::security::ApiKeyStorage::get_api_key(provider_id)
         .map_err(|e| format!("获取 API Key 失败: {}", e))?;
@@ -2629,11 +2641,15 @@ pub async fn sync_embeddings_now(
     // 创建同步管理器
     let sync_manager = EmbeddingSyncManager::new(std::sync::Arc::new(repo));
     sync_manager.set_api_key(api_key).await;
-    sync_manager.update_config(&settings).await
+    sync_manager
+        .update_config(&settings)
+        .await
         .map_err(|e| format!("更新配置失败: {}", e))?;
 
     // 执行同步
-    let count = sync_manager.sync_all_sessions().await
+    let count = sync_manager
+        .sync_all_sessions()
+        .await
         .map_err(|e| format!("同步失败: {}", e))?;
 
     Ok(count)
@@ -2643,7 +2659,7 @@ pub async fn sync_embeddings_now(
 // 多等级日志读取 Commands (Multi-Level Log Reading)
 // ============================================================================
 
-use crate::parser::view_level::{ViewLevel, MessageFilter, QAPair};
+use crate::parser::view_level::{MessageFilter, QAPair, ViewLevel};
 
 /// 根据等级获取会话消息
 ///
@@ -2661,7 +2677,7 @@ pub async fn cmd_get_messages_by_level(
     file_path: Option<String>,
 ) -> Result<Vec<crate::database::models::Message>, String> {
     use crate::database::repository::SessionRepository;
-    use crate::session_parser::{SessionParserService, SessionParserConfig};
+    use crate::session_parser::{SessionParserConfig, SessionParserService};
 
     // 确定文件路径
     let final_file_path = if let Some(fp) = file_path {
@@ -2671,7 +2687,8 @@ pub async fn cmd_get_messages_by_level(
         // 否则从数据库查询会话信息
         let repo = SessionRepository::from_default_db()
             .map_err(|e| format!("创建 SessionRepository 失败: {}", e))?;
-        let session = repo.get_session_by_id(&session_id)
+        let session = repo
+            .get_session_by_id(&session_id)
             .map_err(|e| format!("获取会话失败: {}", e))?
             .ok_or_else(|| format!("会话不存在: {}", session_id))?;
         session.file_path
@@ -2685,7 +2702,7 @@ pub async fn cmd_get_messages_by_level(
 
     // 创建解析配置
     let config = SessionParserConfig {
-        enable_content_filter: true,  // ✅ 启用内容过滤
+        enable_content_filter: true, // ✅ 启用内容过滤
         view_level: view_level.clone(),
         debug: cfg!(debug_assertions),
     };
@@ -2694,14 +2711,19 @@ pub async fn cmd_get_messages_by_level(
     let parser = SessionParserService::new(config);
 
     // 解析会话
-    let result = parser.parse_session(&final_file_path, &session_id)
+    let result = parser
+        .parse_session(&final_file_path, &session_id)
         .map_err(|e| format!("解析会话失败: {}", e))?;
 
     // 输出调试信息
     #[cfg(debug_assertions)]
     {
         eprintln!("[DEBUG] 解析统计: {:?}", result.stats);
-        eprintln!("[DEBUG] 返回 {} 个消息 (view_level: {:?})", result.messages.len(), view_level);
+        eprintln!(
+            "[DEBUG] 返回 {} 个消息 (view_level: {:?})",
+            result.messages.len(),
+            view_level
+        );
 
         // 显示前 3 条消息的详细信息
         if !result.messages.is_empty() {
@@ -2710,7 +2732,10 @@ pub async fn cmd_get_messages_by_level(
                 eprintln!("  [{}]:", i);
                 eprintln!("    msg_type: {:?}", msg.msg_type);
                 eprintln!("    uuid: {:?}", msg.uuid.get(..8));
-                eprintln!("    summary: {:?}", msg.summary.as_ref().and_then(|s| s.get(..50)));
+                eprintln!(
+                    "    summary: {:?}",
+                    msg.summary.as_ref().and_then(|s| s.get(..50))
+                );
                 eprintln!("    timestamp: {:?}", msg.timestamp);
             }
 
@@ -2753,7 +2778,6 @@ pub async fn cmd_get_messages_by_level(
     Ok(result.messages)
 }
 
-
 /// 根据等级提取问答对
 ///
 /// # 参数
@@ -2770,7 +2794,7 @@ pub async fn cmd_get_qa_pairs_by_level(
     file_path: Option<String>,
 ) -> Result<Vec<QAPair>, String> {
     use crate::database::repository::SessionRepository;
-    use crate::session_parser::{SessionParserService, SessionParserConfig};
+    use crate::session_parser::{SessionParserConfig, SessionParserService};
 
     // 验证等级必须是 QAPairs
     if view_level != ViewLevel::QAPairs {
@@ -2785,7 +2809,8 @@ pub async fn cmd_get_qa_pairs_by_level(
         // 否则从数据库查询会话信息
         let repo = SessionRepository::from_default_db()
             .map_err(|e| format!("创建 SessionRepository 失败: {}", e))?;
-        let session = repo.get_session_by_id(&session_id)
+        let session = repo
+            .get_session_by_id(&session_id)
             .map_err(|e| format!("获取会话失败: {}", e))?
             .ok_or_else(|| format!("会话不存在: {}", session_id))?;
         session.file_path
@@ -2799,19 +2824,23 @@ pub async fn cmd_get_qa_pairs_by_level(
 
     // 使用 SessionParserService 解析会话（在 Full 视图等级下获取所有消息）
     let config = SessionParserConfig {
-        enable_content_filter: false,  // 问答对提取不过滤内容
-        view_level: ViewLevel::Full,   // 获取所有消息，后续由 extract_qa_pairs 处理
+        enable_content_filter: false, // 问答对提取不过滤内容
+        view_level: ViewLevel::Full,  // 获取所有消息，后续由 extract_qa_pairs 处理
         debug: cfg!(debug_assertions),
     };
 
     let parser = SessionParserService::new(config);
-    let result = parser.parse_session(&final_file_path, &session_id)
+    let result = parser
+        .parse_session(&final_file_path, &session_id)
         .map_err(|e| format!("解析会话失败: {}", e))?;
 
     #[cfg(debug_assertions)]
     {
         eprintln!("[DEBUG] 解析统计: {:?}", result.stats);
-        eprintln!("[DEBUG] 返回 {} 个消息用于问答对提取", result.messages.len());
+        eprintln!(
+            "[DEBUG] 返回 {} 个消息用于问答对提取",
+            result.messages.len()
+        );
     }
 
     // 提取问答对
@@ -2825,14 +2854,16 @@ pub async fn cmd_get_qa_pairs_by_level(
         if !qa_pairs.is_empty() {
             eprintln!("[DEBUG] 前 3 个问答对:");
             for (i, pair) in qa_pairs.iter().take(3).enumerate() {
-                eprintln!("  [{}] question_uuid={}, question_type={}, has_answer={}",
+                eprintln!(
+                    "  [{}] question_uuid={}, question_type={}, has_answer={}",
                     i,
                     &pair.question.uuid[..pair.question.uuid.len().min(8)],
                     pair.question.msg_type,
                     pair.answer.is_some()
                 );
                 if let Some(ref answer) = pair.answer {
-                    eprintln!("       answer_uuid={}, answer_type={}",
+                    eprintln!(
+                        "       answer_uuid={}, answer_type={}",
                         &answer.uuid[..answer.uuid.len().min(8)],
                         answer.msg_type
                     );
@@ -2843,7 +2874,6 @@ pub async fn cmd_get_qa_pairs_by_level(
 
     Ok(qa_pairs)
 }
-
 
 /// 保存视图等级偏好
 ///
@@ -2873,13 +2903,12 @@ pub async fn cmd_save_view_level_preference(
 /// # 返回
 /// 视图等级，如果不存在则返回默认值 QAPairs
 #[tauri::command]
-pub async fn cmd_get_view_level_preference(
-    session_id: String,
-) -> Result<ViewLevel, String> {
+pub async fn cmd_get_view_level_preference(session_id: String) -> Result<ViewLevel, String> {
     use crate::database::repository::ViewLevelPreferenceRepository;
 
     let repo = ViewLevelPreferenceRepository::new();
-    let preference = repo.get_preference_or_default(&session_id)
+    let preference = repo
+        .get_preference_or_default(&session_id)
         .map_err(|e| format!("获取偏好失败: {}", e))?;
 
     Ok(preference)
@@ -2914,7 +2943,8 @@ pub async fn cmd_export_session_by_level(
     // 获取过滤后的消息
     let messages = if view_level == ViewLevel::QAPairs {
         // 对于 QAPairs，先获取问答对
-        let qa_pairs = cmd_get_qa_pairs_by_level(session_id.clone(), view_level, file_path.clone()).await?;
+        let qa_pairs =
+            cmd_get_qa_pairs_by_level(session_id.clone(), view_level, file_path.clone()).await?;
 
         // 将问答对转换为可导出的格式
         let export_messages: Vec<crate::database::models::Message> = qa_pairs
@@ -2999,28 +3029,27 @@ pub async fn cmd_export_session_by_level(
 pub fn get_filter_config() -> Result<crate::filter_config::FilterConfig, CommandError> {
     use crate::filter_config::FilterConfigManager;
 
-    let manager = FilterConfigManager::with_default_path()
-        .map_err(|e| CommandError {
-            message: format!("加载过滤配置失败: {}", e),
-        })?;
+    let manager = FilterConfigManager::with_default_path().map_err(|e| CommandError {
+        message: format!("加载过滤配置失败: {}", e),
+    })?;
 
     Ok(manager.get_config().clone())
 }
 
 /// 更新过滤配置
 #[tauri::command]
-pub fn update_filter_config(config: crate::filter_config::FilterConfig) -> Result<(), CommandError> {
+pub fn update_filter_config(
+    config: crate::filter_config::FilterConfig,
+) -> Result<(), CommandError> {
     use crate::filter_config::FilterConfigManager;
 
-    let mut manager = FilterConfigManager::with_default_path()
-        .map_err(|e| CommandError {
-            message: format!("加载过滤配置失败: {}", e),
-        })?;
+    let mut manager = FilterConfigManager::with_default_path().map_err(|e| CommandError {
+        message: format!("加载过滤配置失败: {}", e),
+    })?;
 
-    manager.update_config(config)
-        .map_err(|e| CommandError {
-            message: format!("更新过滤配置失败: {}", e),
-        })?;
+    manager.update_config(config).map_err(|e| CommandError {
+        message: format!("更新过滤配置失败: {}", e),
+    })?;
 
     Ok(())
 }
@@ -3030,15 +3059,13 @@ pub fn update_filter_config(config: crate::filter_config::FilterConfig) -> Resul
 pub fn reload_filter_config() -> Result<(), CommandError> {
     use crate::filter_config::FilterConfigManager;
 
-    let mut manager = FilterConfigManager::with_default_path()
-        .map_err(|e| CommandError {
-            message: format!("加载过滤配置失败: {}", e),
-        })?;
+    let mut manager = FilterConfigManager::with_default_path().map_err(|e| CommandError {
+        message: format!("加载过滤配置失败: {}", e),
+    })?;
 
-    manager.reload()
-        .map_err(|e| CommandError {
-            message: format!("重新加载过滤配置失败: {}", e),
-        })?;
+    manager.reload().map_err(|e| CommandError {
+        message: format!("重新加载过滤配置失败: {}", e),
+    })?;
 
     Ok(())
 }
@@ -3048,10 +3075,9 @@ pub fn reload_filter_config() -> Result<(), CommandError> {
 pub fn get_filter_config_path() -> Result<String, CommandError> {
     use crate::filter_config::FilterConfigManager;
 
-    let manager = FilterConfigManager::with_default_path()
-        .map_err(|e| CommandError {
-            message: format!("获取配置路径失败: {}", e),
-        })?;
+    let manager = FilterConfigManager::with_default_path().map_err(|e| CommandError {
+        message: format!("获取配置路径失败: {}", e),
+    })?;
 
     Ok(manager.config_path().to_string_lossy().to_string())
 }
@@ -3061,21 +3087,18 @@ pub fn get_filter_config_path() -> Result<String, CommandError> {
 pub fn open_filter_config_folder() -> Result<(), CommandError> {
     use crate::filter_config::FilterConfigManager;
 
-    let manager = FilterConfigManager::with_default_path()
-        .map_err(|e| CommandError {
-            message: format!("获取配置路径失败: {}", e),
-        })?;
+    let manager = FilterConfigManager::with_default_path().map_err(|e| CommandError {
+        message: format!("获取配置路径失败: {}", e),
+    })?;
 
-    let config_dir = manager.config_path().parent()
-        .ok_or_else(|| CommandError {
-            message: "无法获取配置目录".to_string(),
-        })?;
+    let config_dir = manager.config_path().parent().ok_or_else(|| CommandError {
+        message: "无法获取配置目录".to_string(),
+    })?;
 
     // 使用系统默认程序打开目录
-    open::that(config_dir)
-        .map_err(|e| CommandError {
-            message: format!("打开配置目录失败: {}", e),
-        })?;
+    open::that(config_dir).map_err(|e| CommandError {
+        message: format!("打开配置目录失败: {}", e),
+    })?;
 
     Ok(())
 }
@@ -3133,9 +3156,11 @@ pub async fn cmd_get_prompt_history_paginated(
         message: format!("创建仓库失败: {}", e),
     })?;
 
-    let histories = repo.get_histories_paginated(offset, limit).map_err(|e| CommandError {
-        message: format!("获取历史记录失败: {}", e),
-    })?;
+    let histories = repo
+        .get_histories_paginated(offset, limit)
+        .map_err(|e| CommandError {
+            message: format!("获取历史记录失败: {}", e),
+        })?;
 
     Ok(histories)
 }
@@ -3164,9 +3189,7 @@ pub async fn cmd_get_prompt_history_by_id(
 /// # 参数
 /// - `id`: 要删除的历史 ID
 #[tauri::command]
-pub async fn cmd_delete_prompt_history(
-    id: i64,
-) -> Result<(), CommandError> {
+pub async fn cmd_delete_prompt_history(id: i64) -> Result<(), CommandError> {
     let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
         message: format!("创建仓库失败: {}", e),
     })?;
@@ -3186,9 +3209,7 @@ pub async fn cmd_delete_prompt_history(
 /// # 返回
 /// 返回更新后的收藏状态
 #[tauri::command]
-pub async fn cmd_toggle_prompt_history_favorite(
-    id: i64,
-) -> Result<bool, CommandError> {
+pub async fn cmd_toggle_prompt_history_favorite(id: i64) -> Result<bool, CommandError> {
     let mut repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
         message: format!("创建仓库失败: {}", e),
     })?;
@@ -3202,7 +3223,8 @@ pub async fn cmd_toggle_prompt_history_favorite(
 
 /// 获取收藏的提示词历史
 #[tauri::command]
-pub async fn cmd_get_favorite_prompt_history() -> Result<Vec<PromptGenerationHistory>, CommandError> {
+pub async fn cmd_get_favorite_prompt_history() -> Result<Vec<PromptGenerationHistory>, CommandError>
+{
     let repo = PromptHistoryRepository::from_default_db().map_err(|e| CommandError {
         message: format!("创建仓库失败: {}", e),
     })?;
@@ -3227,5 +3249,3 @@ pub async fn cmd_count_prompt_history() -> Result<i64, CommandError> {
 
     Ok(count)
 }
-
-
