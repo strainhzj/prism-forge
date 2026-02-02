@@ -9,11 +9,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use ts_rs::TS;
 
-use super::compressor::ContextCompressor;
 use super::config::ConfigManager;
 use crate::database::models::TokenStats;
 use crate::database::prompt_versions::PromptVersionRepository;
-use crate::database::repository::SessionRepository;
 use crate::llm::{
     interface::{Message, ModelParams},
     LLMClientManager,
@@ -101,12 +99,8 @@ pub struct EnhancedPrompt {
 ///
 /// 整合上下文压缩和 LLM 生成（不使用向量检索）
 pub struct PromptGenerator {
-    /// 数据库仓库
-    repository: SessionRepository,
     /// 提示词版本仓库
     prompt_version_repo: PromptVersionRepository,
-    /// 上下文压缩器
-    compressor: ContextCompressor,
     /// Token 计数器
     token_counter: TokenCounter,
     /// 配置管理器
@@ -126,13 +120,13 @@ impl PromptGenerator {
         let config_manager = Arc::new(ConfigManager::new(config_path)?);
 
         Ok(Self {
-            repository: SessionRepository::from_default_db()?,
             prompt_version_repo: PromptVersionRepository::from_default_db()?,
-            compressor: ContextCompressor::new()?,
             token_counter: TokenCounter::new()?,
             config_manager,
         })
     }
+
+    /// 解析配置文件路径
 
     /// 解析配置文件路径
     ///
@@ -221,9 +215,7 @@ impl PromptGenerator {
         let config_manager = Arc::new(ConfigManager::new(config_path)?);
 
         Ok(Self {
-            repository: SessionRepository::from_default_db()?,
             prompt_version_repo: PromptVersionRepository::from_default_db()?,
-            compressor: ContextCompressor::new()?,
             token_counter: TokenCounter::new()?,
             config_manager,
         })
@@ -678,82 +670,6 @@ impl PromptGenerator {
                 .as_ref()
                 .map(|(_, m): &(String, String)| m.clone()),
         })
-    }
-
-    /// 创建对话开始提示词（会话为空时，已弃用，保留用于兼容）
-    ///
-    /// 注意：此方法无法获取 LLM 提供商信息，因此 llm_provider 和 llm_model 将为 None
-    #[deprecated(note = "使用 generate_conversation_starter_with_llm 代替")]
-    fn create_conversation_starter_prompt(
-        &self,
-        goal: &str,
-        session_file_path: &str,
-        language: &str,
-    ) -> EnhancedPrompt {
-        // 使用硬编码的对话开始模板
-        let template = if language == "en" {
-            r#"You are a professional prompt expert. The user wants to start a new conversation in an AI coding agent. Please generate a high signal-to-noise ratio prompt to help the user begin the conversation.
-
-## User Goal
-{{goal}}
-
-## Requirements
-1. Understand the user's goal
-2. Supplement any potentially missing parts of the user's goal
-3. Provide clear direction
-4. Keep it concise and clear (within 200 words)
-
-Please generate a conversation-starting prompt."#
-        } else {
-            r#"你是一个专业的提示词专家。用户想要在ai coding agent开始一个新的对话，请生成一段信噪比的提示词来帮助用户开始对话。
-
-## 用户目标
-{{goal}}
-
-## 要求
-1. 理解用户的目标
-2. 补充用户目标中可能缺失的部分
-3. 提供明确的方向
-4. 保持简洁明了（控制在 200 字以内）
-
-请生成一个对话开始的提示词。"#
-        };
-
-        let enhanced_prompt = template.replace("{{goal}}", goal);
-
-        // 提取会话信息
-        let path_buf = PathBuf::from(session_file_path);
-        let session_id = path_buf
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown");
-
-        let (project_name, summary) = if language == "en" {
-            (
-                "Current Session".to_string(),
-                "New conversation, no history".to_string(),
-            )
-        } else {
-            ("当前会话".to_string(), "新对话，无历史记录".to_string())
-        };
-
-        EnhancedPrompt {
-            original_goal: goal.to_string(),
-            referenced_sessions: vec![ReferencedSession {
-                session_id: session_id.to_string(),
-                project_name,
-                summary,
-                similarity_score: 1.0,
-            }],
-            enhanced_prompt,
-            token_stats: TokenStats {
-                total_tokens: goal.len(),
-                max_tokens: None,
-            },
-            confidence: 0.5,    // 对话开始的置信度中等
-            llm_provider: None, // 废弃方法无法获取提供商信息
-            llm_model: None,    // 废弃方法无法获取模型信息
-        }
     }
 
     /// 生成对话模板提示词（LLM 调用失败时回退）
