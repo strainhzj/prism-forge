@@ -347,7 +347,15 @@ impl PromptGenerator {
             }];
 
             // 10. 获取 LLM 提供商和模型信息
-            let provider_config = llm_manager.get_active_provider_config().ok();
+            let provider_config = match llm_manager.get_active_provider_config() {
+                Ok(cfg) => Some(cfg),
+                Err(e) => {
+                    log::warn!("获取活跃 LLM 提供商配置失败: {}", e);
+                    #[cfg(debug_assertions)]
+                    eprintln!("[PromptGenerator] 获取活跃提供商配置失败: {}", e);
+                    None
+                }
+            };
             let provider_info = provider_config
                 .as_ref()
                 .map(|p| (p.provider_type.to_string(), p.effective_model().to_string()));
@@ -644,7 +652,15 @@ impl PromptGenerator {
         }];
 
         // 5. 获取 LLM 提供商和模型信息
-        let provider_config = llm_manager.get_active_provider_config().ok();
+        let provider_config = match llm_manager.get_active_provider_config() {
+            Ok(cfg) => Some(cfg),
+            Err(e) => {
+                log::warn!("获取活跃 LLM 提供商配置失败: {}", e);
+                #[cfg(debug_assertions)]
+                eprintln!("[PromptGenerator] 获取活跃提供商配置失败: {}", e);
+                None
+            }
+        };
         let provider_info = provider_config
             .as_ref()
             .map(|p| (p.provider_type.to_string(), p.effective_model().to_string()));

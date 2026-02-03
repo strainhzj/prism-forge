@@ -1344,18 +1344,44 @@ impl PromptVersionRepository {
     /// - 使用 ok() 处理 Option 类型，转换错误为 None
     /// - 字符串字段提供合理的默认值
     fn row_to_change(row: &rusqlite::Row) -> PromptChange {
-        // 使用 unwrap_or_default 替代 unwrap_or，避免类型不匹配时的 panic
-        // unwrap_or_default 只在 Result::Err 时返回默认值，类型匹配时正常返回值
-        let id: i64 = row.get(0).unwrap_or_default();
-        let template_id: i64 = row.get(1).unwrap_or_default();
-        let to_version_id: i64 = row.get(3).unwrap_or_default();
+        // 使用 unwrap_or_else 但记录日志，避免静默吞掉错误
+        let id: i64 = row.get(0).unwrap_or_else(|e| {
+            log::error!("从 prompt_changes 读取 id 失败: {}", e);
+            0
+        });
+        let template_id: i64 = row.get(1).unwrap_or_else(|e| {
+            log::error!("从 prompt_changes 读取 template_id 失败: {}", e);
+            0
+        });
+        let to_version_id: i64 = row.get(3).unwrap_or_else(|e| {
+            log::error!("从 prompt_changes 读取 to_version_id 失败: {}", e);
+            0
+        });
 
         // change_type 字段（索引 5）需要特殊处理：先获取字符串，再解析枚举
-        let change_type_str: String = row.get(5).unwrap_or_else(|_| "Updated".to_string());
-        let change_type: ChangeType = change_type_str.parse().unwrap_or(ChangeType::Updated);
+        let change_type_str: String = row.get(5).unwrap_or_else(|e| {
+            log::warn!("从 prompt_changes 读取 change_type 失败，使用默认 Updated: {}", e);
+            "Updated".to_string()
+        });
+        let change_type: ChangeType = change_type_str
+            .parse()
+            .unwrap_or_else(|e| {
+                log::warn!(
+                    "解析 PromptChange.change_type 失败（值: '{}'），使用默认 Updated: {}",
+                    change_type_str,
+                    e
+                );
+                ChangeType::Updated
+            });
 
         // field_name 字段（索引 6）
-        let field_name: String = row.get(6).unwrap_or_else(|_| "unknown".to_string());
+        let field_name: String = row.get(6).unwrap_or_else(|e| {
+            log::warn!(
+                "从 prompt_changes 读取 field_name 失败，使用占位 unknown: {}",
+                e
+            );
+            "unknown".to_string()
+        });
 
         PromptChange {
             id,
@@ -1369,9 +1395,13 @@ impl PromptVersionRepository {
             new_value: row.get(8).ok(),
             line_number: row.get(9).ok(),
             change_summary: row.get(10).ok(),
-            changed_at: row
-                .get(11)
-                .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339()),
+            changed_at: row.get(11).unwrap_or_else(|e| {
+                log::warn!(
+                    "从 prompt_changes 读取 changed_at 失败，使用当前时间占位: {}",
+                    e
+                );
+                chrono::Utc::now().to_rfc3339()
+            }),
         }
     }
 

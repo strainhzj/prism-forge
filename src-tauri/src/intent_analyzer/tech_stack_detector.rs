@@ -250,12 +250,6 @@ impl TechStackDetector {
     }
 }
 
-impl Default for TechStackDetector {
-    fn default() -> Self {
-        Self::new().expect("TechStackDetector 创建失败")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

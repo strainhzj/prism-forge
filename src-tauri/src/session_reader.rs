@@ -438,7 +438,16 @@ impl SessionDisplayName {
     fn read_last_n_messages(content: &str, n: usize) -> Vec<Message> {
         content
             .lines()
-            .filter_map(|line| serde_json::from_str::<Message>(line).ok())
+            .filter_map(|line| {
+                match serde_json::from_str::<Message>(line) {
+                    Ok(msg) => Some(msg),
+                    Err(e) => {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[SessionReader] 解析 JSON 行失败，已跳过: {}", e);
+                        None
+                    }
+                }
+            })
             .rev()
             .take(n)
             .collect()

@@ -1653,12 +1653,11 @@ impl SettingsRepository {
 
     /// 创建新的仓库实例（便捷方法）
     pub fn new() -> Self {
-        Self::from_default_db().unwrap_or_else(|_| {
-            // 如果无法获取默认连接，返回一个带有空连接的实例
-            // 这在调用时会失败，但至少可以编译通过
-            Self {
-                conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
-            }
+        Self::from_default_db().unwrap_or_else(|e| {
+            log::error!("从默认数据库创建 SettingsRepository 失败: {}", e);
+            #[cfg(debug_assertions)]
+            eprintln!("从默认数据库创建 SettingsRepository 失败: {:?}", e);
+            std::process::exit(1);
         })
     }
 
@@ -1751,8 +1750,17 @@ impl ViewLevelPreferenceRepository {
 
     /// 创建新的仓库实例（便捷方法）
     pub fn new() -> Self {
-        Self::from_default_db().unwrap_or_else(|_| Self {
-            conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+        Self::from_default_db().unwrap_or_else(|e| {
+            log::error!(
+                "从默认数据库创建 ViewLevelPreferenceRepository 失败: {}",
+                e
+            );
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "从默认数据库创建 ViewLevelPreferenceRepository 失败: {:?}",
+                e
+            );
+            std::process::exit(1);
         })
     }
 
@@ -2046,8 +2054,17 @@ impl PromptHistoryRepository {
 
     /// 创建新的仓库实例（便捷方法）
     pub fn new() -> Self {
-        Self::from_default_db().unwrap_or_else(|_| Self {
-            conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
+        Self::from_default_db().unwrap_or_else(|e| {
+            log::error!(
+                "从默认数据库创建 PromptGenerationHistoryRepository 失败: {}",
+                e
+            );
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "从默认数据库创建 PromptGenerationHistoryRepository 失败: {:?}",
+                e
+            );
+            std::process::exit(1);
         })
     }
 

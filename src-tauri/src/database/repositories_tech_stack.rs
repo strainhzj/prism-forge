@@ -52,7 +52,7 @@ impl ProjectTechStackRepository {
              tech_stack = ?2, detection_method = ?3, detection_source = ?4, is_confirmed = ?5, updated_at = datetime('now', 'localtime')",
             params![
                 &project.project_path,
-                &serde_json::to_string(&project.tech_stack).unwrap(),
+                &serde_json::to_string(&project.tech_stack).context("序列化 tech_stack 失败")?,
                 &project.detection_method,
                 &project.detection_source,
                 if project.is_confirmed { 1i64 } else { 0i64 },
@@ -78,7 +78,8 @@ impl ProjectTechStackRepository {
 
         if let Some(row) = rows.next()? {
             let tech_stack_json: String = row.get(2).context("获取 tech_stack 失败")?;
-            let tech_stack = serde_json::from_str(&tech_stack_json).unwrap_or_default();
+            let tech_stack: Vec<String> = serde_json::from_str(&tech_stack_json)
+                .context("解析 tech_stack JSON 失败")?;
 
             Ok(Some(ProjectTechStack {
                 id: row.get(0).context("获取 id 失败")?,
@@ -110,7 +111,8 @@ impl ProjectTechStackRepository {
 
         if let Some(row) = rows.next()? {
             let tech_stack_json: String = row.get(2).context("获取 tech_stack 失败")?;
-            let tech_stack = serde_json::from_str(&tech_stack_json).unwrap_or_default();
+            let tech_stack: Vec<String> = serde_json::from_str(&tech_stack_json)
+                .context("解析 tech_stack JSON 失败")?;
 
             Ok(Some(ProjectTechStack {
                 id: row.get(0).context("获取 id 失败")?,

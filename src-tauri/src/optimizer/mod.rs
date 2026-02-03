@@ -152,12 +152,7 @@ impl PromptOptimizer {
             .join("\n--------------------\n");
 
         // 3. 构建系统提示词（从数据库加载）
-        let system_prompt = Self::load_system_prompt(&request.language).unwrap_or_else(|e| {
-            #[cfg(debug_assertions)]
-            eprintln!("⚠️  加载系统提示词失败: {}，使用 fallback 提示词", e);
-
-            Self::get_fallback_prompt(&request.language)
-        });
+        let system_prompt = Self::load_system_prompt(&request.language)?;
 
         let full_text = format!(
             "{}\n\n== 会话日志 ==\n{}\n\n== 用户当前目标 ==\n{}",
@@ -233,11 +228,17 @@ impl PromptOptimizer {
                 continue;
             }
 
-            let json: serde_json::Value =
-                serde_json::from_str(&line_content).unwrap_or(serde_json::Value::Null);
-            if json.is_null() {
-                continue;
-            }
+            let json: serde_json::Value = match serde_json::from_str(&line_content) {
+                Ok(v) => v,
+                Err(e) => {
+                    #[cfg(debug_assertions)]
+                    eprintln!(
+                        "[parse_session_file] 解析 JSON 行失败，已跳过: {}",
+                        e
+                    );
+                    continue;
+                }
+            };
 
             let timestamp = json["timestamp"].as_str().unwrap_or("").to_string();
 

@@ -95,7 +95,13 @@ impl PerformanceMonitor {
 
     /// Get average duration for an operation type
     pub fn get_average_duration(&self, operation_name: &str) -> Option<Duration> {
-        let metrics = self.metrics.lock().ok()?;
+        let metrics = match self.metrics.lock() {
+            Ok(m) => m,
+            Err(e) => {
+                log::error!("获取性能指标锁失败（Mutex 已被毒化）: {}", e);
+                return None;
+            }
+        };
         let matching: Vec<_> = metrics
             .iter()
             .filter(|m| m.name == operation_name)
@@ -111,7 +117,13 @@ impl PerformanceMonitor {
 
     /// Get success rate for an operation type
     pub fn get_success_rate(&self, operation_name: &str) -> Option<f64> {
-        let metrics = self.metrics.lock().ok()?;
+        let metrics = match self.metrics.lock() {
+            Ok(m) => m,
+            Err(e) => {
+                log::error!("获取性能指标锁失败（Mutex 已被毒化）: {}", e);
+                return None;
+            }
+        };
         let matching: Vec<_> = metrics
             .iter()
             .filter(|m| m.name == operation_name)
@@ -134,7 +146,13 @@ impl PerformanceMonitor {
 
     /// Get all recorded metrics
     pub fn get_all_metrics(&self) -> Vec<OperationMetrics> {
-        self.metrics.lock().map(|m| m.clone()).unwrap_or_default()
+        match self.metrics.lock() {
+            Ok(m) => m.clone(),
+            Err(e) => {
+                log::error!("获取性能指标锁失败（Mutex 已被毒化）: {}", e);
+                Vec::new()
+            }
+        }
     }
 
     /// Clear all recorded metrics
