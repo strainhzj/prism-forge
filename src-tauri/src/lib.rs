@@ -206,6 +206,8 @@ pub fn run() {
             cmd_get_project_tech_stack,
             cmd_detect_project_tech_stack,
             cmd_detect_and_save_project_tech_stack,
+            // 开场白意图分析命令
+            cmd_analyze_opening_intent,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| {

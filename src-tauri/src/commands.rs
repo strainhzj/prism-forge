@@ -3253,6 +3253,8 @@ pub async fn cmd_count_prompt_history() -> Result<i64, CommandError> {
 // ==================== 项目技术栈管理命令 ====================
 
 use crate::database::repositories_tech_stack::{ProjectTechStack, ProjectTechStackRepository};
+use crate::intent_analyzer::opening_intent::OpeningIntent;
+use crate::intent_analyzer::opening_intent::OpeningIntentAnalyzer;
 use crate::intent_analyzer::tech_stack_detector::TechStackDetector;
 
 /// 保存或更新项目技术栈
@@ -3387,4 +3389,72 @@ pub async fn cmd_detect_and_save_project_tech_stack(
     })?;
 
     Ok(project)
+}
+
+// ==================== 开场白意图分析命令 ====================
+
+/// 分析开场白意图
+///
+/// # 参数
+///
+/// - `session_file_path`: 会话文件路径
+/// - `language`: 语言标识（"zh" 或 "en"）
+///
+/// # 返回
+///
+/// 开场白意图分析结果
+#[tauri::command]
+pub async fn cmd_analyze_opening_intent(
+    llm_manager: State<'_, LLMClientManager>,
+    session_file_path: String,
+    language: String,
+) -> Result<OpeningIntent, CommandError> {
+    // 1. 解析会话文件
+    let events = crate::optimizer::PromptOptimizer::parse_session_file(&session_file_path)
+        .map_err(|e| CommandError {
+            message: format!("解析会话文件失败: {}", e),
+        })?;
+
+    if events.is_empty() {
+        return Err(CommandError {
+            message: "会话文件为空".to_string(),
+        });
+    }
+
+    // 2. 提取第一个 user 消息作为开场白
+    let opening_event = events
+        .iter()
+        .find(|e| e.role == "user")
+        .ok_or_else(|| CommandError {
+            message: "未找到开场白".to_string(),
+        })?;
+
+    // 构建 Message 结构
+    let opening_message = crate::database::models::Message {
+        id: None,
+        session_id: String::new(),
+        uuid: String::new(),
+        parent_uuid: None,
+        msg_type: "user".to_string(),
+        content_type: Some("text".to_string()),
+        timestamp: opening_event.time.clone(),
+        offset: 0,
+        length: opening_event.content.len() as i64,
+        summary: None,
+        content: Some(opening_event.content.clone()),
+        parent_idx: None,
+        created_at: opening_event.time.clone(),
+    };
+
+    // 3. 创建分析器并分析
+    let analyzer = OpeningIntentAnalyzer::new().map_err(|e| CommandError {
+        message: format!("创建分析器失败: {}", e),
+    })?;
+
+    analyzer
+        .analyze(&opening_message, &language, &llm_manager)
+        .await
+        .map_err(|e| CommandError {
+            message: format!("分析失败: {}", e),
+        })
 }

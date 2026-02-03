@@ -32,3 +32,6 @@ export type { LineChangeType } from "./LineChangeType";
 export type { ParameterDiff } from "./ParameterDiff";
 export type { MetadataDiff } from "./MetadataDiff";
 export type { RollbackRecord } from "./RollbackRecord";
+
+// Intent analyzer types
+export type { OpeningIntent } from "./OpeningIntent";
