@@ -138,6 +138,11 @@ mod tests {
 
         // 创建表（简化版，仅用于测试）
         let conn = Connection::open(&db_path).unwrap();
+
+        // 先删除旧表，确保测试从干净状态开始
+        conn.execute("DROP TABLE IF EXISTS project_tech_stack", [])
+            .expect("删除旧表失败");
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS project_tech_stack (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
