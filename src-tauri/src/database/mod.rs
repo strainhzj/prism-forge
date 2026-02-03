@@ -8,10 +8,12 @@ pub mod migrations;
 pub mod models;
 pub mod prompt_versions;
 pub mod repository;
+pub mod repositories_tech_stack;
 pub mod vector_repository;
 
 pub use init::{get_connection_shared, get_db_path as get_db_path_init};
 pub use migrations::{get_connection, get_db_path, initialize_database};
+pub use repositories_tech_stack::{ProjectTechStack, ProjectTechStackRepository};
 pub use models::{
     validate_timestamp,
     ApiProvider,

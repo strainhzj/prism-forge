@@ -10,6 +10,8 @@ use prism_forge::database::models::{
     PromptParameterType, PromptTemplate, PromptVersion, PromptVersionDiff, RollbackRecord,
     TokenStats,
 };
+use prism_forge::database::repositories_tech_stack::ProjectTechStack;
+use prism_forge::intent_analyzer::qa_detector::DecisionQAPair;
 use prism_forge::optimizer::config::{
     AdvancedConfig, ComponentContent, ComponentsConfig, CompressionConfig, LLMParamsConfig,
     LanguageComponent, LanguageComponentWithMeta, OptimizerConfig, PromptComponentData,
@@ -67,6 +69,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     EnhancedPromptRequest::export_to(output_dir.join("EnhancedPromptRequest.ts"))?;
     ReferencedSession::export_to(output_dir.join("ReferencedSession.ts"))?;
     SessionMessage::export_to(output_dir.join("SessionMessage.ts"))?;
+
+    // Intent analyzer types
+    DecisionQAPair::export_to(output_dir.join("DecisionQAPair.ts"))?;
+    ProjectTechStack::export_to(output_dir.join("ProjectTechStack.ts"))?;
 
     Ok(())
 }

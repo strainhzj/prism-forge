@@ -201,6 +201,11 @@ pub fn run() {
             commands_prompt_versions::cmd_check_config_updated,
             commands_prompt_versions::cmd_cleanup_legacy_templates,
             commands_prompt_versions::cmd_delete_prompt_template_by_name,
+            // 项目技术栈管理命令
+            cmd_save_project_tech_stack,
+            cmd_get_project_tech_stack,
+            cmd_detect_project_tech_stack,
+            cmd_detect_and_save_project_tech_stack,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| {

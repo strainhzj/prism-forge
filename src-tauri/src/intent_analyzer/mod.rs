@@ -4,6 +4,8 @@
 
 pub mod qa_detector;
 pub mod language;
+pub mod tech_stack_detector;
 
 pub use qa_detector::{QAPairDetector, DecisionQAPair};
 pub use language::LanguageDetector;
+pub use tech_stack_detector::TechStackDetector;

@@ -3249,3 +3249,142 @@ pub async fn cmd_count_prompt_history() -> Result<i64, CommandError> {
 
     Ok(count)
 }
+
+// ==================== 项目技术栈管理命令 ====================
+
+use crate::database::repositories_tech_stack::{ProjectTechStack, ProjectTechStackRepository};
+use crate::intent_analyzer::tech_stack_detector::TechStackDetector;
+
+/// 保存或更新项目技术栈
+///
+/// # 参数
+///
+/// - `project_path`: 项目路径
+/// - `tech_stack`: 技术栈列表
+/// - `detection_method`: 检测方法（auto | manual）
+/// - `detection_source`: 检测来源（CLAUDE.md | README.md | manual）
+/// - `is_confirmed`: 是否已确认
+#[tauri::command]
+pub async fn cmd_save_project_tech_stack(
+    project_path: String,
+    tech_stack: Vec<String>,
+    detection_method: String,
+    detection_source: Option<String>,
+    is_confirmed: bool,
+) -> Result<ProjectTechStack, CommandError> {
+    let db_path = crate::database::get_db_path().map_err(|e| CommandError {
+        message: format!("获取数据库路径失败: {}", e),
+    })?;
+
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let repo = ProjectTechStackRepository::new(db_path_str);
+
+    let project = ProjectTechStack {
+        id: 0,
+        project_path,
+        tech_stack,
+        detection_method,
+        detection_source,
+        is_confirmed,
+        last_verified_at: None,
+    };
+
+    let _id = repo.upsert(&project).map_err(|e| CommandError {
+        message: format!("保存项目技术栈失败: {}", e),
+    })?;
+
+    Ok(project)
+}
+
+/// 获取项目技术栈
+///
+/// # 参数
+///
+/// - `project_path`: 项目路径
+#[tauri::command]
+pub async fn cmd_get_project_tech_stack(
+    project_path: String,
+) -> Result<Option<ProjectTechStack>, CommandError> {
+    let db_path = crate::database::get_db_path().map_err(|e| CommandError {
+        message: format!("获取数据库路径失败: {}", e),
+    })?;
+
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let repo = ProjectTechStackRepository::new(db_path_str);
+
+    let project = repo.get_by_path(&project_path).map_err(|e| CommandError {
+        message: format!("获取项目技术栈失败: {}", e),
+    })?;
+
+    Ok(project)
+}
+
+/// 自动检测项目技术栈
+///
+/// 从 CLAUDE.md 和 README.md 中自动检测技术栈
+///
+/// # 参数
+///
+/// - `project_path`: 项目路径
+#[tauri::command]
+pub async fn cmd_detect_project_tech_stack(
+    project_path: String,
+) -> Result<Vec<String>, CommandError> {
+    let detector = TechStackDetector::new().map_err(|e| CommandError {
+        message: format!("创建技术栈检测器失败: {}", e),
+    })?;
+
+    let tech_stack = detector.detect_from_project(&project_path);
+
+    Ok(tech_stack)
+}
+
+/// 检测并保存项目技术栈
+///
+/// 自动检测并保存到数据库
+///
+/// # 参数
+///
+/// - `project_path`: 项目路径
+#[tauri::command]
+pub async fn cmd_detect_and_save_project_tech_stack(
+    project_path: String,
+) -> Result<ProjectTechStack, CommandError> {
+    // 1. 检测技术栈
+    let detector = TechStackDetector::new().map_err(|e| CommandError {
+        message: format!("创建技术栈检测器失败: {}", e),
+    })?;
+
+    let tech_stack = detector.detect_from_project(&project_path);
+
+    // 2. 确定检测来源
+    let detection_source = if tech_stack.is_empty() {
+        None
+    } else {
+        Some("CLAUDE.md/README.md".to_string())
+    };
+
+    // 3. 保存到数据库
+    let db_path = crate::database::get_db_path().map_err(|e| CommandError {
+        message: format!("获取数据库路径失败: {}", e),
+    })?;
+
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let repo = ProjectTechStackRepository::new(db_path_str);
+
+    let project = ProjectTechStack {
+        id: 0,
+        project_path: project_path.clone(),
+        tech_stack,
+        detection_method: "auto".to_string(),
+        detection_source,
+        is_confirmed: false,
+        last_verified_at: None,
+    };
+
+    let _id = repo.upsert(&project).map_err(|e| CommandError {
+        message: format!("保存项目技术栈失败: {}", e),
+    })?;
+
+    Ok(project)
+}

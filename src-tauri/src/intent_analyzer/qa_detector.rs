@@ -25,11 +25,13 @@
 
 use crate::database::models::Message;
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// 决策问答对（助手回答 + 用户后续决策）
 ///
 /// 表示用户基于助手回答做出的决策记录
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(rename_all = "camelCase")]
 pub struct DecisionQAPair {
     /// 问答对索引（从 0 开始）
     pub qa_index: usize,
