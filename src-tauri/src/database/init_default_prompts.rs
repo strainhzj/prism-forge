@@ -43,6 +43,14 @@ const OPENING_INTENT_TEMPLATE: SessionAnalysisTemplate = SessionAnalysisTemplate
     tags: "intent,opening,analysis",
 };
 
+/// 问答对决策分析模板
+const DECISION_ANALYSIS_TEMPLATE: SessionAnalysisTemplate = SessionAnalysisTemplate {
+    name: "decision_analysis",
+    description: "问答对决策分析模板 - 用于分析用户基于助手回答做出的技术决策",
+    scenario: "decision_analysis",
+    tags: "decision,analysis,qa",
+};
+
 /// 解析配置文件路径
 ///
 /// 支持开发环境和生产环境
@@ -164,10 +172,13 @@ pub fn import_default_prompts(conn: &mut Connection) -> Result<()> {
     // 导入开场白意图分析模板（硬编码）
     import_opening_intent_template(&tx)?;
 
+    // 导入问答对决策分析模板（硬编码）
+    import_decision_analysis_template(&tx)?;
+
     // 提交事务
     tx.commit()?;
 
-    log::info!("默认提示词导入完成！共处理 2 个模板");
+    log::info!("默认提示词导入完成！共处理 3 个模板");
 
     Ok(())
 }
@@ -294,6 +305,60 @@ fn import_opening_intent_template(tx: &rusqlite::Transaction) -> Result<()> {
     )?;
 
     log::info!("开场白意图分析模板导入完成");
+    Ok(())
+}
+
+/// 导入问答对决策分析模板（硬编码）
+fn import_decision_analysis_template(tx: &rusqlite::Transaction) -> Result<()> {
+    log::info!("开始导入问答对决策分析模板...");
+
+    // 构建组件化 JSON 内容
+    let content_json = json!({
+        "zh": {
+            "meta_prompt": {
+                "content": "你是一位经验丰富的技术决策分析师，擅长分析 Claude 会话记录，探究用户在技术决策背后的思考过程和原因。\n\n你的任务是分析问答对（助手回答 + 用户后续决策），提取用户做出的技术决策及其背后的理由。",
+                "last_modified": chrono::Utc::now().to_rfc3339()
+            },
+            "input_template": {
+                "content": "## 输入信息\n\n- **助手回答**: {{assistant_answer}}\n- **用户后续决策**: {{user_decision}}\n\n## 分析要求\n\n1. 用户做了什么技术决策？（选择、放弃、改变、采用等）\n2. 决策类型（技术选型/架构设计/工具选择/代码实现/其他）\n3. 用户的决策依据是什么？（明确提及的理由）\n4. 推测的隐性原因？（基于上下文推断）\n5. 涉及的技术栈和备选方案\n6. 决策的置信度（0-1）",
+                "last_modified": null
+            },
+            "output_template": {
+                "content": "## 输出格式\n\n请返回 JSON 格式：\n{\n  \"decision_made\": \"用户做出的决策（一句话）\",\n  \"decision_type\": \"technology_choice|architecture_design|tool_selection|implementation|other\",\n  \"tech_stack\": [\"涉及的技术\"],\n  \"rationale\": [\"明确理由1\", \"明确理由2\"],\n  \"inferred_reasons\": [\"推测理由1\", \"推测理由2\"],\n  \"alternatives\": [\n    {\"name\": \"备选方案名称\", \"reason\": \"用户提供的未选择理由（可选）\"}\n  ],\n  \"confidence\": 0.8\n}",
+                "last_modified": null
+            }
+        },
+        "en": {
+            "meta_prompt": {
+                "content": "You are an experienced technical decision analyst skilled at analyzing Claude conversation logs to investigate the thought process and reasons behind users' technical decisions.\n\nYour task is to analyze question-answer pairs (assistant response + user's follow-up decision) to extract the technical decisions made by users and the reasoning behind them.",
+                "last_modified": chrono::Utc::now().to_rfc3339()
+            },
+            "input_template": {
+                "content": "## Input Information\n\n- **Assistant Response**: {{assistant_answer}}\n- **User's Follow-up Decision**: {{user_decision}}\n\n## Analysis Requirements\n\n1. What technical decision did the user make? (choose, abandon, change, adopt, etc)\n2. Decision type (technology_choice/architecture_design/tool_selection/implementation/other)\n3. What is the user's basis for decision? (explicitly mentioned reasons)\n4. Inferred implicit reasons? (based on context)\n5. Tech stack involved and alternatives\n6. Decision confidence (0-1)",
+                "last_modified": null
+            },
+            "output_template": {
+                "content": "## Output Format\n\nPlease return in JSON format:\n{\n  \"decision_made\": \"Decision made by user (one sentence)\",\n  \"decision_type\": \"technology_choice|architecture_design|tool_selection|implementation|other\",\n  \"tech_stack\": [\"technologies involved\"],\n  \"rationale\": [\"explicit reason 1\", \"explicit reason 2\"],\n  \"inferred_reasons\": [\"inferred reason 1\", \"inferred reason 2\"],\n  \"alternatives\": [\n    {\"name\": \"Alternative name\", \"reason\": \"User-provided reason for not choosing (optional)\"}\n  ],\n  \"confidence\": 0.8\n}",
+                "last_modified": null
+            }
+        }
+    });
+
+    let content_str = serde_json::to_string_pretty(&content_json).context("序列化组件数据失败")?;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // 导入模板
+    import_template_internal(
+        tx,
+        DECISION_ANALYSIS_TEMPLATE.name,
+        DECISION_ANALYSIS_TEMPLATE.description,
+        DECISION_ANALYSIS_TEMPLATE.scenario,
+        DECISION_ANALYSIS_TEMPLATE.tags,
+        &content_str,
+        &now,
+    )?;
+
+    log::info!("问答对决策分析模板导入完成");
     Ok(())
 }
 

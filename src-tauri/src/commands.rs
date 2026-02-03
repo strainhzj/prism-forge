@@ -3253,8 +3253,10 @@ pub async fn cmd_count_prompt_history() -> Result<i64, CommandError> {
 // ==================== 项目技术栈管理命令 ====================
 
 use crate::database::repositories_tech_stack::{ProjectTechStack, ProjectTechStackRepository};
+use crate::intent_analyzer::decision_analyzer::{Alternative, DecisionAnalysis, DecisionAnalyzer, DecisionType};
 use crate::intent_analyzer::opening_intent::OpeningIntent;
 use crate::intent_analyzer::opening_intent::OpeningIntentAnalyzer;
+use crate::intent_analyzer::qa_detector::DecisionQAPair;
 use crate::intent_analyzer::tech_stack_detector::TechStackDetector;
 
 /// 保存或更新项目技术栈
@@ -3453,6 +3455,35 @@ pub async fn cmd_analyze_opening_intent(
 
     analyzer
         .analyze(&opening_message, &language, &llm_manager)
+        .await
+        .map_err(|e| CommandError {
+            message: format!("分析失败: {}", e),
+        })
+}
+
+/// 分析问答对决策
+///
+/// # 参数
+///
+/// - `qa_pair`: 问答对（助手回答 + 用户后续决策）
+/// - `language`: 语言标识（"zh" 或 "en"）
+///
+/// # 返回
+///
+/// 决策分析结果
+#[tauri::command]
+pub async fn cmd_analyze_decision(
+    llm_manager: State<'_, LLMClientManager>,
+    qa_pair: DecisionQAPair,
+    language: String,
+) -> Result<DecisionAnalysis, CommandError> {
+    // 创建分析器并分析
+    let analyzer = DecisionAnalyzer::new().map_err(|e| CommandError {
+        message: format!("创建分析器失败: {}", e),
+    })?;
+
+    analyzer
+        .analyze(&qa_pair, &language, &llm_manager)
         .await
         .map_err(|e| CommandError {
             message: format!("分析失败: {}", e),

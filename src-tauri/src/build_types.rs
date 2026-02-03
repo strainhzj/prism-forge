@@ -11,6 +11,7 @@ use prism_forge::database::models::{
     TokenStats,
 };
 use prism_forge::database::repositories_tech_stack::ProjectTechStack;
+use prism_forge::intent_analyzer::decision_analyzer::{Alternative, DecisionAnalysis, DecisionType};
 use prism_forge::intent_analyzer::opening_intent::OpeningIntent;
 use prism_forge::intent_analyzer::qa_detector::DecisionQAPair;
 use prism_forge::optimizer::config::{
@@ -75,6 +76,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     DecisionQAPair::export_to(output_dir.join("DecisionQAPair.ts"))?;
     OpeningIntent::export_to(output_dir.join("OpeningIntent.ts"))?;
     ProjectTechStack::export_to(output_dir.join("ProjectTechStack.ts"))?;
+    DecisionType::export_to(output_dir.join("DecisionType.ts"))?;
+    Alternative::export_to(output_dir.join("Alternative.ts"))?;
+    DecisionAnalysis::export_to(output_dir.join("DecisionAnalysis.ts"))?;
 
     Ok(())
 }
