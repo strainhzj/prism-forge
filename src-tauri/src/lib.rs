@@ -210,6 +210,14 @@ pub fn run() {
             cmd_analyze_opening_intent,
             // 问答对决策分析命令
             cmd_analyze_decision,
+            // 决策检测命令（规则引擎）
+            cmd_detect_decisions,
+            cmd_get_decision_keywords,
+            cmd_get_decision_keywords_by_language,
+            cmd_get_decision_keywords_by_type,
+            cmd_upsert_decision_keyword,
+            cmd_delete_decision_keyword,
+            cmd_import_decision_keywords,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| {

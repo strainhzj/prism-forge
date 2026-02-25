@@ -11,7 +11,9 @@ use tauri::State;
 
 use crate::database::vector_repository::VectorRepository;
 use crate::database::{ApiProvider, ApiProviderRepository, ApiProviderType};
+use crate::database::{DecisionKeyword, DecisionKeywordRepository};
 use crate::embedding::{EmbeddingSyncManager, OpenAIEmbeddings};
+use crate::intent_analyzer::{DecisionDetector, DecisionPoint as DetectedDecisionPoint};
 use crate::llm::interface::TestConnectionResult;
 use crate::llm::security::ApiKeyStorage;
 use crate::llm::LLMClientManager;
@@ -3253,7 +3255,7 @@ pub async fn cmd_count_prompt_history() -> Result<i64, CommandError> {
 // ==================== 项目技术栈管理命令 ====================
 
 use crate::database::repositories_tech_stack::{ProjectTechStack, ProjectTechStackRepository};
-use crate::intent_analyzer::decision_analyzer::{Alternative, DecisionAnalysis, DecisionAnalyzer, DecisionType};
+use crate::intent_analyzer::decision_analyzer::{DecisionAnalysis, DecisionAnalyzer};
 use crate::intent_analyzer::opening_intent::OpeningIntent;
 use crate::intent_analyzer::opening_intent::OpeningIntentAnalyzer;
 use crate::intent_analyzer::qa_detector::DecisionQAPair;
@@ -3488,4 +3490,194 @@ pub async fn cmd_analyze_decision(
         .map_err(|e| CommandError {
             message: format!("分析失败: {}", e),
         })
+}
+
+// ==================== 决策检测命令 ====================
+
+/// 检测问答对中的决策点（规则引擎）
+///
+/// # 参数
+///
+/// - `qa_pair`: 问答对（助手回答 + 用户后续决策）
+/// - `language`: 语言标识（"zh" 或 "en"），如果不指定则自动检测
+///
+/// # 返回
+///
+/// 检测到的决策点列表
+#[tauri::command]
+pub async fn cmd_detect_decisions(
+    qa_pair: DecisionQAPair,
+    language: Option<String>,
+) -> Result<Vec<DetectedDecisionPoint>, CommandError> {
+    // 创建检测器
+    let detector = DecisionDetector::new().map_err(|e| CommandError {
+        message: format!("创建检测器失败: {}", e),
+    })?;
+
+    // 如果没有指定语言，自动检测
+    let detected_language = if let Some(lang) = language {
+        lang
+    } else {
+        let combined_text = format!(
+            "{} {}",
+            qa_pair.user_decision,
+            qa_pair.assistant_answer
+        );
+        detector.detect_language(&combined_text)
+    };
+
+    // 执行检测
+    let decisions = detector.detect_decisions(&qa_pair, &detected_language).map_err(|e| CommandError {
+        message: format!("检测失败: {}", e),
+    })?;
+
+    Ok(decisions)
+}
+
+/// 获取所有决策关键词
+///
+/// # 返回
+///
+/// 所有激活的决策关键词列表
+#[tauri::command]
+pub async fn cmd_get_decision_keywords() -> Result<Vec<DecisionKeyword>, CommandError> {
+    let db_path = crate::database::get_db_path().map_err(|e| CommandError {
+        message: format!("获取数据库路径失败: {}", e),
+    })?;
+
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let repo = DecisionKeywordRepository::new(db_path_str);
+    let keywords = repo.get_active_keywords().map_err(|e| CommandError {
+        message: format!("获取关键词失败: {}", e),
+    })?;
+
+    Ok(keywords)
+}
+
+/// 根据语言获取决策关键词
+///
+/// # 参数
+///
+/// - `language`: 语言标识（"zh" 或 "en"）
+///
+/// # 返回
+///
+/// 指定语言的激活关键词列表
+#[tauri::command]
+pub async fn cmd_get_decision_keywords_by_language(
+    language: String,
+) -> Result<Vec<DecisionKeyword>, CommandError> {
+    let db_path = crate::database::get_db_path().map_err(|e| CommandError {
+        message: format!("获取数据库路径失败: {}", e),
+    })?;
+
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let repo = DecisionKeywordRepository::new(db_path_str);
+    let keywords = repo.get_by_language(&language).map_err(|e| CommandError {
+        message: format!("获取关键词失败: {}", e),
+    })?;
+
+    Ok(keywords)
+}
+
+/// 根据决策类型获取关键词
+///
+/// # 参数
+///
+/// - `decision_type`: 决策类型
+///
+/// # 返回
+///
+/// 指定决策类型的激活关键词列表
+#[tauri::command]
+pub async fn cmd_get_decision_keywords_by_type(
+    decision_type: String,
+) -> Result<Vec<DecisionKeyword>, CommandError> {
+    let db_path = crate::database::get_db_path().map_err(|e| CommandError {
+        message: format!("获取数据库路径失败: {}", e),
+    })?;
+
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let repo = DecisionKeywordRepository::new(db_path_str);
+    let keywords = repo.get_by_decision_type(&decision_type).map_err(|e| CommandError {
+        message: format!("获取关键词失败: {}", e),
+    })?;
+
+    Ok(keywords)
+}
+
+/// 添加或更新决策关键词
+///
+/// # 参数
+///
+/// - `keyword`: 关键词数据
+///
+/// # 返回
+///
+/// 插入或更新的记录 ID
+#[tauri::command]
+pub async fn cmd_upsert_decision_keyword(
+    keyword: DecisionKeyword,
+) -> Result<i64, CommandError> {
+    let db_path = crate::database::get_db_path().map_err(|e| CommandError {
+        message: format!("获取数据库路径失败: {}", e),
+    })?;
+
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let repo = DecisionKeywordRepository::new(db_path_str);
+    let id = repo.upsert(&keyword).map_err(|e| CommandError {
+        message: format!("保存关键词失败: {}", e),
+    })?;
+
+    Ok(id)
+}
+
+/// 删除决策关键词
+///
+/// # 参数
+///
+/// - `id`: 关键词 ID
+///
+/// # 返回
+///
+/// 是否删除成功
+#[tauri::command]
+pub async fn cmd_delete_decision_keyword(id: i64) -> Result<bool, CommandError> {
+    let db_path = crate::database::get_db_path().map_err(|e| CommandError {
+        message: format!("获取数据库路径失败: {}", e),
+    })?;
+
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let repo = DecisionKeywordRepository::new(db_path_str);
+    let deleted = repo.delete(id).map_err(|e| CommandError {
+        message: format!("删除关键词失败: {}", e),
+    })?;
+
+    Ok(deleted)
+}
+
+/// 批量导入决策关键词
+///
+/// # 参数
+///
+/// - `keywords`: 关键词列表
+///
+/// # 返回
+///
+/// 成功导入的关键词数量
+#[tauri::command]
+pub async fn cmd_import_decision_keywords(
+    keywords: Vec<DecisionKeyword>,
+) -> Result<usize, CommandError> {
+    let db_path = crate::database::get_db_path().map_err(|e| CommandError {
+        message: format!("获取数据库路径失败: {}", e),
+    })?;
+
+    let db_path_str = db_path.to_string_lossy().to_string();
+    let repo = DecisionKeywordRepository::new(db_path_str);
+    let count = repo.batch_import(&keywords).map_err(|e| CommandError {
+        message: format!("批量导入失败: {}", e),
+    })?;
+
+    Ok(count)
 }

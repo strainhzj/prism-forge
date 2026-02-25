@@ -11,7 +11,9 @@ use prism_forge::database::models::{
     TokenStats,
 };
 use prism_forge::database::repositories_tech_stack::ProjectTechStack;
+use prism_forge::database::decision_keywords::DecisionKeyword;
 use prism_forge::intent_analyzer::decision_analyzer::{Alternative, DecisionAnalysis, DecisionType};
+use prism_forge::intent_analyzer::decision_detector::{Alternative as DetectorAlternative, DecisionPoint};
 use prism_forge::intent_analyzer::opening_intent::OpeningIntent;
 use prism_forge::intent_analyzer::qa_detector::DecisionQAPair;
 use prism_forge::optimizer::config::{
@@ -79,6 +81,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     DecisionType::export_to(output_dir.join("DecisionType.ts"))?;
     Alternative::export_to(output_dir.join("Alternative.ts"))?;
     DecisionAnalysis::export_to(output_dir.join("DecisionAnalysis.ts"))?;
+
+    // Decision detector types
+    DecisionKeyword::export_to(output_dir.join("DecisionKeyword.ts"))?;
+    DecisionPoint::export_to(output_dir.join("DecisionPoint.ts"))?;
+    DetectorAlternative::export_to(output_dir.join("DetectorAlternative.ts"))?;
 
     Ok(())
 }

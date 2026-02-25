@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 19;
+const CURRENT_DB_VERSION: i32 = 20;
 
 /// 初始化数据库
 ///
@@ -88,6 +88,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             17 => migrate_v17(conn)?,
             18 => migrate_v18(conn)?,
             19 => migrate_v19(conn)?,
+            20 => migrate_v20(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -1468,6 +1469,146 @@ fn migrate_v19_impl(conn: &mut Connection) -> Result<()> {
     log::info!("✅ 已创建 prompt_combinations 表");
 
     log::info!("✅ 已完成 v19 迁移：创建 6 张意图分析表");
+
+    Ok(())
+}
+
+/// 迁移到版本 20: 创建决策关键词配置表
+///
+/// # 功能
+/// - 创建 decision_keywords 表（支持动态配置决策关键词）
+/// - 支持多语言和决策类型分类
+/// - 预置默认关键词
+#[cfg(test)]
+pub fn migrate_v20(conn: &mut Connection) -> Result<()> {
+    migrate_v20_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v20(conn: &mut Connection) -> Result<()> {
+    migrate_v20_impl(conn)
+}
+
+fn migrate_v20_impl(conn: &mut Connection) -> Result<()> {
+    // 1. 创建 decision_keywords 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS decision_keywords (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword TEXT NOT NULL,
+            language TEXT NOT NULL,
+            decision_type TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            weight REAL NOT NULL DEFAULT 1.0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(keyword, language, decision_type)
+        )",
+        [],
+    )?;
+
+    // 2. 创建索引
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_keywords_language
+         ON decision_keywords(language);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_keywords_type
+         ON decision_keywords(decision_type);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_keywords_active
+         ON decision_keywords(is_active);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_keywords_weight
+         ON decision_keywords(weight DESC);",
+        [],
+    )?;
+
+    // 3. 插入默认关键词
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // 中文关键词
+    let default_keywords_zh = vec![
+        // 架构设计类
+        ("架构", "zh", "architecture_design", 1.0),
+        ("architecture", "zh", "architecture_design", 1.0),
+        ("设计模式", "zh", "architecture_design", 0.9),
+        ("微服务", "zh", "architecture_design", 0.9),
+        ("分层", "zh", "architecture_design", 0.8),
+        // 技术选型类
+        ("选择", "zh", "technology_choice", 1.0),
+        ("采用", "zh", "technology_choice", 1.0),
+        ("使用", "zh", "technology_choice", 0.8),
+        ("库", "zh", "technology_choice", 0.7),
+        ("框架", "zh", "technology_choice", 0.7),
+        ("library", "zh", "technology_choice", 1.0),
+        ("framework", "zh", "technology_choice", 1.0),
+        // 工具选择类
+        ("工具", "zh", "tool_selection", 0.9),
+        ("plugin", "zh", "tool_selection", 1.0),
+        ("扩展", "zh", "tool_selection", 0.8),
+        // 代码实现类
+        ("实现", "zh", "implementation", 0.8),
+        ("编写", "zh", "implementation", 0.8),
+        ("重构", "zh", "implementation", 0.9),
+        ("优化", "zh", "implementation", 0.9),
+        ("refactor", "zh", "implementation", 1.0),
+        ("implement", "zh", "implementation", 1.0),
+        // 通用决策词
+        ("决定", "zh", "other", 1.0),
+        ("decide", "zh", "other", 1.0),
+        ("确定", "zh", "other", 0.9),
+    ];
+
+    // 英文关键词
+    let default_keywords_en = vec![
+        // 架构设计类
+        ("architecture", "en", "architecture_design", 1.0),
+        ("design pattern", "en", "architecture_design", 0.9),
+        ("microservice", "en", "architecture_design", 0.9),
+        ("layer", "en", "architecture_design", 0.8),
+        // 技术选型类
+        ("choose", "en", "technology_choice", 1.0),
+        ("select", "en", "technology_choice", 1.0),
+        ("adopt", "en", "technology_choice", 1.0),
+        ("use", "en", "technology_choice", 0.8),
+        ("library", "en", "technology_choice", 0.7),
+        ("framework", "en", "technology_choice", 0.7),
+        // 工具选择类
+        ("tool", "en", "tool_selection", 0.9),
+        ("plugin", "en", "tool_selection", 1.0),
+        ("extension", "en", "tool_selection", 0.8),
+        // 代码实现类
+        ("implement", "en", "implementation", 1.0),
+        ("write", "en", "implementation", 0.8),
+        ("refactor", "en", "implementation", 1.0),
+        ("optimize", "en", "implementation", 0.9),
+        // 通用决策词
+        ("decide", "en", "other", 1.0),
+        ("determine", "en", "other", 0.9),
+    ];
+
+    // 合并所有关键词
+    let all_keywords: Vec<(&str, &str, &str, f64)> =
+        default_keywords_zh.into_iter().chain(default_keywords_en).collect();
+
+    // 批量插入
+    for (keyword, language, decision_type, weight) in &all_keywords {
+        conn.execute(
+            "INSERT OR IGNORE INTO decision_keywords (keyword, language, decision_type, weight, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![keyword, language, decision_type, weight, now, now],
+        )?;
+    }
+
+    log::info!("✅ 已创建 decision_keywords 表并预置 {} 条默认关键词", all_keywords.len());
 
     Ok(())
 }
