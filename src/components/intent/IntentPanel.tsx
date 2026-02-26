@@ -21,6 +21,24 @@ function debugLog(action: string, ...args: unknown[]) {
   }
 }
 
+// ==================== 辅助函数 ====================
+
+/**
+ * 安全获取意图类型显示文本
+ */
+function getIntentTypeLabel(intentType: string | undefined | null, t: (key: string) => string): string {
+  if (!intentType) return t('intent.types.other');
+
+  try {
+    const key = `intent.types.${String(intentType).toLowerCase()}`;
+    const translated = t(key);
+    // 如果翻译键不存在，返回原始值
+    return translated.includes('intent.types.') ? String(intentType) : translated;
+  } catch {
+    return String(intentType);
+  }
+}
+
 // ==================== 类型定义 ====================
 
 export interface IntentPanelProps {
@@ -50,11 +68,16 @@ export const IntentPanel = memo(function IntentPanel({ intent }: IntentPanelProp
   }
 
   // 置信度颜色
-  const getConfidenceColor = (confidence: number) => {
+  const getConfidenceColor = (confidence: number | undefined | null) => {
+    if (confidence === undefined || confidence === null) return 'text-[var(--color-text-secondary)]';
     if (confidence >= 0.8) return 'text-[var(--color-accent-green)]';
     if (confidence >= 0.5) return 'text-[var(--color-accent-warm)]';
     return 'text-[var(--color-app-error-accent)]';
   };
+
+  // 安全获取置信度值
+  const confidence = intent.confidence ?? 0;
+  const confidencePercent = Math.round(confidence * 100);
 
   return (
     <div className="space-y-4">
@@ -81,7 +104,7 @@ export const IntentPanel = memo(function IntentPanel({ intent }: IntentPanelProp
           {t('intent.intentType')}
         </p>
         <p className="text-sm" style={{ color: 'var(--color-text-primary)' }}>
-          {t(`intent.types.${intent.intentType.toLowerCase()}`) || intent.intentType}
+          {getIntentTypeLabel(intent.intentType, t)}
         </p>
       </div>
 
@@ -96,7 +119,7 @@ export const IntentPanel = memo(function IntentPanel({ intent }: IntentPanelProp
             {intent.keyInfo.map((info, index) => (
               <li key={index} className="text-xs flex items-start gap-2" style={{ color: 'var(--color-text-primary)' }}>
                 <CheckCircle className="w-3 h-3 mt-0.5 flex-shrink-0" style={{ color: 'var(--color-accent-green)' }} />
-                <span>{info}</span>
+                <span>{info || ''}</span>
               </li>
             ))}
           </ul>
@@ -112,11 +135,11 @@ export const IntentPanel = memo(function IntentPanel({ intent }: IntentPanelProp
           <div className="flex-1 h-2 rounded-full bg-[var(--color-bg-primary)] overflow-hidden">
             <div
               className="h-full rounded-full bg-[var(--color-accent-blue)]"
-              style={{ width: `${intent.confidence * 100}%` }}
+              style={{ width: `${confidencePercent}%` }}
             />
           </div>
           <span className={cn('text-sm font-semibold', getConfidenceColor(intent.confidence))}>
-            {(intent.confidence * 100).toFixed(0)}%
+            {confidencePercent}%
           </span>
         </div>
       </div>

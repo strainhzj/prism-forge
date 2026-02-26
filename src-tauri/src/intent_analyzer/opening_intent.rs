@@ -109,11 +109,78 @@ impl OpeningIntentAnalyzer {
         let messages = vec![LLMMessage::user(full_prompt)];
         let response = client.chat_completion(messages, params).await?;
 
-        // 9. 解析 JSON 响应
-        let result: OpeningIntent = serde_json::from_str(&response.content)
-            .with_context(|| format!("解析 LLM 响应失败: {}", response.content))?;
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[OpeningIntentAnalyzer] LLM 响应内容:");
+            eprintln!("{}", response.content);
+            eprintln!("[OpeningIntentAnalyzer] 响应长度: {} 字符", response.content.len());
+        }
+
+        // 9. 清理并解析 JSON 响应
+        // LLM 可能返回 Markdown 代码块格式，需要清理
+        let cleaned_content = Self::extract_json_from_markdown(&response.content);
+
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[OpeningIntentAnalyzer] 清理后的 JSON:");
+            eprintln!("{}", cleaned_content);
+        }
+
+        let result: OpeningIntent = serde_json::from_str(&cleaned_content)
+            .with_context(|| format!("解析 LLM 响应失败: {}", cleaned_content))?;
+
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[OpeningIntentAnalyzer] 解析成功:");
+            eprintln!("  - intent_type: {}", result.intent_type);
+            eprintln!("  - confidence: {}", result.confidence);
+            eprintln!("  - description: {:?}", result.description);
+            eprintln!("  - key_info: {} 条", result.key_info.len());
+        }
 
         Ok(result)
+    }
+
+    /// 从 Markdown 代码块中提取 JSON 内容
+    ///
+    /// LLM 可能返回以下格式：
+    /// - ```json\n{...}\n```
+    /// - `\n{...}\n`
+    /// - 直接返回 JSON 字符串
+    fn extract_json_from_markdown(content: &str) -> String {
+        let content = content.trim();
+
+        // 检查是否包含 Markdown 代码块开始标记
+        if let Some(start) = content.find("```") {
+            // 找到代码块开始标记之后的内容
+            let after_code_block_start = &content[start + 3..];
+
+            // 查找代码块结束标记
+            if let Some(end) = after_code_block_start.find("```") {
+                // 提取代码块内容（不包含结束标记）
+                let code_content = &after_code_block_start[..end];
+
+                // 按行分割，跳过语言标识符和空行
+                let lines: Vec<&str> = code_content.lines().collect();
+                let json_lines: Vec<&str> = lines
+                    .iter()
+                    // 跳过空行和语言标识符（如 "json"）
+                    .filter(|line| {
+                        let trimmed = line.trim();
+                        !trimmed.is_empty() && trimmed != "json" && trimmed != "javascript" && trimmed != "js"
+                    })
+                    .copied()
+                    .collect();
+
+                json_lines.join("\n")
+            } else {
+                // 没有结束标记，返回原内容
+                content.to_string()
+            }
+        } else {
+            // 没有代码块标记，直接返回原内容
+            content.to_string()
+        }
     }
 }
 
@@ -126,5 +193,83 @@ mod tests {
         // 验证 new() 方法成功创建分析器
         let analyzer = OpeningIntentAnalyzer::new();
         assert!(analyzer.is_ok());
+    }
+
+    #[test]
+    fn test_extract_json_from_markdown_with_code_block() {
+        // 测试从 Markdown 代码块中提取 JSON
+        let input = r#"```json
+{
+  "intent_type": "new_feature",
+  "confidence": 0.95
+}
+```"#;
+        let output = OpeningIntentAnalyzer::extract_json_from_markdown(input);
+        assert!(output.contains("intent_type"));
+        assert!(output.contains("new_feature"));
+        assert!(!output.contains("```"));
+    }
+
+    #[test]
+    fn test_extract_json_from_markdown_plain_json() {
+        // 测试纯 JSON 字符串（无代码块）
+        let input = r#"{"intent_type": "new_feature", "confidence": 0.95}"#;
+        let output = OpeningIntentAnalyzer::extract_json_from_markdown(input);
+        assert_eq!(output, input);
+    }
+
+    #[test]
+    fn test_extract_json_from_markdown_with_whitespace() {
+        // 测试带有额外空格的 Markdown 代码块
+        let input = r#"
+
+```json
+
+{
+  "intent_type": "new_feature"
+}
+
+```
+
+"#;
+        let output = OpeningIntentAnalyzer::extract_json_from_markdown(input);
+        assert!(output.contains("intent_type"));
+        assert!(!output.contains("```"));
+    }
+
+    #[test]
+    fn test_extract_json_from_markdown_multiline() {
+        // 测试多行 JSON 代码块（实际 LLM 返回格式）
+        let input = r#"```json
+
+{
+  "intent_type": "new_feature",
+  "confidence": 0.95,
+  "description": "测试",
+  "key_info": [
+    "info1",
+    "info2"
+  ]
+}
+
+```"#;
+        let output = OpeningIntentAnalyzer::extract_json_from_markdown(input);
+
+        // 调试输出
+        eprintln!("Input:\n{}", input);
+        eprintln!("\nOutput:\n{}", output);
+
+        assert!(output.contains("intent_type"));
+        assert!(output.contains("new_feature"));
+        assert!(output.contains("key_info"));
+        assert!(!output.contains("```"));
+
+        // 注意：语言标识符 "json" 可能会被保留，这是可以接受的
+        // 只要 JSON 本身可以正确解析即可
+
+        // 验证可以解析为 JSON
+        let parsed: serde_json::Value = serde_json::from_str(&output).unwrap();
+        assert_eq!(parsed["intent_type"], "new_feature");
+        assert_eq!(parsed["confidence"], 0.95);
     }
 }

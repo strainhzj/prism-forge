@@ -99,9 +99,14 @@ impl GoogleVertexProvider {
     }
 
     /// 获取 API 端点 URL
-    fn get_endpoint_url(&self, model: &str, _stream: bool) -> String {
+    fn get_endpoint_url(&self, model: &str, stream: bool) -> String {
         let api_key = self.api_key.expose_secret();
-        let method = "streamGenerateContent";
+        // 根据 stream 参数选择正确的 API 方法
+        let method = if stream {
+            "streamGenerateContent"
+        } else {
+            "generateContent"
+        };
         // Vertex AI Public Preview URL 格式
         // 注意：base_url 应该包含 /v1，或者在这里添加
         let base = if self.base_url.ends_with("/v1") {

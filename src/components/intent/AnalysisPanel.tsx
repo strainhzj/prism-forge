@@ -108,9 +108,27 @@ export function AnalysisPanel({
       debugLog('开场白意图分析完成', { intent });
 
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      debugLog('分析失败', { error: errorMessage });
-      setError(errorMessage.includes('API') ? t('errors.llmApiFailed') : t('errors.analysisFailed'));
+      // Tauri invoke 错误格式: { error: string | { message: string } }
+      let errorMessage = t('errors.analysisFailed');
+
+      if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err && typeof err === 'object') {
+        if ('error' in err) {
+          const errorValue = (err as { error: unknown }).error;
+          if (typeof errorValue === 'string') {
+            errorMessage = errorValue;
+          } else if (errorValue && typeof errorValue === 'object' && 'message' in errorValue) {
+            errorMessage = (errorValue as { message: string }).message;
+          }
+        } else if ('message' in err) {
+          errorMessage = (err as { message: string }).message;
+        }
+      }
+
+      debugLog('分析失败', { error: err, errorMessage });
+      // 直接显示真实错误消息，不再过度过滤
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

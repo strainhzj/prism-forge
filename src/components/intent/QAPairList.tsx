@@ -21,6 +21,20 @@ function debugLog(action: string, ...args: unknown[]) {
   }
 }
 
+// ==================== 辅助函数 ====================
+
+/**
+ * 安全截断文本，防止 undefined/null 错误
+ */
+function truncateText(text: string | undefined | null, maxLength: number = 100): string {
+  if (!text) return '';
+
+  const str = String(text);
+  if (str.length <= maxLength) return str;
+
+  return str.slice(0, maxLength) + '...';
+}
+
 // ==================== 类型定义 ====================
 
 export interface QAPairListProps {
@@ -104,8 +118,7 @@ export const QAPairList = memo(function QAPairList({
               {t('qaPairs.assistantAnswer')}
             </p>
             <p className="text-xs line-clamp-2" style={{ color: 'var(--color-text-primary)' }}>
-              {qaPair.assistantAnswer.slice(0, 100)}
-              {qaPair.assistantAnswer.length > 100 ? '...' : ''}
+              {truncateText(qaPair.assistantAnswer, 100)}
             </p>
           </div>
 
@@ -115,8 +128,7 @@ export const QAPairList = memo(function QAPairList({
               {t('qaPairs.userDecision')}
             </p>
             <p className="text-xs line-clamp-2" style={{ color: 'var(--color-text-primary)' }}>
-              {qaPair.userDecision.slice(0, 100)}
-              {qaPair.userDecision.length > 100 ? '...' : ''}
+              {truncateText(qaPair.userDecision, 100)}
             </p>
           </div>
         </button>
