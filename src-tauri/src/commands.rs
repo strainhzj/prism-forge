@@ -3463,6 +3463,63 @@ pub async fn cmd_analyze_opening_intent(
         })
 }
 
+/// 检测会话中的问答对（助手回答 + 用户后续决策）
+///
+/// # 参数
+///
+/// - `session_file_path`: 会话文件路径
+///
+/// # 返回
+///
+/// 检测到的问答对列表
+#[tauri::command]
+pub async fn cmd_detect_qa_pairs(
+    session_file_path: String,
+) -> Result<Vec<DecisionQAPair>, CommandError> {
+    // 1. 解析会话文件
+    let events = crate::optimizer::PromptOptimizer::parse_session_file(&session_file_path)
+        .map_err(|e| CommandError {
+            message: format!("解析会话文件失败: {}", e),
+        })?;
+
+    if events.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // 2. 将 ParsedEvent 转换为 Message
+    let messages: Vec<crate::database::models::Message> = events
+        .into_iter()
+        .enumerate()
+        .map(|(idx, event)| crate::database::models::Message {
+            id: None,
+            session_id: String::new(),
+            uuid: format!("msg-{}", idx),
+            parent_uuid: None,
+            msg_type: event.role.clone(),
+            content_type: Some("text".to_string()),
+            timestamp: event.time.clone(),
+            offset: 0,
+            length: event.content.len() as i64,
+            summary: None,
+            content: Some(event.content),
+            parent_idx: None,
+            created_at: event.time,
+        })
+        .collect();
+
+    // 3. 使用 QAPairDetector 检测问答对
+    let detector = crate::intent_analyzer::qa_detector::QAPairDetector::new();
+    let qa_pairs = detector.detect_decision_qa_pairs(messages);
+
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "[cmd_detect_qa_pairs] 检测到 {} 个问答对",
+        qa_pairs.len()
+    );
+
+    Ok(qa_pairs)
+}
+
 /// 分析问答对决策
 ///
 /// # 参数

@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { MultiLevelViewDropdown } from '@/components/MultiLevelViewSelector';
 import { TimelineMessageList } from '@/components/session/TimelineMessageList';
+import { AnalysisPanel } from '@/components/intent/AnalysisPanel';
 import { useViewLevelManager, useSessionContent, useExportSessionByLevel } from '@/hooks/useViewLevel';
 import { useSessionMonitor } from '@/hooks/useSessionMonitor';
 import { useProjectActions, useProjects, useProjectStore } from '@/stores/useProjectStore';
@@ -96,6 +97,9 @@ export function SessionContentView({
   const [showTrackConfirm, setShowTrackConfirm] = useState(false);
   const [dontShowAgain, setDontShowAgain] = useState(false);
 
+  // ===== 意图分析面板状态管理 =====
+  const [showAnalysisPanel, setShowAnalysisPanel] = useState(false);
+
   // 从 localStorage 读取"下次不再提醒"的设置
   useEffect(() => {
     const saved = localStorage.getItem('track-session-dont-show-again');
@@ -151,6 +155,20 @@ export function SessionContentView({
     debounceMs: 2000,
     onRefresh: handleAutoRefresh,
   });
+
+  /**
+   * 处理分析意图按钮点击
+   */
+  const handleAnalyzeIntent = useCallback(() => {
+    setShowAnalysisPanel(true);
+  }, []);
+
+  /**
+   * 关闭分析面板
+   */
+  const handleCloseAnalysisPanel = useCallback(() => {
+    setShowAnalysisPanel(false);
+  }, []);
 
   // ===== 排序后的消息列表 =====
   const sortedMessages = useMemo(() => {
@@ -450,6 +468,7 @@ export function SessionContentView({
             {sortedMessages && sortedMessages.length > 0 ? (
               <TimelineMessageList
                 contentDisplayMode={contentDisplayMode}
+                onAnalyzeIntent={handleAnalyzeIntent}
                 messages={sortedMessages.map((msg): MessageNode => ({
                   id: msg.uuid,
                   parent_id: msg.parentUuid || null,
@@ -574,6 +593,14 @@ export function SessionContentView({
         </div>
       </div>
     )}
+
+    {/* 意图分析面板 */}
+    <AnalysisPanel
+      sessionFilePath={sessionInfo.file_path}
+      isOpen={showAnalysisPanel}
+      onClose={handleCloseAnalysisPanel}
+      language={localStorage.getItem('i18nextLng') || 'zh'}
+    />
     </>
   );
 }

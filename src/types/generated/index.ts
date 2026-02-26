@@ -35,3 +35,15 @@ export type { RollbackRecord } from "./RollbackRecord";
 
 // Intent analyzer types
 export type { OpeningIntent } from "./OpeningIntent";
+export type { DecisionQAPair } from "./DecisionQAPair";
+export type { DecisionAnalysis } from "./DecisionAnalysis";
+export type { DecisionType } from "./DecisionType";
+export type { Alternative } from "./Alternative";
+
+// Decision detector types
+export type { DecisionKeyword } from "./DecisionKeyword";
+export type { DecisionPoint } from "./DecisionPoint";
+
+// Note: DetectorAlternative is exported as Alternative in the generated file
+// Re-export with an alias for clarity
+export type { Alternative as DetectorAlternative } from "./DetectorAlternative";

@@ -208,6 +208,8 @@ pub fn run() {
             cmd_detect_and_save_project_tech_stack,
             // 开场白意图分析命令
             cmd_analyze_opening_intent,
+            // 问答对检测命令
+            cmd_detect_qa_pairs,
             // 问答对决策分析命令
             cmd_analyze_decision,
             // 决策检测命令（规则引擎）

@@ -10,6 +10,7 @@ import zhSessions from './locales/zh/sessions.json';
 import zhPromptLab from './locales/zh/promptLab.json';
 import zhPrompts from './locales/zh/prompts.json';
 import zhPromptVersions from './locales/zh/promptVersions.json';
+import zhIntentAnalysis from './locales/zh/intentAnalysis.json';
 import enCommon from './locales/en/common.json';
 import enIndex from './locales/en/index.json';
 import enNavigation from './locales/en/navigation.json';
@@ -18,6 +19,7 @@ import enSessions from './locales/en/sessions.json';
 import enPromptLab from './locales/en/promptLab.json';
 import enPrompts from './locales/en/prompts.json';
 import enPromptVersions from './locales/en/promptVersions.json';
+import enIntentAnalysis from './locales/en/intentAnalysis.json';
 
 // ==================== i18n 配置 ====================
 
@@ -42,6 +44,7 @@ i18n
         promptLab: zhPromptLab,
         prompts: zhPrompts,
         promptVersions: zhPromptVersions,
+        intentAnalysis: zhIntentAnalysis,
       },
       en: {
         common: enCommon,
@@ -52,12 +55,13 @@ i18n
         promptLab: enPromptLab,
         prompts: enPrompts,
         promptVersions: enPromptVersions,
+        intentAnalysis: enIntentAnalysis,
       },
     },
     lng: 'zh', // 默认语言（中文）
     fallbackLng: 'zh', // 回退语言
     defaultNS: 'common', // 默认命名空间
-    ns: ['common', 'index', 'navigation', 'settings', 'sessions', 'promptLab', 'prompts', 'promptVersions'], // 可用命名空间
+    ns: ['common', 'index', 'navigation', 'settings', 'sessions', 'promptLab', 'prompts', 'promptVersions', 'intentAnalysis'], // 可用命名空间
     debug: DEBUG, // 开发模式显示调试信息
     interpolation: {
       escapeValue: false, // React 已经做了 XSS 防护

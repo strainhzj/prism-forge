@@ -1,0 +1,72 @@
+{
+  "actions": {
+    "analyzeIntent": "Analyze Intent",
+    "retry": "Retry",
+    "close": "Close",
+    "copy": "Copy"
+  },
+  "panel": {
+    "title": "Session Intent Analysis",
+    "analyzing": "Analyzing...",
+    "loading": "Loading...",
+    "qaPairs": "Q&A Pairs",
+    "openingIntent": "Opening Intent",
+    "decisions": "Decision Points",
+    "noQAPairs": "No Q&A pairs found",
+    "noDecisions": "No decision points found"
+  },
+  "qaPairs": {
+    "title": "Q&A Pairs List",
+    "assistantAnswer": "Assistant Answer",
+    "userDecision": "User Decision",
+    "selectToView": "Select a Q&A pair to view decision analysis"
+  },
+  "intent": {
+    "title": "Opening Intent",
+    "openingGoal": "Core Goal",
+    "projectType": "Project Type",
+    "intentType": "Intent Type",
+    "techStack": "Tech Stack",
+    "constraints": "Constraints",
+    "confidence": "Confidence",
+    "types": {
+      "newFeature": "New Feature",
+      "bugFix": "Bug Fix",
+      "refactor": "Refactor",
+      "learning": "Learning",
+      "other": "Other"
+    },
+    "projectTypes": {
+      "webApp": "Web App",
+      "cliTool": "CLI Tool",
+      "library": "Library/Framework",
+      "other": "Other"
+    }
+  },
+  "decisions": {
+    "title": "Decision Point Analysis",
+    "type": "Decision Type",
+    "made": "Decision Made",
+    "rationale": "Explicit Rationale",
+    "inferredReasons": "Inferred Reasons",
+    "alternatives": "Alternatives",
+    "confidence": "Confidence",
+    "noDecisionSelected": "Please select a Q&A pair first",
+    "noDecisionsDetected": "No decision points detected"
+  },
+  "decisionTypes": {
+    "technologyChoice": "Technology Choice",
+    "architectureDesign": "Architecture Design",
+    "toolSelection": "Tool Selection",
+    "implementation": "Implementation",
+    "other": "Other"
+  },
+  "errors": {
+    "analysisFailed": "Intent analysis failed",
+    "noQAPairs": "No Q&A pairs detected",
+    "llmApiFailed": "LLM API call failed, please check network connection or API configuration",
+    "lowConfidence": "Decision point confidence is low, manual verification recommended",
+    "loadSessionFailed": "Failed to load session file",
+    "unknownError": "Unknown error"
+  }
+}

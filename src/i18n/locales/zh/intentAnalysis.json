@@ -1,0 +1,72 @@
+{
+  "actions": {
+    "analyzeIntent": "分析意图",
+    "retry": "重试",
+    "close": "关闭",
+    "copy": "复制"
+  },
+  "panel": {
+    "title": "会话意图分析",
+    "analyzing": "正在分析中...",
+    "loading": "加载中...",
+    "qaPairs": "问答对",
+    "openingIntent": "开场白意图",
+    "decisions": "决策点",
+    "noQAPairs": "暂无问答对",
+    "noDecisions": "暂无决策点"
+  },
+  "qaPairs": {
+    "title": "问答对列表",
+    "assistantAnswer": "助手回答",
+    "userDecision": "用户决策",
+    "selectToView": "选择一个问答对查看决策分析"
+  },
+  "intent": {
+    "title": "开场白意图",
+    "openingGoal": "核心目标",
+    "projectType": "项目类型",
+    "intentType": "意图类型",
+    "techStack": "技术栈",
+    "constraints": "约束条件",
+    "confidence": "置信度",
+    "types": {
+      "newFeature": "新功能开发",
+      "bugFix": "Bug 修复",
+      "refactor": "重构优化",
+      "learning": "学习探索",
+      "other": "其他"
+    },
+    "projectTypes": {
+      "webApp": "Web 应用",
+      "cliTool": "CLI 工具",
+      "library": "库/框架",
+      "other": "其他"
+    }
+  },
+  "decisions": {
+    "title": "决策点分析",
+    "type": "决策类型",
+    "made": "决策内容",
+    "rationale": "明确理由",
+    "inferredReasons": "推测理由",
+    "alternatives": "备选方案",
+    "confidence": "置信度",
+    "noDecisionSelected": "请先选择一个问答对",
+    "noDecisionsDetected": "未检测到决策点"
+  },
+  "decisionTypes": {
+    "technologyChoice": "技术选型",
+    "architectureDesign": "架构设计",
+    "toolSelection": "工具选择",
+    "implementation": "实现方式",
+    "other": "其他"
+  },
+  "errors": {
+    "analysisFailed": "意图分析失败",
+    "noQAPairs": "未检测到问答对",
+    "llmApiFailed": "LLM API 调用失败，请检查网络连接或 API 配置",
+    "lowConfidence": "决策点置信度较低，建议人工确认",
+    "loadSessionFailed": "加载会话文件失败",
+    "unknownError": "未知错误"
+  }
+}
