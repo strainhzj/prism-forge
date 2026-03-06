@@ -319,6 +319,7 @@ mod tests {
             user_decision_uuid: "u1".to_string(),
             assistant_answer: "我建议使用 Rust 实现后端。".to_string(),
             user_decision: "好的，我们选择使用 Rust。".to_string(),
+            context_qa_pairs: None,
         };
 
         let decisions = detector.detect_decisions(&qa_pair, "zh").unwrap();
@@ -336,6 +337,7 @@ mod tests {
             user_decision_uuid: "u1".to_string(),
             assistant_answer: "这是一个普通的问题。".to_string(),
             user_decision: "这是一个普通的回答。".to_string(),
+            context_qa_pairs: None,
         };
 
         let decisions = detector.detect_decisions(&qa_pair, "zh").unwrap();

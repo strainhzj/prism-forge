@@ -132,33 +132,61 @@ impl DecisionAnalyzer {
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("output_template 内容缺失"))?;
 
-        // 4. 构建用户消息
+        // 4. 构建上下文格式化字符串
+        let context_section = if let Some(ref context_pairs) = qa_pair.context_qa_pairs {
+            if !context_pairs.is_empty() {
+                // 按照 PromptGenerator 的格式构建上下文
+                let formatted_pairs: Vec<String> = context_pairs
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, pair)| {
+                        format!(
+                            "{}. 用户: \"{}\"\n   助手: \"{}\"",
+                            idx + 1,
+                            pair.user_question,
+                            pair.assistant_answer
+                        )
+                    })
+                    .collect();
+
+                format!(
+                    "### 对话上下文（前序问答对）\n\n{}\n\n",
+                    formatted_pairs.join("\n\n")
+                )
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+
+        // 5. 构建用户消息
         let full_prompt = format!(
-            "{}\n\n{}\n\n{}",
+            "{}\n\n{}\n\n{}### 当前决策分析\n\n- **用户后续决策**: \"{}\"\n\n{}",
             meta_prompt,
-            input_template
-                .replace("{{assistant_answer}}", &qa_pair.assistant_answer)
-                .replace("{{user_decision}}", &qa_pair.user_decision),
+            context_section,
+            input_template.replace("{{assistant_answer}}", &qa_pair.assistant_answer),
+            qa_pair.user_decision,
             output_template
         );
 
-        // 5. 获取 LLM 客户端
+        // 6. 获取 LLM 客户端
         let client = llm_manager.get_active_client()?;
 
-        // 6. 获取提供商配置
+        // 7. 获取提供商配置
         let provider = llm_manager.get_active_provider_config()?;
         let model = provider.effective_model();
 
-        // 7. 创建参数
+        // 8. 创建参数
         let params = ModelParams::new(model)
             .with_temperature(0.1)
             .with_max_tokens(1500);
 
-        // 8. 调用 LLM
+        // 9. 调用 LLM
         let messages = vec![LLMMessage::user(full_prompt)];
         let response = client.chat_completion(messages, params).await?;
 
-        // 9. 解析 JSON 响应
+        // 10. 解析 JSON 响应
         let result: DecisionAnalysis = serde_json::from_str(&response.content)
             .with_context(|| format!("解析 LLM 响应失败: {}", response.content))?;
 

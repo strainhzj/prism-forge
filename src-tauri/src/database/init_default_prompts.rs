@@ -316,11 +316,11 @@ fn import_decision_analysis_template(tx: &rusqlite::Transaction) -> Result<()> {
     let content_json = json!({
         "zh": {
             "meta_prompt": {
-                "content": "你是一位经验丰富的技术决策分析师，擅长分析 Claude 会话记录，探究用户在技术决策背后的思考过程和原因。\n\n你的任务是分析问答对（助手回答 + 用户后续决策），提取用户做出的技术决策及其背后的理由。",
+                "content": "你是一位经验丰富的技术决策分析师，擅长分析 Claude 会话记录，探究用户在技术决策背后的思考过程和原因。\n\n你的任务是分析问答对（助手回答 + 用户后续决策），提取用户做出的技术决策及其背后的理由。分析时请结合前序对话上下文，全面理解决策的背景和演变过程。",
                 "last_modified": chrono::Utc::now().to_rfc3339()
             },
             "input_template": {
-                "content": "## 输入信息\n\n- **助手回答**: {{assistant_answer}}\n- **用户后续决策**: {{user_decision}}\n\n## 分析要求\n\n1. 用户做了什么技术决策？（选择、放弃、改变、采用等）\n2. 决策类型（技术选型/架构设计/工具选择/代码实现/其他）\n3. 用户的决策依据是什么？（明确提及的理由）\n4. 推测的隐性原因？（基于上下文推断）\n5. 涉及的技术栈和备选方案\n6. 决策的置信度（0-1）",
+                "content": "## 输入信息\n\n{{assistant_answer}}",
                 "last_modified": null
             },
             "output_template": {
@@ -330,11 +330,11 @@ fn import_decision_analysis_template(tx: &rusqlite::Transaction) -> Result<()> {
         },
         "en": {
             "meta_prompt": {
-                "content": "You are an experienced technical decision analyst skilled at analyzing Claude conversation logs to investigate the thought process and reasons behind users' technical decisions.\n\nYour task is to analyze question-answer pairs (assistant response + user's follow-up decision) to extract the technical decisions made by users and the reasoning behind them.",
+                "content": "You are an experienced technical decision analyst skilled at analyzing Claude conversation logs to investigate the thought process and reasons behind users' technical decisions.\n\nYour task is to analyze question-answer pairs (assistant response + user's follow-up decision) to extract the technical decisions made by users and the reasoning behind them. Please consider the conversation context to comprehensively understand the background and evolution of decisions.",
                 "last_modified": chrono::Utc::now().to_rfc3339()
             },
             "input_template": {
-                "content": "## Input Information\n\n- **Assistant Response**: {{assistant_answer}}\n- **User's Follow-up Decision**: {{user_decision}}\n\n## Analysis Requirements\n\n1. What technical decision did the user make? (choose, abandon, change, adopt, etc)\n2. Decision type (technology_choice/architecture_design/tool_selection/implementation/other)\n3. What is the user's basis for decision? (explicitly mentioned reasons)\n4. Inferred implicit reasons? (based on context)\n5. Tech stack involved and alternatives\n6. Decision confidence (0-1)",
+                "content": "## Input Information\n\n{{assistant_answer}}",
                 "last_modified": null
             },
             "output_template": {

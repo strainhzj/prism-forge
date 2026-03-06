@@ -15,7 +15,7 @@ use prism_forge::database::decision_keywords::DecisionKeyword;
 use prism_forge::intent_analyzer::decision_analyzer::{Alternative, DecisionAnalysis, DecisionType};
 use prism_forge::intent_analyzer::decision_detector::{Alternative as DetectorAlternative, DecisionPoint};
 use prism_forge::intent_analyzer::opening_intent::OpeningIntent;
-use prism_forge::intent_analyzer::qa_detector::DecisionQAPair;
+use prism_forge::intent_analyzer::qa_detector::{DecisionQAPair, QAPairContext};
 use prism_forge::optimizer::config::{
     AdvancedConfig, ComponentContent, ComponentsConfig, CompressionConfig, LLMParamsConfig,
     LanguageComponent, LanguageComponentWithMeta, OptimizerConfig, PromptComponentData,
@@ -75,6 +75,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     SessionMessage::export_to(output_dir.join("SessionMessage.ts"))?;
 
     // Intent analyzer types
+    QAPairContext::export_to(output_dir.join("QAPairContext.ts"))?;
     DecisionQAPair::export_to(output_dir.join("DecisionQAPair.ts"))?;
     OpeningIntent::export_to(output_dir.join("OpeningIntent.ts"))?;
     ProjectTechStack::export_to(output_dir.join("ProjectTechStack.ts"))?;
