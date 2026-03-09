@@ -3589,6 +3589,15 @@ pub async fn cmd_get_intent_analysis_history(
             "[cmd_get_intent_analysis_history] 找到分析历史，分析时间: {}",
             h.analyzed_at
         );
+        // 🔍 调试日志：序列化测试
+        match serde_json::to_string(h) {
+            Ok(json) => {
+                eprintln!("[cmd_get_intent_analysis_history] 序列化成功: {}", json);
+            }
+            Err(e) => {
+                eprintln!("[cmd_get_intent_analysis_history] 序列化失败: {}", e);
+            }
+        }
     } else {
         eprintln!(
             "[cmd_get_intent_analysis_history] 未找到分析历史: {}",

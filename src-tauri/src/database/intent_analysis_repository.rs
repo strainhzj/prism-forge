@@ -109,10 +109,25 @@ impl IntentAnalysisRepository {
                 let qa_pairs_json: String = row.get(2)?;
                 let opening_intent_json: String = row.get(3)?;
 
+                // 🔍 调试日志：输出原始 JSON
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[get_analysis_by_session] opening_intent_json: {}", &opening_intent_json);
+                    eprintln!("[get_analysis_by_session] qa_pairs_json: {}", &qa_pairs_json);
+                }
+
                 let qa_pairs: Vec<DecisionQAPair> = serde_json::from_str(&qa_pairs_json)
                     .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
                 let opening_intent: OpeningIntent = serde_json::from_str(&opening_intent_json)
                     .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+
+                // 🔍 调试日志：输出反序列化后的结构
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[get_analysis_by_session] opening_intent.intent_type: {}", opening_intent.intent_type);
+                    eprintln!("[get_analysis_by_session] opening_intent.confidence: {}", opening_intent.confidence);
+                    eprintln!("[get_analysis_by_session] qa_pairs length: {}", qa_pairs.len());
+                }
 
                 Ok(IntentAnalysisHistory {
                     id: row.get(0)?,

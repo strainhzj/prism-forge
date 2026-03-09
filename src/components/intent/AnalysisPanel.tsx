@@ -16,7 +16,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { Loader2, RotateCcw, Trash2 } from 'lucide-react';
+import { Loader2, RotateCcw, Trash2, Target } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN, enUS } from 'date-fns/locale';
 
@@ -35,6 +35,7 @@ import type { IntentAnalysisHistory } from '@/types/generated/IntentAnalysisHist
 import { QAPairList } from './QAPairList';
 import { IntentPanel } from './IntentPanel';
 import { DecisionList } from './DecisionList';
+import { mapIntentAnalysisHistory } from '@/lib/intentMapper';
 
 // ==================== 调试模式 ====================
 const DEBUG = import.meta.env.DEV;
@@ -83,7 +84,7 @@ export function AnalysisPanel({
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [qaPairs, setQaPairs] = useState<DecisionQAPair[]>([]);
+  const [qaPairs, setQaPairs] = useState<DecisionQAPair[]>([]);  // ✅ 确保初始值是空数组
   const [openingIntent, setOpeningIntent] = useState<OpeningIntent | null>(null);
   const [selectedQaPair, setSelectedQaPair] = useState<DecisionQAPair | null>(null);
   const [selectedQaIndex, setSelectedQaIndex] = useState<number | null>(null);
@@ -91,22 +92,36 @@ export function AnalysisPanel({
 
   /**
    * 从历史记录加载数据
+   * @returns 是否成功加载到历史记录
    */
-  const loadFromHistory = useCallback(async () => {
+  const loadFromHistory = useCallback(async (): Promise<boolean> => {
     setLoadingHistory(true);
     try {
-      const historyData = await invoke<IntentAnalysisHistory | null>('cmd_get_intent_analysis_history', {
+      const rawData = await invoke<any>('cmd_get_intent_analysis_history', {
         sessionFilePath,
       });
-      setHistory(historyData);
-      if (historyData) {
-        setQaPairs(historyData.qaPairs);
+
+      if (rawData) {
+        // 🔧 使用映射工具修复字段命名问题
+        const historyData = mapIntentAnalysisHistory(rawData);
+
+        if (DEBUG) {
+          console.log('[AnalysisPanel] 从历史记录加载 - 映射完成', {
+            hasOpeningIntent: !!historyData?.openingIntent,
+            intentType: historyData?.openingIntent?.intentType,
+          });
+        }
+
+        setHistory(historyData);
+        setQaPairs(historyData.qaPairs ?? []);
         setOpeningIntent(historyData.openingIntent);
-        debugLog('从历史记录加载', { analyzedAt: historyData.analyzedAt });
+        return true;
       }
+      return false;
     } catch (err) {
       debugLog('加载历史记录失败', { error: err });
       setHistory(null);
+      return false;
     } finally {
       setLoadingHistory(false);
     }
@@ -260,9 +275,9 @@ export function AnalysisPanel({
   useEffect(() => {
     if (isOpen) {
       // 先尝试加载历史记录
-      loadFromHistory().then(() => {
+      loadFromHistory().then((hasHistory) => {
         // 如果没有历史记录，则执行分析
-        if (!history) {
+        if (!hasHistory) {
           performAnalysis(true);
         }
       });
@@ -276,7 +291,8 @@ export function AnalysisPanel({
       setHistory(null);
       setLoadingHistory(true);
     }
-  }, [isOpen, loadFromHistory, performAnalysis, history]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);  // ✅ 只依赖 isOpen，避免循环触发
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -348,12 +364,26 @@ export function AnalysisPanel({
                 {t('actions.retry')}
               </Button>
             </div>
-          ) : qaPairs.length === 0 ? (
-            // 无问答对状态
+          ) : !qaPairs || qaPairs.length === 0 ? (  // ✅ 添加 qaPairs 空值检查
+            // 无问答对状态 - 区分开场白已分析和完全无数据
             <div className="flex flex-col items-center justify-center py-12">
-              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                {t('panel.noQAPairs')}
-              </p>
+              {openingIntent && openingIntent.intentType ? (  // ✅ 更严格的条件判断
+                // 开场白专用模式：有开场白意图但无问答对
+                <>
+                  <Target className="w-12 h-12 mb-3" style={{ color: 'var(--color-accent-blue)' }} />
+                  <p className="text-base font-medium mb-2" style={{ color: 'var(--color-text-primary)' }}>
+                    {t('panel.openingAnalyzed')}
+                  </p>
+                  <p className="text-sm text-center max-w-md px-4" style={{ color: 'var(--color-text-secondary)' }}>
+                    {t('panel.noQAPairsInOpening')}
+                  </p>
+                </>
+              ) : (
+                // 完全无数据状态
+                <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                  {t('panel.noQAPairs')}
+                </p>
+              )}
             </div>
           ) : (
             // 三栏布局

@@ -27,7 +27,7 @@ function debugLog(action: string, ...args: unknown[]) {
  * 安全截断文本，防止 undefined/null 错误
  */
 function truncateText(text: string | undefined | null, maxLength: number = 100): string {
-  if (!text) return '';
+  if (text == null || text === '') return '';  // ✅ 使用 == 检查 null 和 undefined
 
   const str = String(text);
   if (str.length <= maxLength) return str;
@@ -83,7 +83,7 @@ export const QAPairList = memo(function QAPairList({
 
       {qaPairs.map((qaPair, index) => (
         <button
-          key={qaPair.qaIndex}
+          key={`qa-pair-${qaPair.qaIndex ?? index}-${index}`}  // ✅ 使用组合键确保唯一性
           onClick={() => onSelectQaPair(qaPair, index)}
           className={cn(
             'w-full text-left p-3 rounded-lg border transition-all hover:shadow-md',

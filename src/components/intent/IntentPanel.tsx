@@ -117,9 +117,9 @@ export const IntentPanel = memo(function IntentPanel({ intent }: IntentPanelProp
           </p>
           <ul className="space-y-1">
             {intent.keyInfo.map((info, index) => (
-              <li key={index} className="text-xs flex items-start gap-2" style={{ color: 'var(--color-text-primary)' }}>
+              <li key={`keyinfo-${index}`} className="text-xs flex items-start gap-2" style={{ color: 'var(--color-text-primary)' }}>
                 <CheckCircle className="w-3 h-3 mt-0.5 flex-shrink-0" style={{ color: 'var(--color-accent-green)' }} />
-                <span>{info || ''}</span>
+                <span>{info ?? ''}</span>  {/* ✅ 使用 nullish coalescing */}
               </li>
             ))}
           </ul>

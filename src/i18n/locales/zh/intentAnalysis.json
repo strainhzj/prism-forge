@@ -18,7 +18,9 @@
     "noQAPairs": "暂无问答对",
     "noDecisions": "暂无决策点",
     "lastAnalyzedAt": "上次分析时间：{{time}}",
-    "loadingHistory": "加载历史记录..."
+    "loadingHistory": "加载历史记录...",
+    "openingAnalyzed": "开场白已分析",
+    "noQAPairsInOpening": "当前会话仅包含开场白对话，暂无后续问答对"
   },
   "qaPairs": {
     "title": "问答对列表",

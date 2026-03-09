@@ -18,7 +18,9 @@
     "noQAPairs": "No Q&A pairs found",
     "noDecisions": "No decision points found",
     "lastAnalyzedAt": "Last analyzed: {{time}}",
-    "loadingHistory": "Loading history..."
+    "loadingHistory": "Loading history...",
+    "openingAnalyzed": "Opening analyzed",
+    "noQAPairsInOpening": "This session only contains opening dialogue, no follow-up Q&A pairs yet"
   },
   "qaPairs": {
     "title": "Q&A Pairs List",
