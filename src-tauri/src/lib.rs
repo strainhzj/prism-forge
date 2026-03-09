@@ -210,6 +210,10 @@ pub fn run() {
             cmd_analyze_opening_intent,
             // 问答对检测命令
             cmd_detect_qa_pairs,
+            // 意图分析历史管理命令
+            cmd_save_intent_analysis,
+            cmd_get_intent_analysis_history,
+            cmd_clear_intent_analysis_history,
             // 问答对决策分析命令
             cmd_analyze_decision,
             // 决策检测命令（规则引擎）

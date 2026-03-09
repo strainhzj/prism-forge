@@ -5,12 +5,20 @@
  * - 左侧：问答对列表
  * - 中间：开场白意图
  * - 右侧：决策点列表
+ *
+ * 新增功能：
+ * - 支持历史记录缓存
+ * - 显示上次分析时间
+ * - 提供重新分析按钮
+ * - 提供清除历史按钮
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { Loader2 } from 'lucide-react';
+import { Loader2, RotateCcw, Trash2 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { zhCN, enUS } from 'date-fns/locale';
 
 import {
   Dialog,
@@ -18,9 +26,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 
 import type { DecisionQAPair } from '@/types/generated';
 import type { OpeningIntent } from '@/types/generated/OpeningIntent';
+import type { IntentAnalysisHistory } from '@/types/generated/IntentAnalysisHistory';
 
 import { QAPairList } from './QAPairList';
 import { IntentPanel } from './IntentPanel';
@@ -71,16 +81,41 @@ export function AnalysisPanel({
 
   // 状态管理
   const [loading, setLoading] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [qaPairs, setQaPairs] = useState<DecisionQAPair[]>([]);
   const [openingIntent, setOpeningIntent] = useState<OpeningIntent | null>(null);
   const [selectedQaPair, setSelectedQaPair] = useState<DecisionQAPair | null>(null);
   const [selectedQaIndex, setSelectedQaIndex] = useState<number | null>(null);
+  const [history, setHistory] = useState<IntentAnalysisHistory | null>(null);
+
+  /**
+   * 从历史记录加载数据
+   */
+  const loadFromHistory = useCallback(async () => {
+    setLoadingHistory(true);
+    try {
+      const historyData = await invoke<IntentAnalysisHistory | null>('cmd_get_intent_analysis_history', {
+        sessionFilePath,
+      });
+      setHistory(historyData);
+      if (historyData) {
+        setQaPairs(historyData.qaPairs);
+        setOpeningIntent(historyData.openingIntent);
+        debugLog('从历史记录加载', { analyzedAt: historyData.analyzedAt });
+      }
+    } catch (err) {
+      debugLog('加载历史记录失败', { error: err });
+      setHistory(null);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, [sessionFilePath]);
 
   /**
    * 执行分析流程
    */
-  const performAnalysis = useCallback(async () => {
+  const performAnalysis = useCallback(async (saveToHistory = true) => {
     setLoading(true);
     setError(null);
 
@@ -107,6 +142,32 @@ export function AnalysisPanel({
       setOpeningIntent(intent);
       debugLog('开场白意图分析完成', { intent });
 
+      // 3. 保存到历史记录
+      if (saveToHistory) {
+        try {
+          await invoke('cmd_save_intent_analysis', {
+            sessionFilePath,
+            qaPairs: pairs,
+            openingIntent: intent,
+            language,
+          });
+          // 更新本地历史状态
+          const newHistory: IntentAnalysisHistory = {
+            id: BigInt(0), // 保存后会被后端设置
+            sessionFilePath,
+            qaPairs: pairs,
+            openingIntent: intent,
+            language,
+            analyzedAt: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+          };
+          setHistory(newHistory);
+          debugLog('已保存到历史记录');
+        } catch (saveErr) {
+          debugLog('保存历史记录失败', { error: saveErr });
+        }
+      }
+
     } catch (err) {
       // Tauri invoke 错误格式: { error: string | { message: string } }
       let errorMessage = t('errors.analysisFailed');
@@ -127,12 +188,42 @@ export function AnalysisPanel({
       }
 
       debugLog('分析失败', { error: err, errorMessage });
-      // 直接显示真实错误消息，不再过度过滤
       setError(errorMessage);
     } finally {
       setLoading(false);
     }
   }, [sessionFilePath, language, t]);
+
+  /**
+   * 重新分析
+   */
+  const handleReanalyze = useCallback(() => {
+    setHistory(null);
+    performAnalysis(true);
+  }, [performAnalysis]);
+
+  /**
+   * 清除历史记录
+   */
+  const handleClearHistory = useCallback(async () => {
+    if (!confirm(t('actions.clearHistoryConfirm'))) {
+      return;
+    }
+
+    try {
+      await invoke('cmd_clear_intent_analysis_history', {
+        sessionFilePath,
+      });
+      setHistory(null);
+      setQaPairs([]);
+      setOpeningIntent(null);
+      setSelectedQaPair(null);
+      setSelectedQaIndex(null);
+      debugLog('已清除历史记录');
+    } catch (err) {
+      debugLog('清除历史记录失败', { error: err });
+    }
+  }, [sessionFilePath, t]);
 
   /**
    * 选择问答对
@@ -147,15 +238,34 @@ export function AnalysisPanel({
    * 重试分析
    */
   const handleRetry = useCallback(() => {
-    performAnalysis();
+    performAnalysis(true);
   }, [performAnalysis]);
 
   /**
-   * 弹窗打开时自动执行分析
+   * 格式化相对时间
+   */
+  const formatRelativeTime = useCallback((timestamp: string) => {
+    try {
+      const date = new Date(timestamp);
+      const locale = language === 'zh' ? zhCN : enUS;
+      return formatDistanceToNow(date, { addSuffix: true, locale });
+    } catch {
+      return timestamp;
+    }
+  }, [language]);
+
+  /**
+   * 弹窗打开时自动加载历史或执行分析
    */
   useEffect(() => {
     if (isOpen) {
-      performAnalysis();
+      // 先尝试加载历史记录
+      loadFromHistory().then(() => {
+        // 如果没有历史记录，则执行分析
+        if (!history) {
+          performAnalysis(true);
+        }
+      });
     } else {
       // 弹窗关闭时重置状态
       setQaPairs([]);
@@ -163,8 +273,10 @@ export function AnalysisPanel({
       setSelectedQaPair(null);
       setSelectedQaIndex(null);
       setError(null);
+      setHistory(null);
+      setLoadingHistory(true);
     }
-  }, [isOpen, performAnalysis]);
+  }, [isOpen, loadFromHistory, performAnalysis, history]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -173,19 +285,53 @@ export function AnalysisPanel({
         style={{ backgroundColor: 'var(--color-bg-card)' }}
       >
         <DialogHeader>
-          <DialogTitle style={{ color: 'var(--color-text-primary)' }}>
-            {t('panel.title')}
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle style={{ color: 'var(--color-text-primary)' }}>
+              {t('panel.title')}
+            </DialogTitle>
+            <div className="flex gap-2">
+              {history && !loading && (
+                <>
+                  {/* 显示上次分析时间 */}
+                  <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                    {t('panel.lastAnalyzedAt', {
+                      time: formatRelativeTime(history.analyzedAt),
+                    })}
+                  </span>
+                  {/* 重新分析按钮 */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleReanalyze}
+                    className="h-7 px-2"
+                    title={t('actions.reanalyze')}
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </Button>
+                  {/* 清除历史按钮 */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearHistory}
+                    className="h-7 px-2"
+                    title={t('actions.clearHistory')}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
         </DialogHeader>
 
         {/* 内容区域 */}
         <div className="mt-4">
-          {loading ? (
+          {loading || loadingHistory ? (
             // 加载状态
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin mb-4" style={{ color: 'var(--color-accent-blue)' }} />
               <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                {t('panel.analyzing')}
+                {loading ? t('panel.analyzing') : t('panel.loadingHistory')}
               </p>
             </div>
           ) : error ? (
@@ -194,16 +340,13 @@ export function AnalysisPanel({
               <p className="font-medium mb-2" style={{ color: 'var(--color-app-error-accent)' }}>
                 {error}
               </p>
-              <button
+              <Button
                 onClick={handleRetry}
-                className="px-4 py-2 text-sm rounded transition-colors hover:bg-[var(--color-accent-blue)] hover:text-white"
-                style={{
-                  color: 'var(--color-accent-blue)',
-                  border: '1px solid var(--color-accent-blue)',
-                }}
+                variant="outline"
+                size="sm"
               >
                 {t('actions.retry')}
-              </button>
+              </Button>
             </div>
           ) : qaPairs.length === 0 ? (
             // 无问答对状态

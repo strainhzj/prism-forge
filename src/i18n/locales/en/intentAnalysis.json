@@ -2,8 +2,11 @@
   "actions": {
     "analyzeIntent": "Analyze Intent",
     "retry": "Retry",
+    "reanalyze": "Reanalyze",
     "close": "Close",
-    "copy": "Copy"
+    "copy": "Copy",
+    "clearHistory": "Clear History",
+    "clearHistoryConfirm": "Are you sure you want to clear the analysis history for this session?"
   },
   "panel": {
     "title": "Session Intent Analysis",
@@ -13,7 +16,9 @@
     "openingIntent": "Opening Intent",
     "decisions": "Decision Points",
     "noQAPairs": "No Q&A pairs found",
-    "noDecisions": "No decision points found"
+    "noDecisions": "No decision points found",
+    "lastAnalyzedAt": "Last analyzed: {{time}}",
+    "loadingHistory": "Loading history..."
   },
   "qaPairs": {
     "title": "Q&A Pairs List",

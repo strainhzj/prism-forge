@@ -3520,6 +3520,118 @@ pub async fn cmd_detect_qa_pairs(
     Ok(qa_pairs)
 }
 
+/// 保存意图分析结果到数据库
+///
+/// # 参数
+///
+/// - `session_file_path`: 会话文件路径
+/// - `qa_pairs`: 问答对列表
+/// - `opening_intent`: 开场白意图
+/// - `language`: 语言标识
+///
+/// # 返回
+///
+/// 保存的记录 ID
+#[tauri::command]
+pub async fn cmd_save_intent_analysis(
+    session_file_path: String,
+    qa_pairs: Vec<DecisionQAPair>,
+    opening_intent: OpeningIntent,
+    language: String,
+) -> Result<i64, CommandError> {
+    let repo = crate::database::IntentAnalysisRepository::from_default_db()
+        .map_err(|e| CommandError {
+            message: format!("创建数据库仓库失败: {}", e),
+        })?;
+
+    let id = repo
+        .save_analysis(&session_file_path, &qa_pairs, &opening_intent, &language)
+        .map_err(|e| CommandError {
+            message: format!("保存分析结果失败: {}", e),
+        })?;
+
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "[cmd_save_intent_analysis] 已保存分析结果，ID: {}",
+        id
+    );
+
+    Ok(id)
+}
+
+/// 获取指定会话文件的意图分析历史
+///
+/// # 参数
+///
+/// - `session_file_path`: 会话文件路径
+///
+/// # 返回
+///
+/// 分析历史记录（如果存在）
+#[tauri::command]
+pub async fn cmd_get_intent_analysis_history(
+    session_file_path: String,
+) -> Result<Option<crate::database::IntentAnalysisHistory>, CommandError> {
+    let repo = crate::database::IntentAnalysisRepository::from_default_db()
+        .map_err(|e| CommandError {
+            message: format!("创建数据库仓库失败: {}", e),
+        })?;
+
+    let history = repo
+        .get_analysis_by_session(&session_file_path)
+        .map_err(|e| CommandError {
+            message: format!("获取分析历史失败: {}", e),
+        })?;
+
+    #[cfg(debug_assertions)]
+    if let Some(ref h) = history {
+        eprintln!(
+            "[cmd_get_intent_analysis_history] 找到分析历史，分析时间: {}",
+            h.analyzed_at
+        );
+    } else {
+        eprintln!(
+            "[cmd_get_intent_analysis_history] 未找到分析历史: {}",
+            session_file_path
+        );
+    }
+
+    Ok(history)
+}
+
+/// 清除指定会话文件的意图分析历史
+///
+/// # 参数
+///
+/// - `session_file_path`: 会话文件路径
+///
+/// # 返回
+///
+/// 是否成功删除（true 表示删除了记录，false 表示没有记录可删除）
+#[tauri::command]
+pub async fn cmd_clear_intent_analysis_history(
+    session_file_path: String,
+) -> Result<bool, CommandError> {
+    let repo = crate::database::IntentAnalysisRepository::from_default_db()
+        .map_err(|e| CommandError {
+            message: format!("创建数据库仓库失败: {}", e),
+        })?;
+
+    let deleted = repo
+        .delete_analysis(&session_file_path)
+        .map_err(|e| CommandError {
+            message: format!("清除分析历史失败: {}", e),
+        })?;
+
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "[cmd_clear_intent_analysis_history] 清除结果: {}",
+        deleted
+    );
+
+    Ok(deleted)
+}
+
 /// 分析问答对决策
 ///
 /// # 参数

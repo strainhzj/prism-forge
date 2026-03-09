@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 20;
+const CURRENT_DB_VERSION: i32 = 21;
 
 /// 初始化数据库
 ///
@@ -89,6 +89,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             18 => migrate_v18(conn)?,
             19 => migrate_v19(conn)?,
             20 => migrate_v20(conn)?,
+            21 => migrate_v21(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -1609,6 +1610,56 @@ fn migrate_v20_impl(conn: &mut Connection) -> Result<()> {
     }
 
     log::info!("✅ 已创建 decision_keywords 表并预置 {} 条默认关键词", all_keywords.len());
+
+    Ok(())
+}
+
+/// 迁移到版本 21: 创建意图分析历史表
+///
+/// # 功能
+/// - 创建 intent_analysis_history 表（保存问答对分析历史）
+/// - 支持会话文件路径作为唯一键
+/// - 永久保存直到手动删除或用户点击重新分析
+#[cfg(test)]
+pub fn migrate_v21(conn: &mut Connection) -> Result<()> {
+    migrate_v21_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v21(conn: &mut Connection) -> Result<()> {
+    migrate_v21_impl(conn)
+}
+
+fn migrate_v21_impl(conn: &mut Connection) -> Result<()> {
+    // 1. 创建意图分析历史表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS intent_analysis_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_file_path TEXT NOT NULL UNIQUE,
+            qa_pairs_json TEXT NOT NULL,
+            opening_intent_json TEXT NOT NULL,
+            language TEXT NOT NULL DEFAULT 'zh',
+            analyzed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        )",
+        [],
+    )?;
+
+    // 2. 创建索引：按会话文件路径快速查找
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_intent_analysis_history_session_path
+         ON intent_analysis_history(session_file_path);",
+        [],
+    )?;
+
+    // 3. 创建索引：按分析时间排序
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_intent_analysis_history_analyzed_at
+         ON intent_analysis_history(analyzed_at DESC);",
+        [],
+    )?;
+
+    log::info!("✅ 已创建 intent_analysis_history 表");
 
     Ok(())
 }

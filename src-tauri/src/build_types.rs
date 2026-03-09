@@ -12,6 +12,7 @@ use prism_forge::database::models::{
 };
 use prism_forge::database::repositories_tech_stack::ProjectTechStack;
 use prism_forge::database::decision_keywords::DecisionKeyword;
+use prism_forge::database::intent_analysis_repository::IntentAnalysisHistory;
 use prism_forge::intent_analyzer::decision_analyzer::{Alternative, DecisionAnalysis, DecisionType};
 use prism_forge::intent_analyzer::decision_detector::{Alternative as DetectorAlternative, DecisionPoint};
 use prism_forge::intent_analyzer::opening_intent::OpeningIntent;
@@ -87,6 +88,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     DecisionKeyword::export_to(output_dir.join("DecisionKeyword.ts"))?;
     DecisionPoint::export_to(output_dir.join("DecisionPoint.ts"))?;
     DetectorAlternative::export_to(output_dir.join("DetectorAlternative.ts"))?;
+
+    // Intent analysis history types
+    IntentAnalysisHistory::export_to(output_dir.join("IntentAnalysisHistory.ts"))?;
 
     Ok(())
 }

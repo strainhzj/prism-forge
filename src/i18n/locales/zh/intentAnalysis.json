@@ -2,8 +2,11 @@
   "actions": {
     "analyzeIntent": "分析意图",
     "retry": "重试",
+    "reanalyze": "重新分析",
     "close": "关闭",
-    "copy": "复制"
+    "copy": "复制",
+    "clearHistory": "清除历史",
+    "clearHistoryConfirm": "确认清除该会话的分析历史记录？"
   },
   "panel": {
     "title": "会话意图分析",
@@ -13,7 +16,9 @@
     "openingIntent": "开场白意图",
     "decisions": "决策点",
     "noQAPairs": "暂无问答对",
-    "noDecisions": "暂无决策点"
+    "noDecisions": "暂无决策点",
+    "lastAnalyzedAt": "上次分析时间：{{time}}",
+    "loadingHistory": "加载历史记录..."
   },
   "qaPairs": {
     "title": "问答对列表",
