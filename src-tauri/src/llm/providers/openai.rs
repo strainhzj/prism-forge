@@ -171,14 +171,43 @@ impl LLMService for OpenAIProvider {
         messages: Vec<Message>,
         params: ModelParams,
     ) -> Result<ChatCompletionResponse> {
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[OpenAIProvider] 准备发起请求");
+            eprintln!("[OpenAIProvider] base_url: {}", self.base_url);
+            eprintln!("[OpenAIProvider] model: {}", params.model);
+            eprintln!("[OpenAIProvider] temperature: {:?}", params.temperature);
+            eprintln!("[OpenAIProvider] messages count: {}", messages.len());
+        }
+
         let request = self.build_request(messages, params)?;
+
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[OpenAIProvider] 请求构建成功，开始发送...");
+        }
 
         let response = self
             .client
             .chat()
             .create(request)
             .await
-            .context("OpenAI API 请求失败")?;
+            .map_err(|e| {
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[OpenAIProvider] ❌ 请求失败:");
+                    eprintln!("  错误: {:?}", e);
+                    eprintln!("  base_url: {}", self.base_url);
+                }
+                anyhow::anyhow!("OpenAI API 请求失败: {}", e)
+            })?;
+
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[OpenAIProvider] 响应接收成功");
+            eprintln!("[OpenAIProvider] model: {}", response.model);
+            eprintln!("[OpenAIProvider] choices count: {}", response.choices.len());
+        }
 
         let choice = response.choices.first().context("OpenAI 返回空响应")?;
 

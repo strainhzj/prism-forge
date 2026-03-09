@@ -41,7 +41,12 @@ export function mapIntentAnalysisHistory(raw: any): IntentAnalysisHistory | null
     id: raw.id ?? BigInt(0),
     sessionFilePath: raw.session_file_path || raw.sessionFilePath || '',
     qaPairs: raw.qa_pairs || raw.qaPairs || [],
-    openingIntent: mapOpeningIntent(raw.opening_intent || raw.openingIntent),
+    openingIntent: mapOpeningIntent(raw.opening_intent || raw.openingIntent) ?? {
+      intentType: '',
+      confidence: 0,
+      description: null,
+      keyInfo: [],
+    },
     language: raw.language || '',
     analyzedAt: raw.analyzed_at || raw.analyzedAt || '',
     createdAt: raw.created_at || raw.createdAt || '',

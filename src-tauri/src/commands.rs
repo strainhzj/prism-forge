@@ -488,11 +488,18 @@ pub async fn cmd_save_provider(
     // 创建或更新提供商
     let mut provider = if let Some(id) = request.id {
         // 更新现有提供商
+        #[cfg(debug_assertions)]
+        eprintln!("[cmd_save_provider] 编辑模式: provider_id={}", id);
+        eprintln!("[cmd_save_provider] request.base_url={}", request.base_url);
+
         let existing = repo
             .get_provider_by_id(id)?
             .ok_or_else(|| anyhow::anyhow!("提供商不存在 (id={})", id))?;
 
-        ApiProvider {
+        #[cfg(debug_assertions)]
+        eprintln!("[cmd_save_provider] existing.base_url={}", existing.base_url);
+
+        let updated = ApiProvider {
             id: existing.id,
             provider_type: request.provider_type,
             name: request.name,
@@ -504,7 +511,12 @@ pub async fn cmd_save_provider(
             max_tokens: request.max_tokens,
             is_active: request.is_active,
             aliases: existing.aliases,
-        }
+        };
+
+        #[cfg(debug_assertions)]
+        eprintln!("[cmd_save_provider] updated.base_url={}", updated.base_url);
+
+        updated
     } else {
         // 创建新提供商
         let mut new_provider = ApiProvider::new(
@@ -575,10 +587,19 @@ pub async fn cmd_save_provider(
 
     // 保存/更新到数据库
     if provider.id.is_some() {
-        repo.update_provider(&provider)?;
+        #[cfg(debug_assertions)]
+        eprintln!("[cmd_save_provider] 更新到数据库: base_url={}", provider.base_url);
+
+        let rows_affected = repo.update_provider(&provider)?;
+
+        #[cfg(debug_assertions)]
+        eprintln!("[cmd_save_provider] 数据库更新完成，影响行数: {}", rows_affected);
     } else {
         provider = repo.create_provider(provider)?;
     }
+
+    #[cfg(debug_assertions)]
+    eprintln!("[cmd_save_provider] 最终返回的提供商: base_url={}", provider.base_url);
 
     Ok(provider)
 }
@@ -614,7 +635,14 @@ pub fn cmd_set_active_provider(
     manager: State<'_, LLMClientManager>,
     id: i64,
 ) -> std::result::Result<(), CommandError> {
+    #[cfg(debug_assertions)]
+    eprintln!("[cmd_set_active_provider] 切换活跃提供商，provider_id={}", id);
+
     manager.switch_provider(id)?;
+
+    #[cfg(debug_assertions)]
+    eprintln!("[cmd_set_active_provider] 切换成功");
+
     Ok(())
 }
 
@@ -3413,11 +3441,21 @@ pub async fn cmd_analyze_opening_intent(
     session_file_path: String,
     language: String,
 ) -> Result<OpeningIntent, CommandError> {
+    #[cfg(debug_assertions)]
+    eprintln!("[cmd_analyze_opening_intent] 开始分析开场白意图");
+    #[cfg(debug_assertions)]
+    eprintln!("[cmd_analyze_opening_intent] 会话文件: {}", session_file_path);
+    #[cfg(debug_assertions)]
+    eprintln!("[cmd_analyze_opening_intent] 语言: {}", language);
+
     // 1. 解析会话文件
     let events = crate::optimizer::PromptOptimizer::parse_session_file(&session_file_path)
         .map_err(|e| CommandError {
             message: format!("解析会话文件失败: {}", e),
         })?;
+
+    #[cfg(debug_assertions)]
+    eprintln!("[cmd_analyze_opening_intent] 解析到 {} 个事件", events.len());
 
     if events.is_empty() {
         return Err(CommandError {
@@ -3451,16 +3489,27 @@ pub async fn cmd_analyze_opening_intent(
     };
 
     // 3. 创建分析器并分析
+    #[cfg(debug_assertions)]
+    eprintln!("[cmd_analyze_opening_intent] 创建 OpeningIntentAnalyzer");
+
     let analyzer = OpeningIntentAnalyzer::new().map_err(|e| CommandError {
         message: format!("创建分析器失败: {}", e),
     })?;
 
-    analyzer
+    #[cfg(debug_assertions)]
+    eprintln!("[cmd_analyze_opening_intent] 开始调用 LLM 分析");
+
+    let result = analyzer
         .analyze(&opening_message, &language, &llm_manager)
         .await
         .map_err(|e| CommandError {
             message: format!("分析失败: {}", e),
-        })
+        })?;
+
+    #[cfg(debug_assertions)]
+    eprintln!("[cmd_analyze_opening_intent] 分析完成: intent_type={}", result.intent_type);
+
+    Ok(result)
 }
 
 /// 检测会话中的问答对（助手回答 + 用户后续决策）

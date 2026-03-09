@@ -61,6 +61,9 @@ impl LLMClientManager {
         }
         .context("未设置活跃的 API 提供商，请先在设置中配置")?;
 
+        #[cfg(debug_assertions)]
+        eprintln!("[LLMClientManager::get_active_client] 获取到活跃提供商: id={:?}, name={}", provider.id, provider.name);
+
         self.create_client_from_provider(&provider)
     }
 
@@ -287,8 +290,15 @@ impl LLMClientManager {
     /// # 参数
     /// - `provider_id`: 要设置为活跃的提供商 ID
     pub fn switch_provider(&self, provider_id: i64) -> Result<()> {
+        #[cfg(debug_assertions)]
+        eprintln!("[LLMClientManager::switch_provider] 开始切换，provider_id={}", provider_id);
+
         let repo = self.repository.lock().unwrap();
-        repo.set_active_provider(provider_id)?;
+        let rows_affected = repo.set_active_provider(provider_id)?;
+
+        #[cfg(debug_assertions)]
+        eprintln!("[LLMClientManager::switch_provider] 数据库更新完成，影响行数: {}", rows_affected);
+
         Ok(())
     }
 

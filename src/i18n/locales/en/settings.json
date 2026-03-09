@@ -13,7 +13,12 @@
     "edit": "Edit",
     "delete": "Delete",
     "setActive": "Set as Active",
-    "testConnection": "Test Connection"
+    "testConnection": "Test Connection",
+    "saving": "Saving...",
+    "active": "Active",
+    "keyConfigured": "Key configured",
+    "noKeyConfigured": "No key configured",
+    "model": "Model"
   },
   "emptyState": {
     "title": "No API Providers",
@@ -94,13 +99,6 @@
     "aliasesMustBeArray": "Aliases must be an array",
     "aliasesElementsMustBeString": "Each element in aliases array must be a string",
     "aliasesJsonExample": "Invalid JSON format, e.g., [\"alias1\", \"alias2\"]"
-  },
-  "buttons": {
-    "saving": "Saving...",
-    "active": "Active",
-    "keyConfigured": "Key configured",
-    "noKeyConfigured": "No key configured",
-    "model": "Model"
   },
   "stats": {
     "total": "Total",

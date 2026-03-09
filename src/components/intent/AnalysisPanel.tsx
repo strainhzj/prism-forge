@@ -113,8 +113,8 @@ export function AnalysisPanel({
         }
 
         setHistory(historyData);
-        setQaPairs(historyData.qaPairs ?? []);
-        setOpeningIntent(historyData.openingIntent);
+        setQaPairs(historyData?.qaPairs ?? []);
+        setOpeningIntent(historyData?.openingIntent ?? null);
         return true;
       }
       return false;
@@ -144,20 +144,51 @@ export function AnalysisPanel({
       setQaPairs(pairs);
       debugLog('检测到问答对', { count: pairs.length });
 
-      if (pairs.length === 0) {
+      // 2. 分析开场白意图（无论是否有问答对，都要分析开场白）
+      debugLog('准备调用 cmd_analyze_opening_intent', { sessionFilePath, language });
+
+      let intent: OpeningIntent;
+      try {
+        debugLog('🚀 发起 invoke 调用（使用 any 类型）...');
+        console.log('[TRACE] 即将调用 cmd_analyze_opening_intent');
+
+        // 尝试不使用 TypeScript 类型，直接用 any
+        const rawResult = await invoke<any>('cmd_analyze_opening_intent', {
+          sessionFilePath,
+          language,
+        });
+
+        console.log('[TRACE] invoke 调用成功，原始结果:', rawResult);
+
+        // 手动验证和转换结果
+        if (!rawResult || typeof rawResult !== 'object') {
+          throw new Error(`返回值无效: ${typeof rawResult}`);
+        }
+
+        intent = rawResult as OpeningIntent;
+        debugLog('✅ invoke 调用成功返回', { intent });
+      } catch (invokeErr) {
+        console.error('[TRACE] invoke 调用失败', invokeErr);
+        debugLog('❌ invoke 调用失败', {
+          error: invokeErr,
+          errorType: typeof invokeErr,
+          errorMessage: String(invokeErr),
+          errorKeys: invokeErr && typeof invokeErr === 'object' ? Object.keys(invokeErr) : [],
+          fullError: JSON.stringify(invokeErr),
+        });
+        throw invokeErr; // 重新抛出，让外层 catch 处理
+      }
+
+      debugLog('开场白意图分析完成', { intent });
+      setOpeningIntent(intent);
+
+      // 3. 如果既没有问答对，也没有开场白意图，才报错
+      if (pairs.length === 0 && (!intent.intentType || intent.intentType === 'unknown')) {
         setError(t('errors.noQAPairs'));
         return;
       }
 
-      // 2. 分析开场白意图
-      const intent = await invoke<OpeningIntent>('cmd_analyze_opening_intent', {
-        sessionFilePath,
-        language,
-      });
-      setOpeningIntent(intent);
-      debugLog('开场白意图分析完成', { intent });
-
-      // 3. 保存到历史记录
+      // 4. 保存到历史记录
       if (saveToHistory) {
         try {
           await invoke('cmd_save_intent_analysis', {
@@ -186,6 +217,13 @@ export function AnalysisPanel({
     } catch (err) {
       // Tauri invoke 错误格式: { error: string | { message: string } }
       let errorMessage = t('errors.analysisFailed');
+
+      debugLog('❌ 捕获到异常', {
+        error: err,
+        errorType: typeof err,
+        errorKeys: err && typeof err === 'object' ? Object.keys(err) : [],
+        errorString: JSON.stringify(err),
+      });
 
       if (typeof err === 'string') {
         errorMessage = err;

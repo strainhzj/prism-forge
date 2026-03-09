@@ -427,6 +427,16 @@ export const useSettingsStore = create<SettingsState>()(
         const providers = await invoke<ProviderResponse[]>('cmd_get_providers');
         debugLog('fetchProviders', 'success', providers);
 
+        // 🔍 调试：检查每个提供商的 baseUrl
+        if (import.meta.env.DEV) {
+          providers.forEach((p) => {
+            console.log(`[fetchProviders] Provider "${p.name}" (id=${p.id}):`, {
+              baseUrl: p.baseUrl,
+              providerType: p.providerType,
+            });
+          });
+        }
+
         set((state) => {
           state.providers = providers;
           state.activeProviderId = providers.find((p) => p.isActive)?.id ?? null;
@@ -464,6 +474,12 @@ export const useSettingsStore = create<SettingsState>()(
             model: request.model,
           },
         });
+
+        // 🔍 调试：检查后端返回的数据
+        if (import.meta.env.DEV) {
+          console.log('[useSettingsStore.saveProvider] 后端返回的提供商:', provider);
+          console.log('[useSettingsStore.saveProvider] 返回的 baseUrl:', provider.baseUrl);
+        }
 
         // 如果保存成功，刷新列表
         await get().fetchProviders();
