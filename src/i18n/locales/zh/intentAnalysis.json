@@ -4,6 +4,7 @@
     "retry": "重试",
     "reanalyze": "重新分析",
     "close": "关闭",
+    "cancel": "取消",
     "copy": "复制",
     "clearHistory": "清除历史",
     "clearHistoryConfirm": "确认清除该会话的分析历史记录？"

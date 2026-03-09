@@ -4,6 +4,7 @@
     "retry": "Retry",
     "reanalyze": "Reanalyze",
     "close": "Close",
+    "cancel": "Cancel",
     "copy": "Copy",
     "clearHistory": "Clear History",
     "clearHistoryConfirm": "Are you sure you want to clear the analysis history for this session?"

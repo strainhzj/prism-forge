@@ -83,6 +83,7 @@ export function AnalysisPanel({
   // 状态管理
   const [loading, setLoading] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [analyzing, setAnalyzing] = useState(false);  // 🆕 是否正在分析
   const [error, setError] = useState<string | null>(null);
   const [qaPairs, setQaPairs] = useState<DecisionQAPair[]>([]);  // ✅ 确保初始值是空数组
   const [openingIntent, setOpeningIntent] = useState<OpeningIntent | null>(null);
@@ -132,6 +133,7 @@ export function AnalysisPanel({
    */
   const performAnalysis = useCallback(async (saveToHistory = true) => {
     setLoading(true);
+    setAnalyzing(true);  // 🆕 标记开始分析
     setError(null);
 
     try {
@@ -244,6 +246,7 @@ export function AnalysisPanel({
       setError(errorMessage);
     } finally {
       setLoading(false);
+      setAnalyzing(false);  // 🆕 分析结束
     }
   }, [sessionFilePath, language, t]);
 
@@ -332,19 +335,31 @@ export function AnalysisPanel({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);  // ✅ 只依赖 isOpen，避免循环触发
 
+  /**
+   * 处理关闭对话框
+   */
+  const handleClose = useCallback(() => {
+    if (analyzing) {
+      // 分析中不允许关闭
+      return;
+    }
+    onClose();
+  }, [analyzing, onClose]);
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent
         className="max-w-6xl max-h-[80vh] overflow-hidden"
         style={{ backgroundColor: 'var(--color-bg-card)' }}
+        hideCloseButton={analyzing}  // 🆕 分析中时隐藏关闭按钮
       >
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle style={{ color: 'var(--color-text-primary)' }}>
               {t('panel.title')}
             </DialogTitle>
-            <div className="flex gap-2">
-              {history && !loading && (
+            <div className="flex gap-2 items-center">
+              {history && !loading && !analyzing && (
                 <>
                   {/* 显示上次分析时间 */}
                   <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
@@ -384,9 +399,20 @@ export function AnalysisPanel({
             // 加载状态
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin mb-4" style={{ color: 'var(--color-accent-blue)' }} />
-              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+              <p className="text-sm mb-3" style={{ color: 'var(--color-text-secondary)' }}>
                 {loading ? t('panel.analyzing') : t('panel.loadingHistory')}
               </p>
+              {/* 🆕 分析中显示取消按钮 */}
+              {analyzing && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClose}
+                  className="mt-2"
+                >
+                  {t('actions.cancel')}
+                </Button>
+              )}
             </div>
           ) : error ? (
             // 错误状态
