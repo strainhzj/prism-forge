@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::llm::interface::{
     ChatCompletionResponse, LLMService, Message, MessageRole, ModelParams, StreamChunk,
@@ -30,7 +31,11 @@ impl OllamaProvider {
     /// # 参数
     /// - `base_url`: Ollama 服务地址（默认 http://127.0.0.1:11434）
     pub fn new(base_url: Option<String>) -> Result<Self> {
-        let client = Client::builder().build().context("创建 HTTP 客户端失败")?;
+        let client = Client::builder()
+            .timeout(Duration::from_secs(300))  // Ollama 本地服务，给更长超时（5 分钟）
+            .connect_timeout(Duration::from_secs(5))
+            .build()
+            .context("创建 HTTP 客户端失败")?;
 
         Ok(Self {
             client,

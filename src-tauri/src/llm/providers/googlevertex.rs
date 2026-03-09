@@ -9,6 +9,7 @@ use futures::{Stream, StreamExt};
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Deserializer, Serialize};
+use std::time::Duration;
 
 use crate::llm::interface::{
     ChatCompletionResponse, LLMService, Message, MessageRole, ModelParams, StreamChunk,
@@ -36,7 +37,11 @@ impl GoogleVertexProvider {
     /// - `api_key`: Google Cloud API Key
     /// - `base_url`: API 基础 URL
     pub fn new(api_key: SecretString, base_url: String) -> Result<Self> {
-        let client = Client::builder().build().context("创建 HTTP 客户端失败")?;
+        let client = Client::builder()
+            .timeout(Duration::from_secs(120))
+            .connect_timeout(Duration::from_secs(10))
+            .build()
+            .context("创建 HTTP 客户端失败")?;
 
         Ok(Self {
             client,
@@ -48,7 +53,11 @@ impl GoogleVertexProvider {
 
     /// 使用 API Key 引用创建提供商
     pub fn with_ref(api_key: SecretString, base_url: String, api_key_ref: String) -> Result<Self> {
-        let client = Client::builder().build().context("创建 HTTP 客户端失败")?;
+        let client = Client::builder()
+            .timeout(Duration::from_secs(120))
+            .connect_timeout(Duration::from_secs(10))
+            .build()
+            .context("创建 HTTP 客户端失败")?;
 
         Ok(Self {
             client,
