@@ -64,7 +64,7 @@ export enum ApiProviderType {
   GOOGLE = 'google',
   GOOGLE_VERTEX = 'googlevertex',
   AZURE_OPENAI = 'azureopenai',
-  OPENAI_COMPATIBLE = 'openai-compatible',
+  OPENAI_COMPATIBLE = 'openaicompatible',
 }
 
 /**

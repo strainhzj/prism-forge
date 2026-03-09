@@ -47,7 +47,7 @@ export type ProviderType =
   | 'gemini'           // Google Gemini (API Key 认证)
   | 'vertexai'         // Google Vertex AI
   | 'azure-openai'     // Azure OpenAI
-  | 'openai-compatible'; // OpenAI 兼容接口
+  | 'openaicompatible'; // OpenAI 兼容接口（注意：匹配后端 Rust 枚举序列化）
 
 // ==================== 提供商配置 ====================
 
@@ -504,10 +504,10 @@ export const SYSTEM_PROVIDERS: Record<string, ProviderConfig> = {
     modelsUrl: 'https://aihubmix.com/models',
   },
 
-  'openai-compatible': {
-    id: 'openai-compatible',
+  'openaicompatible': {
+    id: 'openaicompatible',
     name: 'OpenAI Compatible (自定义)',
-    type: 'openai-compatible',
+    type: 'openaicompatible',
     apiHost: 'https://api.example.com/v1',
     defaultModel: 'gpt-4o-mini',
     requiresApiKey: true,
