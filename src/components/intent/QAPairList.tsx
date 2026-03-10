@@ -105,10 +105,12 @@ export const QAPairList = memo(function QAPairList({
                   : 'bg-[var(--color-bg-primary)] text-[var(--color-text-secondary)]'
               )}
             >
-              {qaPair.qaIndex + 1}
+              {/* 🔧 修复：安全处理 qaIndex，防止 NaN */}
+              {(qaPair.qaIndex ?? index) + 1}
             </span>
             <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-              Q&A #{qaPair.qaIndex + 1}
+              {/* 🔧 修复：安全处理 qaIndex，防止 #NaN */}
+              Q&A #{(qaPair.qaIndex ?? index) + 1}
             </span>
           </div>
 

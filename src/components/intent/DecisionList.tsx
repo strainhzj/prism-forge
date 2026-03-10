@@ -64,8 +64,17 @@ export const DecisionList = memo(function DecisionList({
     setError(null);
 
     try {
-      debugLog('分析问答对决策', { qaIndex: selectedQaPair.qaIndex });
+      debugLog('分析问答对决策', {
+        qaIndex: selectedQaPair.qaIndex,
+        assistantAnswerUuid: selectedQaPair.assistantAnswerUuid,
+        userDecisionUuid: selectedQaPair.userDecisionUuid,
+      });
 
+      if (DEBUG) {
+        console.log('[DecisionList] selectedQaPair:', selectedQaPair);
+      }
+
+      // ✅ Rust 端已添加 #[serde(rename_all = "camelCase")]，直接传递 camelCase 对象
       const result = await invoke<DecisionAnalysis>('cmd_analyze_decision', {
         qaPair: selectedQaPair,
         language,

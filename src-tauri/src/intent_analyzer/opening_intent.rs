@@ -13,6 +13,7 @@ use crate::llm::LLMClientManager;
 
 /// 开场白意图分析结果
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct OpeningIntent {
     /// 意图类型
@@ -23,6 +24,27 @@ pub struct OpeningIntent {
     pub description: Option<String>,
     /// 提取的关键信息
     pub key_info: Vec<String>,
+}
+
+/// LLM 响应的原始格式（snake_case，兼容 LLM 输出）
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct OpeningIntentRaw {
+    intent_type: String,
+    confidence: f32,
+    description: Option<String>,
+    key_info: Vec<String>,
+}
+
+impl From<OpeningIntentRaw> for OpeningIntent {
+    fn from(raw: OpeningIntentRaw) -> Self {
+        Self {
+            intent_type: raw.intent_type,
+            confidence: raw.confidence,
+            description: raw.description,
+            key_info: raw.key_info,
+        }
+    }
 }
 
 /// 开场白意图分析器
@@ -126,8 +148,22 @@ impl OpeningIntentAnalyzer {
             eprintln!("{}", cleaned_content);
         }
 
-        let result: OpeningIntent = serde_json::from_str(&cleaned_content)
-            .with_context(|| format!("解析 LLM 响应失败: {}", cleaned_content))?;
+        // 🔧 修复：尝试两种格式解析
+        // LLM 可能返回 camelCase 或 snake_case
+        let result = if let Ok(parsed) = serde_json::from_str::<OpeningIntent>(&cleaned_content) {
+            parsed
+        } else if let Ok(raw) = serde_json::from_str::<OpeningIntentRaw>(&cleaned_content) {
+            #[cfg(debug_assertions)]
+            {
+                eprintln!("[OpeningIntentAnalyzer] LLM 返回 snake_case，已自动转换");
+            }
+            raw.into()
+        } else {
+            anyhow::bail!(
+                "解析 LLM 响应失败: {}\n提示：LLM 返回的 JSON 字段名格式不匹配",
+                cleaned_content
+            );
+        };
 
         #[cfg(debug_assertions)]
         {

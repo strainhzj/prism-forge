@@ -13,6 +13,7 @@ use crate::intent_analyzer::{DecisionQAPair, OpeningIntent};
 
 /// 意图分析历史记录
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct IntentAnalysisHistory {
     /// 数据库 ID

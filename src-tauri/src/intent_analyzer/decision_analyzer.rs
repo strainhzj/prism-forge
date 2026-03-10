@@ -19,6 +19,7 @@ use crate::llm::LLMClientManager;
 
 /// 决策类型（固定枚举）
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub enum DecisionType {
     /// 技术选型（选择编程语言、框架、库等）
@@ -37,6 +38,7 @@ pub enum DecisionType {
 ///
 /// 用户考虑过但未选择的方案
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct Alternative {
     /// 备选方案名称
@@ -49,6 +51,7 @@ pub struct Alternative {
 ///
 /// 表示用户在问答对中做出的技术决策分析
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct DecisionAnalysis {
     /// 决策内容（一句话总结）
@@ -65,6 +68,58 @@ pub struct DecisionAnalysis {
     pub alternatives: Vec<Alternative>,
     /// 置信度（0-1）
     pub confidence: f64,
+}
+
+/// LLM 响应的原始格式（snake_case，兼容 LLM 输出）
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+struct DecisionAnalysisRaw {
+    decision_made: String,
+    decision_type: String,  // 字符串形式，后续转换为枚举
+    tech_stack: Vec<String>,
+    rationale: Vec<String>,
+    inferred_reasons: Vec<String>,
+    alternatives: Vec<AlternativeRaw>,
+    confidence: f64,
+}
+
+/// 备选方案的原始格式
+#[derive(Debug, Clone, Deserialize)]
+struct AlternativeRaw {
+    name: String,
+    reason: Option<String>,
+}
+
+impl From<AlternativeRaw> for Alternative {
+    fn from(raw: AlternativeRaw) -> Self {
+        Self {
+            name: raw.name,
+            reason: raw.reason,
+        }
+    }
+}
+
+impl From<DecisionAnalysisRaw> for DecisionAnalysis {
+    fn from(raw: DecisionAnalysisRaw) -> Self {
+        // 将字符串转换为枚举
+        let decision_type = match raw.decision_type.as_str() {
+            "TechnologyChoice" => DecisionType::TechnologyChoice,
+            "ArchitectureDesign" => DecisionType::ArchitectureDesign,
+            "ToolSelection" => DecisionType::ToolSelection,
+            "Implementation" => DecisionType::Implementation,
+            "Other" | _ => DecisionType::Other,
+        };
+
+        Self {
+            decision_made: raw.decision_made,
+            decision_type,
+            tech_stack: raw.tech_stack,
+            rationale: raw.rationale,
+            inferred_reasons: raw.inferred_reasons,
+            alternatives: raw.alternatives.into_iter().map(Into::into).collect(),
+            confidence: raw.confidence,
+        }
+    }
 }
 
 /// 决策分析器
@@ -186,11 +241,108 @@ impl DecisionAnalyzer {
         let messages = vec![LLMMessage::user(full_prompt)];
         let response = client.chat_completion(messages, params).await?;
 
+        // 🔍 调试日志：输出原始 LLM 响应
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[DecisionAnalyzer] LLM 原始响应:");
+            eprintln!("{}", response.content);
+            eprintln!("[DecisionAnalyzer] 响应长度: {}", response.content.len());
+        }
+
         // 10. 解析 JSON 响应
-        let result: DecisionAnalysis = serde_json::from_str(&response.content)
-            .with_context(|| format!("解析 LLM 响应失败: {}", response.content))?;
+        // 🔧 修复：处理 LLM 可能返回的额外文本（如代码块标记）
+        let json_str = Self::extract_json_from_response(&response.content)?;
+
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[DecisionAnalyzer] 提取的 JSON:");
+            eprintln!("{}", json_str);
+        }
+
+        // 🔧 修复：尝试两种格式解析
+        // LLM 可能返回 camelCase 或 snake_case
+        let result = if let Ok(parsed) = serde_json::from_str::<DecisionAnalysis>(&json_str) {
+            parsed
+        } else if let Ok(raw) = serde_json::from_str::<DecisionAnalysisRaw>(&json_str) {
+            #[cfg(debug_assertions)]
+            {
+                eprintln!("[DecisionAnalyzer] LLM 返回 snake_case，已自动转换");
+            }
+            raw.into()
+        } else {
+            anyhow::bail!(
+                "解析 LLM 响应失败: {}\n提示：LLM 返回的 JSON 字段名格式不匹配",
+                json_str
+            );
+        };
 
         Ok(result)
+    }
+
+    /// 从 LLM 响应中提取 JSON 内容
+    ///
+    /// 处理 LLM 可能返回的额外文本，如：
+    /// - 代码块标记 (```json ... ```)
+    /// - 前后的解释文字
+    /// - Markdown 格式
+    fn extract_json_from_response(response: &str) -> Result<String> {
+        let response = response.trim();
+
+        // 尝试直接解析
+        if let Ok(_) = serde_json::from_str::<serde_json::Value>(response) {
+            return Ok(response.to_string());
+        }
+
+        // 尝试提取 ```json ... ``` 代码块
+        if let Some(start) = response.find("```json") {
+            let start = start + 7; // 跳过 "```json"
+            if let Some(end) = response[start..].find("```") {
+                let json = response[start..start + end].trim();
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[DecisionAnalyzer] 从代码块提取 JSON");
+                }
+                return Ok(json.to_string());
+            }
+        }
+
+        // 尝试提取 ``` ... ``` 代码块（无语言标记）
+        if let Some(start) = response.find("```") {
+            let start = start + 3; // 跳过 "```"
+            if let Some(end) = response[start..].find("```") {
+                let json = response[start..start + end].trim();
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[DecisionAnalyzer] 从无标记代码块提取 JSON");
+                }
+                return Ok(json.to_string());
+            }
+        }
+
+        // 尝试找到第一个 { 和最后一个 }
+        if let Some(start) = response.find('{') {
+            if let Some(end) = response.rfind('}') {
+                if end > start {
+                    let json = &response[start..=end];
+                    #[cfg(debug_assertions)]
+                    {
+                        eprintln!("[DecisionAnalyzer] 从大括号提取 JSON");
+                    }
+                    return Ok(json.to_string());
+                }
+            }
+        }
+
+        // 都失败了，返回原始响应并附带详细错误
+        anyhow::bail!(
+            "无法从 LLM 响应中提取有效的 JSON。\n\
+             原始响应:\n{}\n\
+             可能原因:\n\
+             1. LLM 返回了非 JSON 格式的内容\n\
+             2. JSON 被包裹在代码块中但提取失败\n\
+             3. JSON 格式有误",
+            response
+        );
     }
 }
 

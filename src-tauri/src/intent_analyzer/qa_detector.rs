@@ -31,6 +31,7 @@ use ts_rs::TS;
 ///
 /// 用于存储当前决策之前的历史问答对
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct QAPairContext {
     /// 用户问题内容
@@ -43,6 +44,7 @@ pub struct QAPairContext {
 ///
 /// 表示用户基于助手回答做出的决策记录
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase")]
 pub struct DecisionQAPair {
     /// 问答对索引（从 0 开始）
@@ -61,6 +63,7 @@ pub struct DecisionQAPair {
     pub user_decision: String,
 
     /// 前序问答对上下文（决策之前的历史对话）
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub context_qa_pairs: Option<Vec<QAPairContext>>,
 }
