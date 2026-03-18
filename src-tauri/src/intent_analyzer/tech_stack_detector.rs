@@ -101,7 +101,7 @@ impl TechStackDetector {
             (r"\bSequelize\b", "Sequelize"),
             (r"\bTypeORM\b", "TypeORM"),
             (r"\bHibernate\b", "Hibernate"),
-            (r"\b SQLAlchemy\b", "SQLAlchemy"),
+            (r"\b(?:SQLAlchemy|sqlalchemy)\b", "SQLAlchemy"),
 
             // 异步运行时
             (r"\bTokio\b", "Tokio"),
@@ -117,7 +117,7 @@ impl TechStackDetector {
             // 测试框架
             (r"\bJest\b", "Jest"),
             (r"\bVitest\b", "Vitest"),
-            (r"\bPytest\b", "Pytest"),
+            (r"\b(?:Pytest|pytest)\b", "Pytest"),
             (r"\bJUnit\b", "JUnit"),
 
             // HTTP 客户端

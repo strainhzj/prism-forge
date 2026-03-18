@@ -270,12 +270,10 @@ fn system_time_to_rfc3339(time: SystemTime) -> Result<String> {
     let nsecs = duration.subsec_nanos();
 
     // 使用 chrono 格式化
-    use chrono::{DateTime, NaiveDateTime, Utc};
-    let naive = NaiveDateTime::from_timestamp_opt(secs as i64, nsecs);
-    match naive {
-        Some(dt) => Ok(DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc).to_rfc3339()),
-        None => Err(anyhow::anyhow!("无效的时间戳")),
-    }
+    use chrono::{DateTime, Utc};
+    let dt = DateTime::from_timestamp(secs as i64, nsecs)
+        .ok_or_else(|| anyhow::anyhow!("无效的时间戳"))?;
+    Ok(dt.to_rfc3339())
 }
 
 /// 计算 JSONL 文件的行数（消息数量）

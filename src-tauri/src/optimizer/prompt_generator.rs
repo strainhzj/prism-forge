@@ -127,8 +127,6 @@ impl PromptGenerator {
     }
 
     /// 解析配置文件路径
-
-    /// 解析配置文件路径
     ///
     /// 优先级：
     /// 1. 开发模式：从可执行文件位置向上查找项目根目录，然后定位 src-tauri/optimizer_config.toml
