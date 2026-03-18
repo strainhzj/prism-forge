@@ -42,9 +42,9 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 // 导入现有类型
-use crate::parser::jsonl::JsonlParser;
-use crate::parser::view_level::{ViewLevel, MessageFilter};
 use crate::database::models::Message;
+use crate::parser::jsonl::JsonlParser;
+use crate::parser::view_level::{MessageFilter, ViewLevel};
 
 // ==================== 配置 ====================
 
@@ -133,11 +133,7 @@ impl SessionParserService {
     /// - 文件不存在
     /// - 文件解析失败
     /// - 消息转换失败
-    pub fn parse_session(
-        &self,
-        file_path: &str,
-        session_id: &str,
-    ) -> Result<SessionParseResult> {
+    pub fn parse_session(&self, file_path: &str, session_id: &str) -> Result<SessionParseResult> {
         // 1. 使用 JsonlParser 解析文件
         let entries = self.parse_file(file_path)?;
         let total_entries = entries.len();
@@ -217,16 +213,17 @@ impl SessionParserService {
         entry: &crate::parser::jsonl::JsonlEntry,
         session_id: &str,
     ) -> Option<Message> {
-        
-
         // 🔧 修复：优先使用 type 字段，如果不存在或无效则尝试使用 role 字段
         // Claude Code 会话文件的 type 字段直接是角色名称 (user/assistant/system)
         // 而不是 "message" 类型
-        let msg_type = entry.message_type()
-            .or_else(|| entry.role())  // Fallback: 使用 role 字段
+        let msg_type = entry
+            .message_type()
+            .or_else(|| entry.role()) // Fallback: 使用 role 字段
             .unwrap_or_else(|| {
                 // 最后的 fallback: 检查 message.type 字段
-                entry.data.get("message")
+                entry
+                    .data
+                    .get("message")
                     .and_then(|v| v.as_object())
                     .and_then(|obj| obj.get("type"))
                     .and_then(|v| v.as_str())
@@ -237,19 +234,26 @@ impl SessionParserService {
         // 只处理对话消息类型 (user, assistant, system)
         if !matches!(msg_type.as_str(), "user" | "assistant" | "system") {
             if self.config.debug {
-                eprintln!("[SessionParser] 跳过非对话消息类型: msg_type={:?}", msg_type);
+                eprintln!(
+                    "[SessionParser] 跳过非对话消息类型: msg_type={:?}",
+                    msg_type
+                );
             }
             return None;
         }
 
         // 从 JsonlEntry 提取消息数据
         let uuid = entry.data.get("uuid")?.as_str()?.to_string();
-        let parent_uuid = entry.data.get("parentUuid")
+        let parent_uuid = entry
+            .data
+            .get("parentUuid")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
         // 从 data 中提取 timestamp
-        let timestamp = entry.data.get("timestamp")
+        let timestamp = entry
+            .data
+            .get("timestamp")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
@@ -447,7 +451,8 @@ impl SessionParserService {
 
                 // 简单回退逻辑：仅过滤 /clear 命令
                 let trimmed = summary.trim();
-                trimmed.starts_with("/clear") || (trimmed.starts_with("/") && !trimmed.contains(" "))
+                trimmed.starts_with("/clear")
+                    || (trimmed.starts_with("/") && !trimmed.contains(" "))
             }
         }
     }
@@ -455,10 +460,7 @@ impl SessionParserService {
     /// 应用视图等级过滤（步骤 3）
     ///
     /// 根据视图等级过滤消息
-    fn apply_view_level_filter(
-        &self,
-        messages: Vec<Message>,
-    ) -> Result<(Vec<Message>, usize)> {
+    fn apply_view_level_filter(&self, messages: Vec<Message>) -> Result<(Vec<Message>, usize)> {
         let filter = MessageFilter::new(self.config.view_level.clone());
         let before_count = messages.len();
         let filtered = filter.filter_messages(messages);
@@ -614,7 +616,7 @@ mod integration_tests {
         let file_path = test_file_path.to_str().unwrap();
 
         let config = SessionParserConfig {
-            enable_content_filter: true,  // 启用内容过滤
+            enable_content_filter: true, // 启用内容过滤
             view_level: ViewLevel::Full,
             debug: false,
         };
@@ -646,7 +648,7 @@ mod integration_tests {
 
         let config = SessionParserConfig {
             enable_content_filter: false,
-            view_level: ViewLevel::Conversation,  // 对话模式
+            view_level: ViewLevel::Conversation, // 对话模式
             debug: false,
         };
 
@@ -750,7 +752,8 @@ mod integration_tests {
         let parse_result = result.unwrap();
 
         // 验证消息顺序保持不变
-        let timestamps: Vec<&str> = parse_result.messages
+        let timestamps: Vec<&str> = parse_result
+            .messages
             .iter()
             .map(|msg| msg.timestamp.as_str())
             .collect();
@@ -771,4 +774,3 @@ mod integration_tests {
         assert!(result.unwrap_err().to_string().contains("会话文件不存在"));
     }
 }
-

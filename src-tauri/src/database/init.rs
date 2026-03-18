@@ -52,7 +52,8 @@ fn initialize_connection() -> Result<Arc<Mutex<Connection>>> {
     log::debug!("忙等待超时设置为 30 秒");
 
     // 设置 PRAGMA: 启用 WAL 模式（提升并发性能）
-    let _journal_mode: String = conn.query_row("PRAGMA journal_mode = WAL;", [], |row| row.get(0))?;
+    let _journal_mode: String =
+        conn.query_row("PRAGMA journal_mode = WAL;", [], |row| row.get(0))?;
     log::debug!("WAL 模式已启用");
 
     // 加载 sqlite-vec 扩展
@@ -102,7 +103,11 @@ pub fn get_connection_shared() -> Result<Arc<Mutex<Connection>>> {
                     let is_poisoned = matches!(e, std::sync::TryLockError::Poisoned(_));
                     return Err(anyhow::anyhow!(
                         "获取初始化锁超时（10秒）：{}",
-                        if is_poisoned { "Mutex 已被毒化" } else { "锁竞争超时" }
+                        if is_poisoned {
+                            "Mutex 已被毒化"
+                        } else {
+                            "锁竞争超时"
+                        }
                     ));
                 }
                 std::thread::sleep(RETRY_DELAY);

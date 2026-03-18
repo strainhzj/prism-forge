@@ -48,16 +48,22 @@ impl ApiKeyStorage {
     /// - **Linux**: 存储到 Secret Service，依赖正在运行的密钥服务
     pub fn save_api_key(provider_id: i64, api_key: SecretString) -> Result<()> {
         let entry = Self::get_entry(provider_id)?;
-        
+
         #[cfg(debug_assertions)]
-        eprintln!("[ApiKeyStorage] Saving API Key for provider_id={}", provider_id);
+        eprintln!(
+            "[ApiKeyStorage] Saving API Key for provider_id={}",
+            provider_id
+        );
 
         entry
             .set_password(api_key.expose_secret())
             .with_context(|| format!("保存 API Key 失败 (provider_id={})", provider_id))?;
 
         #[cfg(debug_assertions)]
-        eprintln!("[ApiKeyStorage] API Key saved successfully for provider_id={}", provider_id);
+        eprintln!(
+            "[ApiKeyStorage] API Key saved successfully for provider_id={}",
+            provider_id
+        );
 
         Ok(())
     }
@@ -87,14 +93,20 @@ impl ApiKeyStorage {
         let entry = Self::get_entry(provider_id)?;
 
         #[cfg(debug_assertions)]
-        eprintln!("[ApiKeyStorage] Getting API Key for provider_id={}", provider_id);
+        eprintln!(
+            "[ApiKeyStorage] Getting API Key for provider_id={}",
+            provider_id
+        );
 
         let password = entry
             .get_password()
             .with_context(|| format!("获取 API Key 失败 (provider_id={})", provider_id))?;
 
         #[cfg(debug_assertions)]
-        eprintln!("[ApiKeyStorage] API Key retrieved successfully for provider_id={}", provider_id);
+        eprintln!(
+            "[ApiKeyStorage] API Key retrieved successfully for provider_id={}",
+            provider_id
+        );
 
         Ok(SecretString::new(password.into()))
     }
@@ -113,7 +125,9 @@ impl ApiKeyStorage {
         match entry.delete_credential() {
             Ok(_) => Ok(()),
             Err(KeyringError::NoEntry) => Ok(()), // 密钥不存在，视为成功
-            Err(e) => Err(e).with_context(|| format!("删除 API Key 失败 (provider_id={})", provider_id)),
+            Err(e) => {
+                Err(e).with_context(|| format!("删除 API Key 失败 (provider_id={})", provider_id))
+            }
         }
     }
 
@@ -177,7 +191,11 @@ impl ApiKeyStorage {
         format!(
             "平台: {}, 密钥库可用: {}",
             std::env::consts::OS,
-            if Self::has_api_key(-1) { "是" } else { "未知状态" }
+            if Self::has_api_key(-1) {
+                "是"
+            } else {
+                "未知状态"
+            }
         )
     }
 }

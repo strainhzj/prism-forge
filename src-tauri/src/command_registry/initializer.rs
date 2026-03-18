@@ -2,9 +2,9 @@
 //!
 //! 按正确顺序初始化所有依赖模块
 
-use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 use crate::command_registry::errors::{ModuleError, ModuleErrorType};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Module initializer that manages module dependencies and initialization order
 pub struct ModuleInitializer {
@@ -17,16 +17,16 @@ pub struct ModuleInitializer {
 pub trait Module: Send + Sync {
     /// Get the module name
     fn name(&self) -> &str;
-    
+
     /// Get the list of module dependencies
     fn dependencies(&self) -> Vec<String>;
-    
+
     /// Initialize the module
     fn initialize(&mut self) -> Result<(), ModuleError>;
-    
+
     /// Perform health check on the module
     fn health_check(&self) -> Result<(), ModuleError>;
-    
+
     /// Shutdown the module
     fn shutdown(&mut self) -> Result<(), ModuleError>;
 }
@@ -78,18 +78,18 @@ pub enum ModuleType {
 /// Type of dependency
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DependencyType {
-    Hard,      // 必须依赖
-    Soft,      // 可选依赖
-    Circular,  // 循环依赖（需要特殊处理）
+    Hard,     // 必须依赖
+    Soft,     // 可选依赖
+    Circular, // 循环依赖（需要特殊处理）
 }
 
 /// Recovery strategy for failed modules
 #[derive(Debug, Clone)]
 pub enum RecoveryStrategy {
-    Retry,      // Retry initialization
-    Fallback,   // Use fallback configuration
-    Skip,       // Skip this module (non-critical)
-    Abort,      // Abort initialization (critical failure)
+    Retry,    // Retry initialization
+    Fallback, // Use fallback configuration
+    Skip,     // Skip this module (non-critical)
+    Abort,    // Abort initialization (critical failure)
 }
 
 /// Health status of a module
@@ -139,7 +139,12 @@ impl HealthCheckReport {
         }
     }
 
-    pub fn add_module_status(&mut self, name: String, status: HealthStatus, response_time: std::time::Duration) {
+    pub fn add_module_status(
+        &mut self,
+        name: String,
+        status: HealthStatus,
+        response_time: std::time::Duration,
+    ) {
         // Update overall status based on module status
         match &status {
             HealthStatus::Critical(_) | HealthStatus::Failed(_) => {
@@ -165,7 +170,7 @@ impl HealthCheckReport {
             dependency,
             issue,
         });
-        
+
         // Dependency issues indicate degraded system health
         if matches!(self.overall_status, SystemHealthStatus::Healthy) {
             self.overall_status = SystemHealthStatus::Degraded;
@@ -183,11 +188,9 @@ impl HealthCheckReport {
     pub fn get_critical_modules(&self) -> Vec<String> {
         self.module_statuses
             .iter()
-            .filter_map(|(name, status)| {
-                match status {
-                    HealthStatus::Critical(_) | HealthStatus::Failed(_) => Some(name.clone()),
-                    _ => None,
-                }
+            .filter_map(|(name, status)| match status {
+                HealthStatus::Critical(_) | HealthStatus::Failed(_) => Some(name.clone()),
+                _ => None,
             })
             .collect()
     }
@@ -206,7 +209,7 @@ impl ModuleInitializer {
     /// Register a module with the initializer
     pub fn register_module(&mut self, module: Box<dyn Module>) -> Result<(), ModuleError> {
         let name = module.name().to_string();
-        
+
         // Check for duplicate registration
         if self.modules.contains_key(&name) {
             return Err(ModuleError::new(
@@ -234,8 +237,9 @@ impl ModuleInitializer {
         }
 
         // Set initial state
-        self.initialization_state.insert(name.clone(), InitState::Pending);
-        
+        self.initialization_state
+            .insert(name.clone(), InitState::Pending);
+
         // Register the module
         self.modules.insert(name, module);
 
@@ -250,11 +254,12 @@ impl ModuleInitializer {
         for module_name in initialization_order {
             if let Err(error) = self.initialize_module(&module_name) {
                 errors.push(error.clone());
-                
+
                 // Mark as failed
-                self.initialization_state.insert(module_name.clone(), InitState::Failed(
-                    error.message.clone()
-                ));
+                self.initialization_state.insert(
+                    module_name.clone(),
+                    InitState::Failed(error.message.clone()),
+                );
 
                 // Attempt recovery for critical modules
                 if let Err(recovery_error) = self.attempt_recovery(&module_name, &error) {
@@ -288,9 +293,10 @@ impl ModuleInitializer {
                         retry_queue.push((module_name.clone(), error.clone()));
                     } else {
                         errors.push(error.clone());
-                        self.initialization_state.insert(module_name.clone(), InitState::Failed(
-                            error.message.clone()
-                        ));
+                        self.initialization_state.insert(
+                            module_name.clone(),
+                            InitState::Failed(error.message.clone()),
+                        );
                     }
                 }
             }
@@ -304,16 +310,21 @@ impl ModuleInitializer {
                     if let Err(retry_error) = self.initialize_module(&module_name) {
                         let error_message = retry_error.message.clone();
                         errors.push(retry_error);
-                        self.initialization_state.insert(module_name, InitState::Failed(
-                            format!("Module initialization failed after recovery attempt: {}", error_message)
-                        ));
+                        self.initialization_state.insert(
+                            module_name,
+                            InitState::Failed(format!(
+                                "Module initialization failed after recovery attempt: {}",
+                                error_message
+                            )),
+                        );
                     }
                 }
                 Err(recovery_error) => {
                     errors.push(recovery_error);
-                    self.initialization_state.insert(module_name, InitState::Failed(
-                        "Recovery failed".to_string()
-                    ));
+                    self.initialization_state.insert(
+                        module_name,
+                        InitState::Failed("Recovery failed".to_string()),
+                    );
                 }
             }
         }
@@ -346,12 +357,12 @@ impl ModuleInitializer {
     /// Perform comprehensive health check with detailed reporting
     pub fn comprehensive_health_check(&self) -> HealthCheckReport {
         let mut report = HealthCheckReport::new();
-        
+
         for (name, module) in &self.modules {
             let start_time = std::time::Instant::now();
             let health_result = module.health_check();
             let duration = start_time.elapsed();
-            
+
             let status = match &health_result {
                 Ok(()) => HealthStatus::Healthy,
                 Err(error) => {
@@ -371,8 +382,15 @@ impl ModuleInitializer {
             if let Some(deps) = self.get_module_dependencies(name) {
                 for dep in deps {
                     if let Some(dep_status) = report.get_module_status(&dep) {
-                        if matches!(dep_status, HealthStatus::Critical(_) | HealthStatus::Failed(_)) {
-                            report.add_dependency_issue(name.clone(), dep, "Dependency unhealthy".to_string());
+                        if matches!(
+                            dep_status,
+                            HealthStatus::Critical(_) | HealthStatus::Failed(_)
+                        ) {
+                            report.add_dependency_issue(
+                                name.clone(),
+                                dep,
+                                "Dependency unhealthy".to_string(),
+                            );
                         }
                     }
                 }
@@ -390,7 +408,9 @@ impl ModuleInitializer {
 
     /// Get dependencies for a specific module
     fn get_module_dependencies(&self, module_name: &str) -> Option<Vec<String>> {
-        self.modules.get(module_name).map(|module| module.dependencies())
+        self.modules
+            .get(module_name)
+            .map(|module| module.dependencies())
     }
 
     /// Get the state of a specific module
@@ -406,40 +426,47 @@ impl ModuleInitializer {
     /// Initialize a specific module
     fn initialize_module(&mut self, name: &str) -> Result<(), ModuleError> {
         // Check if module exists
-        let module = self.modules.get_mut(name)
-            .ok_or_else(|| ModuleError::new(
+        let module = self.modules.get_mut(name).ok_or_else(|| {
+            ModuleError::new(
                 name.to_string(),
                 "Module not found".to_string(),
                 ModuleErrorType::InitializationFailed,
-            ))?;
+            )
+        })?;
 
         // Set state to initializing
-        self.initialization_state.insert(name.to_string(), InitState::Initializing);
+        self.initialization_state
+            .insert(name.to_string(), InitState::Initializing);
 
         // Initialize the module
         match module.initialize() {
             Ok(()) => {
-                self.initialization_state.insert(name.to_string(), InitState::Ready);
+                self.initialization_state
+                    .insert(name.to_string(), InitState::Ready);
                 Ok(())
             }
             Err(error) => {
-                self.initialization_state.insert(name.to_string(), InitState::Failed(
-                    error.message.clone()
-                ));
+                self.initialization_state
+                    .insert(name.to_string(), InitState::Failed(error.message.clone()));
                 Err(error)
             }
         }
     }
 
     /// Attempt to recover from a module initialization failure
-    fn attempt_recovery(&mut self, module_name: &str, error: &ModuleError) -> Result<(), ModuleError> {
+    fn attempt_recovery(
+        &mut self,
+        module_name: &str,
+        error: &ModuleError,
+    ) -> Result<(), ModuleError> {
         // Determine recovery strategy based on error type and module criticality
         let recovery_strategy = self.determine_recovery_strategy(module_name, error);
-        
+
         match recovery_strategy {
             RecoveryStrategy::Retry => {
                 // Simple retry - reset state and try again
-                self.initialization_state.insert(module_name.to_string(), InitState::Pending);
+                self.initialization_state
+                    .insert(module_name.to_string(), InitState::Pending);
                 Ok(())
             }
             RecoveryStrategy::Fallback => {
@@ -448,9 +475,10 @@ impl ModuleInitializer {
             }
             RecoveryStrategy::Skip => {
                 // Mark as disabled but continue
-                self.initialization_state.insert(module_name.to_string(), InitState::Failed(
-                    "Skipped due to non-critical failure".to_string()
-                ));
+                self.initialization_state.insert(
+                    module_name.to_string(),
+                    InitState::Failed("Skipped due to non-critical failure".to_string()),
+                );
                 Ok(())
             }
             RecoveryStrategy::Abort => {
@@ -465,7 +493,11 @@ impl ModuleInitializer {
     }
 
     /// Determine the appropriate recovery strategy for a failed module
-    fn determine_recovery_strategy(&self, module_name: &str, error: &ModuleError) -> RecoveryStrategy {
+    fn determine_recovery_strategy(
+        &self,
+        module_name: &str,
+        error: &ModuleError,
+    ) -> RecoveryStrategy {
         // Critical modules require different handling
         if self.is_critical_module(module_name) {
             match error.error_type {
@@ -489,25 +521,26 @@ impl ModuleInitializer {
     fn apply_fallback_configuration(&mut self, module_name: &str) -> Result<(), ModuleError> {
         // This would typically involve loading safe defaults or minimal configuration
         // For now, we'll mark it as a degraded state
-        self.initialization_state.insert(module_name.to_string(), InitState::Failed(
-            "Running in fallback mode".to_string()
-        ));
-        
+        self.initialization_state.insert(
+            module_name.to_string(),
+            InitState::Failed("Running in fallback mode".to_string()),
+        );
+
         // In a real implementation, this might:
         // - Load minimal configuration
         // - Disable non-essential features
         // - Set up monitoring for recovery
-        
+
         Ok(())
     }
 
     /// Check if an error is recoverable
     fn is_recoverable_error(&self, error: &ModuleError) -> bool {
         match error.error_type {
-            ModuleErrorType::InitializationFailed => true,  // Can retry
-            ModuleErrorType::HealthCheckFailed => true,     // Can retry
-            ModuleErrorType::DependencyMissing => false,    // Cannot recover without dependency
-            ModuleErrorType::ShutdownFailed => false,       // Shutdown errors are not recoverable during initialization
+            ModuleErrorType::InitializationFailed => true, // Can retry
+            ModuleErrorType::HealthCheckFailed => true,    // Can retry
+            ModuleErrorType::DependencyMissing => false,   // Cannot recover without dependency
+            ModuleErrorType::ShutdownFailed => false, // Shutdown errors are not recoverable during initialization
         }
     }
 
@@ -515,7 +548,7 @@ impl ModuleInitializer {
     pub fn shutdown_all(&mut self) -> Result<(), Vec<ModuleError>> {
         let mut shutdown_order = self.get_initialization_order().unwrap_or_default();
         shutdown_order.reverse(); // Shutdown in reverse order
-        
+
         let mut errors = Vec::new();
 
         for module_name in shutdown_order {
@@ -525,7 +558,8 @@ impl ModuleInitializer {
                 }
             }
             // Mark as pending regardless of shutdown result
-            self.initialization_state.insert(module_name, InitState::Pending);
+            self.initialization_state
+                .insert(module_name, InitState::Pending);
         }
 
         if errors.is_empty() {
@@ -648,7 +682,10 @@ mod tests {
 
         fn initialize(&mut self) -> Result<(), ModuleError> {
             if self.should_fail {
-                Err(ModuleError::initialization_failed(&self.name, "Mock failure"))
+                Err(ModuleError::initialization_failed(
+                    &self.name,
+                    "Mock failure",
+                ))
             } else {
                 Ok(())
             }
@@ -686,14 +723,14 @@ mod tests {
     #[test]
     fn test_dependency_order() {
         let mut initializer = ModuleInitializer::new();
-        
+
         // Module A depends on Module B
         let module_a = Box::new(MockModule {
             name: "module_a".to_string(),
             dependencies: vec!["module_b".to_string()],
             should_fail: false,
         });
-        
+
         let module_b = Box::new(MockModule {
             name: "module_b".to_string(),
             dependencies: vec![],
@@ -704,7 +741,7 @@ mod tests {
         initializer.register_module(module_b).unwrap();
 
         let order = initializer.get_initialization_order().unwrap();
-        
+
         // Module B should be initialized before Module A
         let b_index = order.iter().position(|x| x == "module_b").unwrap();
         let a_index = order.iter().position(|x| x == "module_a").unwrap();

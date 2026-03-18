@@ -3,7 +3,7 @@
 //! 管理 SQLite 数据库的版本和表结构
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use std::path::PathBuf;
 
 /// 数据库文件名
@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 18;
+const CURRENT_DB_VERSION: i32 = 22;
 
 /// 初始化数据库
 ///
@@ -87,6 +87,10 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             16 => migrate_v16(conn)?,
             17 => migrate_v17(conn)?,
             18 => migrate_v18(conn)?,
+            19 => migrate_v19(conn)?,
+            20 => migrate_v20(conn)?,
+            21 => migrate_v21(conn)?,
+            22 => migrate_v22(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -178,10 +182,7 @@ fn migrate_v2(conn: &mut Connection) -> Result<()> {
 }
 
 fn migrate_v2_impl(conn: &mut Connection) -> Result<()> {
-    conn.execute(
-        "ALTER TABLE api_providers ADD COLUMN model TEXT;",
-        [],
-    )?;
+    conn.execute("ALTER TABLE api_providers ADD COLUMN model TEXT;", [])?;
     Ok(())
 }
 
@@ -428,7 +429,10 @@ pub fn migrate_v6_impl(conn: &mut Connection) -> Result<()> {
     );
 
     if let Err(e) = vec_table_created {
-        log::warn!("创建 message_embeddings 虚拟表失败（可能 sqlite-vec 扩展未加载）: {}", e);
+        log::warn!(
+            "创建 message_embeddings 虚拟表失败（可能 sqlite-vec 扩展未加载）: {}",
+            e
+        );
         // 不中断迁移，继续创建其他表
     } else {
         log::info!("message_embeddings 虚拟表创建成功");
@@ -775,7 +779,10 @@ pub fn migrate_v14_impl(conn: &mut Connection) -> Result<()> {
     );
 
     if let Err(e) = vec_table_created {
-        log::warn!("创建 message_embeddings 虚拟表失败（可能 sqlite-vec 扩展未加载）: {}", e);
+        log::warn!(
+            "创建 message_embeddings 虚拟表失败（可能 sqlite-vec 扩展未加载）: {}",
+            e
+        );
     } else {
         log::info!("message_embeddings 虚拟表创建成功");
     }
@@ -809,10 +816,7 @@ pub fn migrate_v15_impl(conn: &mut Connection) -> Result<()> {
 
     if column_exists == 0 {
         // 列不存在，添加列
-        conn.execute(
-            "ALTER TABLE messages ADD COLUMN content_type TEXT",
-            [],
-        )?;
+        conn.execute("ALTER TABLE messages ADD COLUMN content_type TEXT", [])?;
         log::info!("✅ 已添加 content_type 列到 messages 表");
     } else {
         log::info!("ℹ️  content_type 列已存在，跳过迁移");
@@ -968,10 +972,10 @@ fn migrate_v17_impl(conn: &mut Connection) -> Result<()> {
             default_prompt_zh,
             "会话分析提示词（中文）",
             "session_analysis",
-            1i32,  // is_default
-            1i32,  // is_system
+            1i32, // is_default
+            1i32, // is_system
             "zh",
-            1i32,  // version
+            1i32, // version
             now.clone(),
             now.clone()
         ],
@@ -1005,10 +1009,10 @@ Output Format:
             default_prompt_en,
             "Session analysis prompt (English)",
             "session_analysis",
-            1i32,  // is_default
-            1i32,  // is_system
+            1i32, // is_default
+            1i32, // is_system
             "en",
-            1i32,  // version
+            1i32, // version
             now.clone(),
             now.clone()
         ],
@@ -1185,6 +1189,529 @@ fn migrate_v18_impl(conn: &mut Connection) -> Result<()> {
     Ok(())
 }
 
+/// 迁移到版本 19: 创建意图分析表
+///
+/// # 功能
+/// - 创建 6 张表支持会话意图分析功能
+/// - project_tech_stack: 项目技术栈配置
+/// - session_intents: 会话意图分析结果
+/// - qa_pairs: 问答对（助手回答+用户后续决策）
+/// - decision_points: 决策点分析结果
+/// - analysis_feedback: 用户反馈
+/// - prompt_combinations: 提示词组合（v1.0.5 使用）
+#[cfg(test)]
+pub fn migrate_v19(conn: &mut Connection) -> Result<()> {
+    migrate_v19_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v19(conn: &mut Connection) -> Result<()> {
+    migrate_v19_impl(conn)
+}
+
+fn migrate_v19_impl(conn: &mut Connection) -> Result<()> {
+    // 1. 创建 project_tech_stack 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS project_tech_stack (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_path TEXT NOT NULL UNIQUE,
+            tech_stack TEXT,
+            detection_method TEXT,
+            detection_source TEXT,
+            is_confirmed INTEGER NOT NULL DEFAULT 0,
+            last_verified_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_project_tech_stack_path
+         ON project_tech_stack(project_path);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_project_tech_stack_confirmed
+         ON project_tech_stack(is_confirmed);",
+        [],
+    )?;
+
+    log::info!("✅ 已创建 project_tech_stack 表");
+
+    // 2. 创建 session_intents 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS session_intents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_file_path TEXT NOT NULL UNIQUE,
+            project_path TEXT,
+            opening_goal TEXT,
+            intent_type TEXT,
+            project_type TEXT,
+            tech_stack TEXT,
+            constraints TEXT,
+            language TEXT,
+            confidence REAL,
+            analysis_status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+
+            FOREIGN KEY (project_path) REFERENCES project_tech_stack(project_path) ON DELETE SET NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_session_intents_file_path
+         ON session_intents(session_file_path);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_session_intents_project
+         ON session_intents(project_path);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_session_intents_status
+         ON session_intents(analysis_status);",
+        [],
+    )?;
+
+    log::info!("✅ 已创建 session_intents 表");
+
+    // 3. 创建 qa_pairs 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS qa_pairs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_intent_id INTEGER NOT NULL,
+            session_file_path TEXT NOT NULL,
+            qa_index INTEGER NOT NULL,
+            user_question_uuid TEXT NOT NULL,
+            assistant_answer_uuid TEXT,
+            user_question TEXT NOT NULL,
+            assistant_answer TEXT,
+            has_decision INTEGER NOT NULL DEFAULT 0,
+            decision_count INTEGER NOT NULL DEFAULT 0,
+            analysis_status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+
+            FOREIGN KEY (session_intent_id) REFERENCES session_intents(id) ON DELETE CASCADE,
+            UNIQUE(session_intent_id, qa_index)
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_qa_pairs_session_intent
+         ON qa_pairs(session_intent_id);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_qa_pairs_file_path
+         ON qa_pairs(session_file_path);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_qa_pairs_has_decision
+         ON qa_pairs(has_decision);",
+        [],
+    )?;
+
+    log::info!("✅ 已创建 qa_pairs 表");
+
+    // 4. 创建 decision_points 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS decision_points (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            qa_pair_id INTEGER NOT NULL,
+            session_file_path TEXT NOT NULL,
+            decision_type TEXT,
+            decision_made TEXT,
+            rationale TEXT,
+            inferred_reasons TEXT,
+            alternatives TEXT,
+            decision_shift TEXT,
+            confidence REAL NOT NULL DEFAULT 0.5,
+            analysis_quality TEXT,
+            needs_interview INTEGER NOT NULL DEFAULT 0,
+            interview_status TEXT NOT NULL DEFAULT 'pending',
+            interview_result TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+
+            FOREIGN KEY (qa_pair_id) REFERENCES qa_pairs(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_points_qa_pair
+         ON decision_points(qa_pair_id);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_points_file_path
+         ON decision_points(session_file_path);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_points_type
+         ON decision_points(decision_type);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_points_needs_interview
+         ON decision_points(needs_interview);",
+        [],
+    )?;
+
+    log::info!("✅ 已创建 decision_points 表");
+
+    // 5. 创建 analysis_feedback 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS analysis_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_file_path TEXT,
+            decision_point_id INTEGER,
+            qa_pair_id INTEGER,
+            session_intent_id INTEGER,
+            feedback_type TEXT NOT NULL,
+            target_field TEXT,
+            original_content TEXT,
+            corrected_content TEXT,
+            user_notes TEXT,
+            feedback_source TEXT,
+            is_applied INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+
+            FOREIGN KEY (decision_point_id) REFERENCES decision_points(id) ON DELETE CASCADE,
+            FOREIGN KEY (qa_pair_id) REFERENCES qa_pairs(id) ON DELETE CASCADE,
+            FOREIGN KEY (session_intent_id) REFERENCES session_intents(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_analysis_feedback_decision
+         ON analysis_feedback(decision_point_id);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_analysis_feedback_qa_pair
+         ON analysis_feedback(qa_pair_id);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_analysis_feedback_intent
+         ON analysis_feedback(session_intent_id);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_analysis_feedback_type
+         ON analysis_feedback(feedback_type);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_analysis_feedback_applied
+         ON analysis_feedback(is_applied);",
+        [],
+    )?;
+
+    log::info!("✅ 已创建 analysis_feedback 表");
+
+    // 6. 创建 prompt_combinations 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS prompt_combinations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            combination_name TEXT NOT NULL,
+            combination_hash TEXT NOT NULL UNIQUE,
+            component_ids TEXT NOT NULL,
+            component_order TEXT,
+            combination_type TEXT NOT NULL,
+            purpose TEXT,
+            target_scenario TEXT,
+            usage_count INTEGER NOT NULL DEFAULT 0,
+            success_count INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            last_used_at TEXT
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prompt_combinations_hash
+         ON prompt_combinations(combination_hash);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prompt_combinations_scenario
+         ON prompt_combinations(target_scenario);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_prompt_combinations_usage
+         ON prompt_combinations(usage_count DESC);",
+        [],
+    )?;
+
+    log::info!("✅ 已创建 prompt_combinations 表");
+
+    log::info!("✅ 已完成 v19 迁移：创建 6 张意图分析表");
+
+    Ok(())
+}
+
+/// 迁移到版本 20: 创建决策关键词配置表
+///
+/// # 功能
+/// - 创建 decision_keywords 表（支持动态配置决策关键词）
+/// - 支持多语言和决策类型分类
+/// - 预置默认关键词
+#[cfg(test)]
+pub fn migrate_v20(conn: &mut Connection) -> Result<()> {
+    migrate_v20_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v20(conn: &mut Connection) -> Result<()> {
+    migrate_v20_impl(conn)
+}
+
+fn migrate_v20_impl(conn: &mut Connection) -> Result<()> {
+    // 1. 创建 decision_keywords 表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS decision_keywords (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            keyword TEXT NOT NULL,
+            language TEXT NOT NULL,
+            decision_type TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            weight REAL NOT NULL DEFAULT 1.0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(keyword, language, decision_type)
+        )",
+        [],
+    )?;
+
+    // 2. 创建索引
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_keywords_language
+         ON decision_keywords(language);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_keywords_type
+         ON decision_keywords(decision_type);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_keywords_active
+         ON decision_keywords(is_active);",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_keywords_weight
+         ON decision_keywords(weight DESC);",
+        [],
+    )?;
+
+    // 3. 插入默认关键词
+    let now = chrono::Utc::now().to_rfc3339();
+
+    // 中文关键词
+    let default_keywords_zh = vec![
+        // 架构设计类
+        ("架构", "zh", "architecture_design", 1.0),
+        ("architecture", "zh", "architecture_design", 1.0),
+        ("设计模式", "zh", "architecture_design", 0.9),
+        ("微服务", "zh", "architecture_design", 0.9),
+        ("分层", "zh", "architecture_design", 0.8),
+        // 技术选型类
+        ("选择", "zh", "technology_choice", 1.0),
+        ("采用", "zh", "technology_choice", 1.0),
+        ("使用", "zh", "technology_choice", 0.8),
+        ("库", "zh", "technology_choice", 0.7),
+        ("框架", "zh", "technology_choice", 0.7),
+        ("library", "zh", "technology_choice", 1.0),
+        ("framework", "zh", "technology_choice", 1.0),
+        // 工具选择类
+        ("工具", "zh", "tool_selection", 0.9),
+        ("plugin", "zh", "tool_selection", 1.0),
+        ("扩展", "zh", "tool_selection", 0.8),
+        // 代码实现类
+        ("实现", "zh", "implementation", 0.8),
+        ("编写", "zh", "implementation", 0.8),
+        ("重构", "zh", "implementation", 0.9),
+        ("优化", "zh", "implementation", 0.9),
+        ("refactor", "zh", "implementation", 1.0),
+        ("implement", "zh", "implementation", 1.0),
+        // 通用决策词
+        ("决定", "zh", "other", 1.0),
+        ("decide", "zh", "other", 1.0),
+        ("确定", "zh", "other", 0.9),
+    ];
+
+    // 英文关键词
+    let default_keywords_en = vec![
+        // 架构设计类
+        ("architecture", "en", "architecture_design", 1.0),
+        ("design pattern", "en", "architecture_design", 0.9),
+        ("microservice", "en", "architecture_design", 0.9),
+        ("layer", "en", "architecture_design", 0.8),
+        // 技术选型类
+        ("choose", "en", "technology_choice", 1.0),
+        ("select", "en", "technology_choice", 1.0),
+        ("adopt", "en", "technology_choice", 1.0),
+        ("use", "en", "technology_choice", 0.8),
+        ("library", "en", "technology_choice", 0.7),
+        ("framework", "en", "technology_choice", 0.7),
+        // 工具选择类
+        ("tool", "en", "tool_selection", 0.9),
+        ("plugin", "en", "tool_selection", 1.0),
+        ("extension", "en", "tool_selection", 0.8),
+        // 代码实现类
+        ("implement", "en", "implementation", 1.0),
+        ("write", "en", "implementation", 0.8),
+        ("refactor", "en", "implementation", 1.0),
+        ("optimize", "en", "implementation", 0.9),
+        // 通用决策词
+        ("decide", "en", "other", 1.0),
+        ("determine", "en", "other", 0.9),
+    ];
+
+    // 合并所有关键词
+    let all_keywords: Vec<(&str, &str, &str, f64)> =
+        default_keywords_zh.into_iter().chain(default_keywords_en).collect();
+
+    // 批量插入
+    for (keyword, language, decision_type, weight) in &all_keywords {
+        conn.execute(
+            "INSERT OR IGNORE INTO decision_keywords (keyword, language, decision_type, weight, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![keyword, language, decision_type, weight, now, now],
+        )?;
+    }
+
+    log::info!("✅ 已创建 decision_keywords 表并预置 {} 条默认关键词", all_keywords.len());
+
+    Ok(())
+}
+
+/// 迁移到版本 21: 创建意图分析历史表
+///
+/// # 功能
+/// - 创建 intent_analysis_history 表（保存问答对分析历史）
+/// - 支持会话文件路径作为唯一键
+/// - 永久保存直到手动删除或用户点击重新分析
+#[cfg(test)]
+pub fn migrate_v21(conn: &mut Connection) -> Result<()> {
+    migrate_v21_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v21(conn: &mut Connection) -> Result<()> {
+    migrate_v21_impl(conn)
+}
+
+fn migrate_v21_impl(conn: &mut Connection) -> Result<()> {
+    // 1. 创建意图分析历史表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS intent_analysis_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_file_path TEXT NOT NULL UNIQUE,
+            qa_pairs_json TEXT NOT NULL,
+            opening_intent_json TEXT NOT NULL,
+            language TEXT NOT NULL DEFAULT 'zh',
+            analyzed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        )",
+        [],
+    )?;
+
+    // 2. 创建索引：按会话文件路径快速查找
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_intent_analysis_history_session_path
+         ON intent_analysis_history(session_file_path);",
+        [],
+    )?;
+
+    // 3. 创建索引：按分析时间排序
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_intent_analysis_history_analyzed_at
+         ON intent_analysis_history(analyzed_at DESC);",
+        [],
+    )?;
+
+    log::info!("✅ 已创建 intent_analysis_history 表");
+
+    Ok(())
+}
+
+/// - 创建 decision_analysis_history 表（保存每个问答对的决策分析历史）
+/// - 支持按会话文件路径 + QA 索引作为唯一键
+/// - 永久保存直到用户点击"重新分析"清除
+#[cfg(test)]
+pub fn migrate_v22(conn: &mut Connection) -> Result<()> {
+    migrate_v22_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v22(conn: &mut Connection) -> Result<()> {
+    migrate_v22_impl(conn)
+}
+
+fn migrate_v22_impl(conn: &mut Connection) -> Result<()> {
+    // 1. 创建决策分析历史表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS decision_analysis_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_file_path TEXT NOT NULL,
+            qa_index INTEGER NOT NULL,
+            decision_analysis_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(session_file_path, qa_index)
+        )",
+        [],
+    )?;
+
+    // 2. 创建索引：按会话文件路径和 QA 索引快速查找
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_analysis_history_session_qa
+         ON decision_analysis_history(session_file_path, qa_index);",
+        [],
+    )?;
+
+    // 3. 创建索引：按更新时间排序
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_analysis_history_updated_at
+         ON decision_analysis_history(updated_at DESC);",
+        [],
+    )?;
+
+    log::info!("✅ 已创建 decision_analysis_history 表");
+
+    Ok(())
+}
+
 /// 获取数据库连接（用于运行时）
 ///
 /// 注意: 每个线程应该有自己的连接
@@ -1192,13 +1719,13 @@ fn migrate_v18_impl(conn: &mut Connection) -> Result<()> {
 pub fn get_connection() -> Result<Connection> {
     let db_path = get_db_path()?;
     let mut conn = Connection::open(&db_path)?;
-    
+
     // 启用外键约束
     conn.execute("PRAGMA foreign_keys = ON;", [])?;
-    
+
     // 确保迁移已执行
     run_migrations(&mut conn)?;
-    
+
     Ok(conn)
 }
 
@@ -1222,11 +1749,13 @@ mod tests {
         migrate_v1_impl(&mut conn).unwrap();
 
         // 验证表已创建
-        let table_exists: i32 = conn.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='api_providers'",
-            [],
-            |row| row.get(0),
-        ).unwrap();
+        let table_exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='api_providers'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
 
         assert_eq!(table_exists, 1);
     }
@@ -1244,12 +1773,94 @@ mod tests {
         migrate_v2_impl(&mut conn).unwrap();
 
         // 验证 model 列已添加
-        let column_exists: i32 = conn.query_row(
-            "SELECT COUNT(*) FROM pragma_table_info('api_providers') WHERE name='model'",
-            [],
-            |row| row.get(0),
-        ).unwrap();
+        let column_exists: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('api_providers') WHERE name='model'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
 
         assert_eq!(column_exists, 1);
+    }
+
+    #[test]
+    fn test_migrate_v19_tables_created() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute("PRAGMA foreign_keys = ON;", []).unwrap();
+
+        migrate_v19_impl(&mut conn).unwrap();
+
+        let tables: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert!(tables.contains(&"analysis_feedback".to_string()));
+        assert!(tables.contains(&"decision_points".to_string()));
+        assert!(tables.contains(&"prompt_combinations".to_string()));
+        assert!(tables.contains(&"project_tech_stack".to_string()));
+        assert!(tables.contains(&"qa_pairs".to_string()));
+        assert!(tables.contains(&"session_intents".to_string()));
+    }
+
+    #[test]
+    fn test_migrate_v19_foreign_keys() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_v19_impl(&mut conn).unwrap();
+
+        let fk_enabled: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(fk_enabled, 1);
+    }
+
+    #[test]
+    fn test_migrate_v19_unique_constraints() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_v19_impl(&mut conn).unwrap();
+
+        conn.execute(
+            "INSERT INTO project_tech_stack (project_path, tech_stack) VALUES ('/test/path', '[\"Rust\"]')",
+            []
+        ).unwrap();
+
+        let result = conn.execute(
+            "INSERT INTO project_tech_stack (project_path, tech_stack) VALUES ('/test/path', '[\"Rust\"]')",
+            []
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_migrate_v19_cascade_delete() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_v19_impl(&mut conn).unwrap();
+
+        // 创建测试数据
+        conn.execute(
+            "INSERT INTO session_intents (session_file_path, opening_goal) VALUES ('/test.jsonl', 'test')",
+            []
+        ).unwrap();
+
+        conn.execute(
+            "INSERT INTO qa_pairs (session_intent_id, session_file_path, qa_index, user_question)
+             VALUES (1, '/test.jsonl', 0, 'test')",
+            [],
+        )
+        .unwrap();
+
+        // 删除 session_intents 记录
+        conn.execute("DELETE FROM session_intents WHERE id = 1", [])
+            .unwrap();
+
+        // 验证 qa_pairs 被级联删除
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM qa_pairs", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0, "qa_pairs 应该被级联删除");
     }
 }

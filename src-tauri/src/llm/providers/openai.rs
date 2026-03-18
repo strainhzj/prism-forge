@@ -3,26 +3,23 @@
 //! 支持 OpenAI 官方 API 及兼容接口（OneAPI、中转服务等）
 
 use anyhow::{Context, Result};
-use async_trait::async_trait;
 use async_openai::{
     config::OpenAIConfig,
     types::{
+        ChatCompletionRequestAssistantMessage, ChatCompletionRequestAssistantMessageContent,
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage,
-        ChatCompletionRequestUserMessage, ChatCompletionRequestAssistantMessage,
-        ChatCompletionRequestSystemMessageContent,
-        ChatCompletionRequestUserMessageContent,
-        ChatCompletionRequestAssistantMessageContent,
-        CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
-        FinishReason,
+        ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessage,
+        ChatCompletionRequestUserMessageContent, CreateChatCompletionRequest,
+        CreateChatCompletionRequestArgs, FinishReason,
     },
     Client,
 };
-use secrecy::{ExposeSecret, SecretString};
+use async_trait::async_trait;
 use futures::StreamExt;
+use secrecy::{ExposeSecret, SecretString};
 
 use crate::llm::interface::{
-    LLMService, Message, MessageRole, ModelParams, ChatCompletionResponse,
-    StreamChunk,
+    ChatCompletionResponse, LLMService, Message, MessageRole, ModelParams, StreamChunk,
 };
 
 /// OpenAI 提供商客户端
@@ -104,10 +101,13 @@ impl OpenAIProvider {
                 }
                 MessageRole::Assistant => {
                     ChatCompletionRequestMessage::Assistant(ChatCompletionRequestAssistantMessage {
-                        content: Some(ChatCompletionRequestAssistantMessageContent::Text(msg.content)),
+                        content: Some(ChatCompletionRequestAssistantMessageContent::Text(
+                            msg.content,
+                        )),
                         name: None,
                         tool_calls: None,
                         refusal: None,
+                        #[allow(deprecated)]
                         function_call: None,
                     })
                 }
@@ -144,14 +144,13 @@ impl OpenAIProvider {
             if let Some(presence_penalty) = extra.get("presence_penalty").and_then(|v| v.as_f64()) {
                 builder.presence_penalty(presence_penalty as f32);
             }
-            if let Some(frequency_penalty) = extra.get("frequency_penalty").and_then(|v| v.as_f64()) {
+            if let Some(frequency_penalty) = extra.get("frequency_penalty").and_then(|v| v.as_f64())
+            {
                 builder.frequency_penalty(frequency_penalty as f32);
             }
         }
 
-        builder
-            .build()
-            .context("创建 OpenAI 请求失败")
+        builder.build().context("创建 OpenAI 请求失败")
     }
 
     /// 转换 finish reason
@@ -173,25 +172,47 @@ impl LLMService for OpenAIProvider {
         messages: Vec<Message>,
         params: ModelParams,
     ) -> Result<ChatCompletionResponse> {
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[OpenAIProvider] 准备发起请求");
+            eprintln!("[OpenAIProvider] base_url: {}", self.base_url);
+            eprintln!("[OpenAIProvider] model: {}", params.model);
+            eprintln!("[OpenAIProvider] temperature: {:?}", params.temperature);
+            eprintln!("[OpenAIProvider] messages count: {}", messages.len());
+        }
+
         let request = self.build_request(messages, params)?;
+
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[OpenAIProvider] 请求构建成功，开始发送...");
+        }
 
         let response = self
             .client
             .chat()
             .create(request)
             .await
-            .context("OpenAI API 请求失败")?;
+            .map_err(|e| {
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!("[OpenAIProvider] ❌ 请求失败:");
+                    eprintln!("  错误: {:?}", e);
+                    eprintln!("  base_url: {}", self.base_url);
+                }
+                anyhow::anyhow!("OpenAI API 请求失败: {}", e)
+            })?;
 
-        let choice = response
-            .choices
-            .first()
-            .context("OpenAI 返回空响应")?;
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("[OpenAIProvider] 响应接收成功");
+            eprintln!("[OpenAIProvider] model: {}", response.model);
+            eprintln!("[OpenAIProvider] choices count: {}", response.choices.len());
+        }
 
-        let content = choice
-            .message
-            .content
-            .clone()
-            .unwrap_or_default();
+        let choice = response.choices.first().context("OpenAI 返回空响应")?;
+
+        let content = choice.message.content.clone().unwrap_or_default();
 
         let usage = response.usage.as_ref();
 
@@ -219,8 +240,8 @@ impl LLMService for OpenAIProvider {
             .await
             .context("OpenAI 流式请求失败")?;
 
-        Ok(Box::new(stream.map(move |chunk_result| {
-            match chunk_result {
+        Ok(Box::new(stream.map(
+            move |chunk_result| match chunk_result {
                 Ok(chunk) => {
                     let deltas = chunk.choices.first();
 
@@ -229,9 +250,7 @@ impl LLMService for OpenAIProvider {
                         .cloned()
                         .unwrap_or_default();
 
-                    let is_finish = deltas.map_or(false, |c| {
-                        c.finish_reason.is_some()
-                    });
+                    let is_finish = deltas.map_or(false, |c| c.finish_reason.is_some());
 
                     let finish_reason = if is_finish {
                         deltas.and_then(|c| Self::convert_finish_reason(&c.finish_reason))
@@ -246,8 +265,8 @@ impl LLMService for OpenAIProvider {
                     })
                 }
                 Err(e) => Err(anyhow::anyhow!("流式响应错误: {}", e)),
-            }
-        })))
+            },
+        )))
     }
 
     fn service_type(&self) -> &'static str {

@@ -5,7 +5,7 @@
 //! **注意**: 由于 fastembed 的依赖库 ort 在 Windows 上存在编译问题，
 //! 当前在 Windows 平台使用占位符实现。将来上游修复后会自动启用真实实现。
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 #[cfg(not(target_os = "windows"))]
 use fastembed::{EmbeddingModel, InitOptions, ModelType};
@@ -85,7 +85,9 @@ impl EmbeddingGenerator {
         #[cfg(not(target_os = "windows"))]
         {
             // 生成向量
-            let vectors = self.model.embed(vec![content], None)
+            let vectors = self
+                .model
+                .embed(vec![content], None)
                 .context("向量生成失败")?;
 
             // 返回第一个向量
@@ -140,20 +142,21 @@ impl EmbeddingGenerator {
         #[cfg(not(target_os = "windows"))]
         {
             // 过滤空文本
-            let valid_contents: Vec<&str> = contents.iter()
+            let valid_contents: Vec<&str> = contents
+                .iter()
                 .map(|s| s.as_str())
                 .filter(|s| !s.trim().is_empty())
                 .collect();
 
             if valid_contents.is_empty() {
                 // 如果全部为空，返回全零向量
-                return Ok(contents.iter()
-                    .map(|_| vec![0.0; 384])
-                    .collect());
+                return Ok(contents.iter().map(|_| vec![0.0; 384]).collect());
             }
 
             // 批量生成向量
-            let vectors = self.model.embed(valid_contents, None)
+            let vectors = self
+                .model
+                .embed(valid_contents, None)
                 .context("批量向量生成失败")?;
 
             Ok(vectors)
@@ -162,7 +165,8 @@ impl EmbeddingGenerator {
         #[cfg(target_os = "windows")]
         {
             // Windows 平台：逐条生成占位符向量
-            contents.iter()
+            contents
+                .iter()
                 .map(|content| self.generate_for_message(content))
                 .collect()
         }
@@ -229,11 +233,7 @@ mod tests {
     #[test]
     fn test_batch_with_empty_strings() {
         let generator = EmbeddingGenerator::new().unwrap();
-        let summaries = vec![
-            "有效内容".to_string(),
-            "".to_string(),
-            "   ".to_string(),
-        ];
+        let summaries = vec!["有效内容".to_string(), "".to_string(), "   ".to_string()];
         let vectors = generator.generate_batch(&summaries).unwrap();
         assert_eq!(vectors.len(), 3);
     }

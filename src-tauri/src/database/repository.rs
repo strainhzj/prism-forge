@@ -3,8 +3,8 @@
 //! 提供 api_providers 表的 CRUD 操作
 
 use anyhow::Result;
-use rusqlite::{Connection, params};
 use chrono::Utc;
+use rusqlite::{params, Connection};
 use std::sync::{Arc, Mutex};
 
 use crate::database::models::{ApiProvider, ApiProviderType};
@@ -46,9 +46,10 @@ impl ApiProviderRepository {
     where
         F: FnOnce(&rusqlite::Connection) -> Result<R>,
     {
-        let conn = self.conn.lock().map_err(|e| {
-            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
-        })?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e))?;
         f(&conn)
     }
 
@@ -77,7 +78,11 @@ impl ApiProviderRepository {
         let provider_type_str = serde_json::to_string(&provider.provider_type)?;
 
         // 提取 aliases 值，避免闭包中的部分移动
-        let aliases_value = provider.aliases.as_ref().unwrap_or(&"[]".to_string()).clone();
+        let aliases_value = provider
+            .aliases
+            .as_ref()
+            .unwrap_or(&"[]".to_string())
+            .clone();
 
         let id = self.with_conn_inner(|conn| {
             conn.execute(
@@ -231,7 +236,9 @@ impl ApiProviderRepository {
     /// # 返回
     /// 返回更新后的行数，如果为 0 表示没有找到对应的提供商
     pub fn update_provider(&self, provider: &ApiProvider) -> Result<usize> {
-        let id = provider.id.ok_or_else(|| anyhow::anyhow!("提供商必须有 id"))?;
+        let id = provider
+            .id
+            .ok_or_else(|| anyhow::anyhow!("提供商必须有 id"))?;
         let now = Utc::now().to_rfc3339();
         let provider_type_str = serde_json::to_string(&provider.provider_type)?;
 
@@ -272,10 +279,7 @@ impl ApiProviderRepository {
     /// 返回删除的行数，如果为 0 表示没有找到对应的提供商
     pub fn delete_provider(&self, id: i64) -> Result<usize> {
         self.with_conn_inner(|conn| {
-            let rows = conn.execute(
-                "DELETE FROM api_providers WHERE id = ?1",
-                params![id],
-            )?;
+            let rows = conn.execute("DELETE FROM api_providers WHERE id = ?1", params![id])?;
 
             Ok(rows)
         })
@@ -308,7 +312,10 @@ impl ApiProviderRepository {
     ///
     /// # 参数
     /// - `provider_type`: 提供商类型
-    pub fn get_providers_by_type(&self, provider_type: ApiProviderType) -> Result<Vec<ApiProvider>> {
+    pub fn get_providers_by_type(
+        &self,
+        provider_type: ApiProviderType,
+    ) -> Result<Vec<ApiProvider>> {
         let provider_type_str = serde_json::to_string(&provider_type)?;
 
         self.with_conn_inner(|conn| {
@@ -347,11 +354,8 @@ impl ApiProviderRepository {
     /// 统计提供商数量
     pub fn count_providers(&self) -> Result<i64> {
         self.with_conn_inner(|conn| {
-            let count: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM api_providers",
-                [],
-                |row| row.get(0),
-            )?;
+            let count: i64 =
+                conn.query_row("SELECT COUNT(*) FROM api_providers", [], |row| row.get(0))?;
             Ok(count)
         })
     }
@@ -401,11 +405,7 @@ mod tests {
 
         // 创建多个提供商
         for i in 1..=3 {
-            let provider = ApiProvider::new(
-                ApiProviderType::Ollama,
-                format!("提供商 {}", i),
-                None,
-            );
+            let provider = ApiProvider::new(ApiProviderType::Ollama, format!("提供商 {}", i), None);
             repo.create_provider(provider).unwrap();
         }
 
@@ -418,18 +418,17 @@ mod tests {
         let conn = setup_test_db();
         let repo = ApiProviderRepository::with_conn(conn);
 
-        let mut provider = ApiProvider::new(
-            ApiProviderType::Ollama,
-            "原始名称".to_string(),
-            None,
-        );
+        let mut provider = ApiProvider::new(ApiProviderType::Ollama, "原始名称".to_string(), None);
         provider = repo.create_provider(provider).unwrap();
 
         provider.name = "更新后的名称".to_string();
         let rows = repo.update_provider(&provider).unwrap();
         assert_eq!(rows, 1);
 
-        let updated = repo.get_provider_by_id(provider.id.unwrap()).unwrap().unwrap();
+        let updated = repo
+            .get_provider_by_id(provider.id.unwrap())
+            .unwrap()
+            .unwrap();
         assert_eq!(updated.name, "更新后的名称");
     }
 
@@ -438,11 +437,7 @@ mod tests {
         let conn = setup_test_db();
         let repo = ApiProviderRepository::with_conn(conn);
 
-        let provider = ApiProvider::new(
-            ApiProviderType::Ollama,
-            "待删除".to_string(),
-            None,
-        );
+        let provider = ApiProvider::new(ApiProviderType::Ollama, "待删除".to_string(), None);
         let created = repo.create_provider(provider).unwrap();
 
         let rows = repo.delete_provider(created.id.unwrap()).unwrap();
@@ -458,11 +453,7 @@ mod tests {
         let repo = ApiProviderRepository::with_conn(conn);
 
         // 创建第一个提供商
-        let mut provider1 = ApiProvider::new(
-            ApiProviderType::Ollama,
-            "提供商1".to_string(),
-            None,
-        );
+        let mut provider1 = ApiProvider::new(ApiProviderType::Ollama, "提供商1".to_string(), None);
         provider1.is_active = true;
         let created1 = repo.create_provider(provider1).unwrap();
 
@@ -486,7 +477,10 @@ mod tests {
         assert_eq!(active.name, "提供商2");
 
         // 验证第一个不再是活跃的
-        let provider1_updated = repo.get_provider_by_id(created1.id.unwrap()).unwrap().unwrap();
+        let provider1_updated = repo
+            .get_provider_by_id(created1.id.unwrap())
+            .unwrap()
+            .unwrap();
         assert!(!provider1_updated.is_active);
     }
 }
@@ -517,10 +511,7 @@ mod property_tests {
     }
 
     fn arb_model() -> impl Strategy<Value = Option<String>> {
-        prop_oneof![
-            Just(None),
-            "[a-zA-Z0-9_-]{1,50}".prop_map(Some),
-        ]
+        prop_oneof![Just(None), "[a-zA-Z0-9_-]{1,50}".prop_map(Some),]
     }
 
     proptest! {
@@ -612,9 +603,10 @@ impl SessionRepository {
     where
         F: FnOnce(&rusqlite::Connection) -> Result<R>,
     {
-        let conn = self.conn.lock().map_err(|e| {
-            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
-        })?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e))?;
         f(&conn)
     }
 
@@ -672,7 +664,7 @@ impl SessionRepository {
                 "SELECT id, session_id, project_path, project_name, file_path,
                         rating, tags, is_archived, is_active, created_at, updated_at
                  FROM sessions
-                 ORDER BY updated_at DESC"
+                 ORDER BY updated_at DESC",
             )?;
 
             let sessions = stmt.query_map([], |row| {
@@ -734,8 +726,7 @@ impl SessionRepository {
     /// 返回更新的行数
     pub fn set_session_tags(&self, session_id: &str, tags: Vec<String>) -> Result<usize> {
         // 将标签数组序列化为 JSON 字符串
-        let tags_json = serde_json::to_string(&tags)
-            .unwrap_or_else(|_| "[]".to_string());
+        let tags_json = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string());
 
         let now = Utc::now().to_rfc3339();
 
@@ -759,13 +750,9 @@ impl SessionRepository {
     /// 返回评分值 (1-5)，None 表示未评分
     pub fn get_session_rating(&self, session_id: &str) -> Result<Option<i32>> {
         self.with_conn_inner(|conn| {
-            let mut stmt = conn.prepare(
-                "SELECT rating FROM sessions WHERE session_id = ?1"
-            )?;
+            let mut stmt = conn.prepare("SELECT rating FROM sessions WHERE session_id = ?1")?;
 
-            let rating = stmt.query_row(params![session_id], |row| {
-                row.get(0)
-            })?;
+            let rating = stmt.query_row(params![session_id], |row| row.get(0))?;
 
             Ok(rating)
         })
@@ -780,21 +767,16 @@ impl SessionRepository {
     /// 返回标签数组
     pub fn get_session_tags(&self, session_id: &str) -> Result<Vec<String>> {
         self.with_conn_inner(|conn| {
-            let mut stmt = conn.prepare(
-                "SELECT tags FROM sessions WHERE session_id = ?1"
-            )?;
+            let mut stmt = conn.prepare("SELECT tags FROM sessions WHERE session_id = ?1")?;
 
-            let tags_json: String = stmt.query_row(params![session_id], |row| {
-                row.get(0)
-            })?;
+            let tags_json: String = stmt.query_row(params![session_id], |row| row.get(0))?;
 
             // 解析 JSON 数组
             if tags_json.is_empty() || tags_json == "[]" {
                 return Ok(Vec::new());
             }
 
-            serde_json::from_str(&tags_json)
-                .map_err(|e| anyhow::anyhow!("解析标签失败: {}", e))
+            serde_json::from_str(&tags_json).map_err(|e| anyhow::anyhow!("解析标签失败: {}", e))
         })
     }
 
@@ -855,7 +837,7 @@ impl SessionRepository {
                         rating, tags, is_archived, is_active, created_at, updated_at
                  FROM sessions
                  WHERE is_archived = 1
-                 ORDER BY updated_at DESC"
+                 ORDER BY updated_at DESC",
             )?;
 
             let sessions = stmt.query_map([], |row| {
@@ -889,7 +871,7 @@ impl SessionRepository {
                         rating, tags, is_archived, is_active, created_at, updated_at
                  FROM sessions
                  WHERE is_archived = 0
-                 ORDER BY updated_at DESC"
+                 ORDER BY updated_at DESC",
             )?;
 
             let sessions = stmt.query_map([], |row| {
@@ -946,11 +928,13 @@ impl SessionRepository {
                 .map_err(|e| anyhow::anyhow!("序列化向量失败: {}", e))?;
 
             // 检查是否已存在该消息的向量
-            let existing: Option<i64> = conn.query_row(
-                "SELECT vec_row_id FROM message_embedding_map WHERE message_id = ?1",
-                params![message_id],
-                |row| row.get(0),
-            ).ok();
+            let existing: Option<i64> = conn
+                .query_row(
+                    "SELECT vec_row_id FROM message_embedding_map WHERE message_id = ?1",
+                    params![message_id],
+                    |row| row.get(0),
+                )
+                .ok();
 
             if let Some(vec_row_id) = existing {
                 // 更新现有向量
@@ -1020,11 +1004,13 @@ impl SessionRepository {
                     .map_err(|e| anyhow::anyhow!("序列化向量失败: {}", e))?;
 
                 // 检查是否已存在
-                let existing: Option<i64> = tx.query_row(
-                    "SELECT vec_row_id FROM message_embedding_map WHERE message_id = ?1",
-                    params![message_id],
-                    |row| row.get(0),
-                ).ok();
+                let existing: Option<i64> = tx
+                    .query_row(
+                        "SELECT vec_row_id FROM message_embedding_map WHERE message_id = ?1",
+                        params![message_id],
+                        |row| row.get(0),
+                    )
+                    .ok();
 
                 if let Some(vec_row_id) = existing {
                     tx.execute(
@@ -1066,16 +1052,13 @@ impl SessionRepository {
     ///
     /// # 返回
     /// 返回向量和摘要，如果不存在则返回 None
-    pub fn get_message_embedding(
-        &self,
-        message_id: i64,
-    ) -> Result<Option<(Vec<f32>, String)>> {
+    pub fn get_message_embedding(&self, message_id: i64) -> Result<Option<(Vec<f32>, String)>> {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT me.embedding, me.summary
                  FROM message_embeddings me
                  INNER JOIN message_embedding_map mem ON me.rowid = mem.vec_row_id
-                 WHERE mem.message_id = ?1"
+                 WHERE mem.message_id = ?1",
             )?;
 
             let result = stmt.query_row(params![message_id], |row| {
@@ -1108,11 +1091,7 @@ impl SessionRepository {
     /// # 说明
     /// 使用 sqlite-vec 的 distance 函数计算余弦相似度
     /// 分数越小表示越相似（距离）
-    pub fn vector_search(
-        &self,
-        query_embedding: &[f32],
-        limit: usize,
-    ) -> Result<Vec<(i64, f64)>> {
+    pub fn vector_search(&self, query_embedding: &[f32], limit: usize) -> Result<Vec<(i64, f64)>> {
         if query_embedding.len() != 384 {
             return Err(anyhow::anyhow!(
                 "查询向量维度错误，期望 384，实际 {}",
@@ -1129,7 +1108,7 @@ impl SessionRepository {
                  FROM message_embeddings me
                  INNER JOIN message_embedding_map mem ON me.rowid = mem.vec_row_id
                  ORDER BY dist
-                 LIMIT ?2"
+                 LIMIT ?2",
             )?;
 
             let results = stmt.query_map(params![embedding_json, limit], |row| {
@@ -1162,7 +1141,8 @@ impl SessionRepository {
         // 执行向量检索获取 (message_id, distance) 列表
         let message_results = self.vector_search(query_embedding, limit * 2)?;
 
-        let mut session_results: std::collections::HashMap<String, (f64, String)> = std::collections::HashMap::new();
+        let mut session_results: std::collections::HashMap<String, (f64, String)> =
+            std::collections::HashMap::new();
 
         // 获取每条消息对应的会话信息
         for (message_id, distance) in message_results {
@@ -1170,7 +1150,7 @@ impl SessionRepository {
                 let mut stmt = conn.prepare(
                     "SELECT m.session_id, m.summary
                      FROM messages m
-                     WHERE m.id = ?1"
+                     WHERE m.id = ?1",
                 )?;
 
                 let result = stmt.query_row(params![message_id], |row| {
@@ -1213,13 +1193,16 @@ impl SessionRepository {
     }
 
     /// 根据 session_id 获取会话详情
-    pub fn get_session_by_id(&self, session_id: &str) -> Result<Option<crate::database::models::Session>> {
+    pub fn get_session_by_id(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<crate::database::models::Session>> {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, session_id, project_path, project_name, file_path,
                         rating, tags, is_archived, is_active, created_at, updated_at
                  FROM sessions
-                 WHERE session_id = ?1"
+                 WHERE session_id = ?1",
             )?;
 
             let session = stmt.query_row(params![session_id], |row| {
@@ -1297,7 +1280,7 @@ impl SessionRepository {
                  WHERE s.is_archived = 0  -- 排除归档会话
                    AND (s.rating IS NULL OR s.rating >= 2)  -- 排除低分会话
                  ORDER BY weighted_score DESC
-                 LIMIT ?2"
+                 LIMIT ?2",
             )?;
 
             let results = stmt.query_map(params![embedding_json, limit * 2], |row| {
@@ -1309,7 +1292,7 @@ impl SessionRepository {
 
                 Ok((
                     session_id,
-                    rating.unwrap_or(2),  // 用于后续计算
+                    rating.unwrap_or(2), // 用于后续计算
                     summary.unwrap_or_default(),
                     distance,
                     weighted_score,
@@ -1317,7 +1300,8 @@ impl SessionRepository {
             })?;
 
             // 收集并去重（同一会话取最高加权分数）
-            let mut session_map: std::collections::HashMap<String, (f64, f64, String)> = std::collections::HashMap::new();
+            let mut session_map: std::collections::HashMap<String, (f64, f64, String)> =
+                std::collections::HashMap::new();
 
             for result in results {
                 let (session_id, _rating, summary, distance, weighted_score) = result?;
@@ -1361,7 +1345,7 @@ impl SessionRepository {
             Ok(final_results)
         })
     }
-// ==================== Meta-Prompt 管理方法 ====================
+    // ==================== Meta-Prompt 管理方法 ====================
 
     /// 获取 Meta-Prompt 模板
     ///
@@ -1370,14 +1354,11 @@ impl SessionRepository {
         use rusqlite::params;
 
         self.with_conn_inner(|conn| {
-            let mut stmt = conn.prepare(
-                "SELECT content FROM meta_templates WHERE key = ?1 AND is_active = 1"
-            )?;
+            let mut stmt = conn
+                .prepare("SELECT content FROM meta_templates WHERE key = ?1 AND is_active = 1")?;
 
             stmt.query_row(params![category], |row| row.get(0))
-                .map_err(|_| anyhow::anyhow!(
-                    "未找到类别为 \"{}\" 的 Meta-Prompt 模板", category
-                ))
+                .map_err(|_| anyhow::anyhow!("未找到类别为 \"{}\" 的 Meta-Prompt 模板", category))
         })
     }
 
@@ -1441,9 +1422,10 @@ impl MonitoredDirectoryRepository {
     where
         F: FnOnce(&rusqlite::Connection) -> Result<R>,
     {
-        let conn = self.conn.lock().map_err(|e| {
-            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
-        })?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e))?;
         f(&conn)
     }
 
@@ -1454,7 +1436,10 @@ impl MonitoredDirectoryRepository {
     ///
     /// # 返回
     /// 返回创建后的目录（包含生成的 id）
-    pub fn create_directory(&mut self, mut directory: crate::database::models::MonitoredDirectory) -> Result<crate::database::models::MonitoredDirectory> {
+    pub fn create_directory(
+        &mut self,
+        mut directory: crate::database::models::MonitoredDirectory,
+    ) -> Result<crate::database::models::MonitoredDirectory> {
         // 验证目录
         directory.validate()?;
 
@@ -1485,7 +1470,7 @@ impl MonitoredDirectoryRepository {
             let mut stmt = conn.prepare(
                 "SELECT id, path, name, is_active, created_at, updated_at
                  FROM monitored_directories
-                 ORDER BY created_at DESC"
+                 ORDER BY created_at DESC",
             )?;
 
             let directories = stmt.query_map([], |row| {
@@ -1499,18 +1484,22 @@ impl MonitoredDirectoryRepository {
                 })
             })?;
 
-            directories.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+            directories
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(Into::into)
         })
     }
 
     /// 获取所有启用的监控目录
-    pub fn get_active_directories(&self) -> Result<Vec<crate::database::models::MonitoredDirectory>> {
+    pub fn get_active_directories(
+        &self,
+    ) -> Result<Vec<crate::database::models::MonitoredDirectory>> {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, path, name, is_active, created_at, updated_at
                  FROM monitored_directories
                  WHERE is_active = 1
-                 ORDER BY created_at DESC"
+                 ORDER BY created_at DESC",
             )?;
 
             let directories = stmt.query_map([], |row| {
@@ -1524,17 +1513,22 @@ impl MonitoredDirectoryRepository {
                 })
             })?;
 
-            directories.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+            directories
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(Into::into)
         })
     }
 
     /// 根据 ID 获取监控目录
-    pub fn get_directory_by_id(&self, id: i64) -> Result<Option<crate::database::models::MonitoredDirectory>> {
+    pub fn get_directory_by_id(
+        &self,
+        id: i64,
+    ) -> Result<Option<crate::database::models::MonitoredDirectory>> {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, path, name, is_active, created_at, updated_at
                  FROM monitored_directories
-                 WHERE id = ?1"
+                 WHERE id = ?1",
             )?;
 
             let directory = stmt.query_row(params![id], |row| {
@@ -1580,8 +1574,13 @@ impl MonitoredDirectoryRepository {
     ///
     /// # 返回
     /// 返回更新的行数
-    pub fn update_directory(&mut self, directory: &crate::database::models::MonitoredDirectory) -> Result<usize> {
-        let id = directory.id.ok_or_else(|| anyhow::anyhow!("目录必须有 id"))?;
+    pub fn update_directory(
+        &mut self,
+        directory: &crate::database::models::MonitoredDirectory,
+    ) -> Result<usize> {
+        let id = directory
+            .id
+            .ok_or_else(|| anyhow::anyhow!("目录必须有 id"))?;
         let now = Utc::now().to_rfc3339();
 
         self.with_conn_inner(|conn| {
@@ -1654,12 +1653,11 @@ impl SettingsRepository {
 
     /// 创建新的仓库实例（便捷方法）
     pub fn new() -> Self {
-        Self::from_default_db().unwrap_or_else(|_| {
-            // 如果无法获取默认连接，返回一个带有空连接的实例
-            // 这在调用时会失败，但至少可以编译通过
-            Self {
-                conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
-            }
+        Self::from_default_db().unwrap_or_else(|e| {
+            log::error!("从默认数据库创建 SettingsRepository 失败: {}", e);
+            #[cfg(debug_assertions)]
+            eprintln!("从默认数据库创建 SettingsRepository 失败: {:?}", e);
+            std::process::exit(1);
         })
     }
 
@@ -1668,9 +1666,10 @@ impl SettingsRepository {
     where
         F: FnOnce(&rusqlite::Connection) -> Result<R>,
     {
-        let conn = self.conn.lock().map_err(|e| {
-            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
-        })?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e))?;
         f(&conn)
     }
 
@@ -1717,7 +1716,8 @@ impl SettingsRepository {
                     settings.embedding_batch_size,
                     now,
                 ],
-            ).map_err(|e| anyhow::anyhow!("更新设置失败: {}", e))
+            )
+            .map_err(|e| anyhow::anyhow!("更新设置失败: {}", e))
         })
     }
 }
@@ -1750,10 +1750,17 @@ impl ViewLevelPreferenceRepository {
 
     /// 创建新的仓库实例（便捷方法）
     pub fn new() -> Self {
-        Self::from_default_db().unwrap_or_else(|_| {
-            Self {
-                conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
-            }
+        Self::from_default_db().unwrap_or_else(|e| {
+            log::error!(
+                "从默认数据库创建 ViewLevelPreferenceRepository 失败: {}",
+                e
+            );
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "从默认数据库创建 ViewLevelPreferenceRepository 失败: {:?}",
+                e
+            );
+            std::process::exit(1);
         })
     }
 
@@ -1762,9 +1769,10 @@ impl ViewLevelPreferenceRepository {
     where
         F: FnOnce(&rusqlite::Connection) -> Result<R>,
     {
-        let conn = self.conn.lock().map_err(|e| {
-            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
-        })?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e))?;
         f(&conn)
     }
 
@@ -1779,7 +1787,11 @@ impl ViewLevelPreferenceRepository {
     ///
     /// # 返回
     /// 返回 Ok(()) 表示保存成功
-    pub fn save_preference(&mut self, session_id: &str, view_level: crate::parser::view_level::ViewLevel) -> Result<()> {
+    pub fn save_preference(
+        &mut self,
+        session_id: &str,
+        view_level: crate::parser::view_level::ViewLevel,
+    ) -> Result<()> {
         let now = Utc::now().to_rfc3339();
         let view_level_str = view_level.to_string();
 
@@ -1828,7 +1840,10 @@ impl ViewLevelPreferenceRepository {
     /// # 返回
     /// - `Some(view_level)`: 如果找到偏好记录
     /// - `None`: 如果没有找到偏好记录
-    pub fn get_preference(&self, session_id: &str) -> Result<Option<crate::parser::view_level::ViewLevel>> {
+    pub fn get_preference(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<crate::parser::view_level::ViewLevel>> {
         self.with_conn_inner(|conn| {
             let preference = conn.query_row(
                 "SELECT view_level FROM view_level_preferences WHERE session_id = ?1",
@@ -1841,8 +1856,9 @@ impl ViewLevelPreferenceRepository {
 
             match preference {
                 Ok(view_level_str) => {
-                    let view_level = crate::parser::view_level::ViewLevel::from_str(&view_level_str)
-                        .map_err(|e| anyhow::anyhow!("无效的视图等级: {}", e))?;
+                    let view_level =
+                        crate::parser::view_level::ViewLevel::from_str(&view_level_str)
+                            .map_err(|e| anyhow::anyhow!("无效的视图等级: {}", e))?;
                     Ok(Some(view_level))
                 }
                 Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -1858,7 +1874,10 @@ impl ViewLevelPreferenceRepository {
     ///
     /// # 返回
     /// 如果没有找到偏好记录，返回默认值 QAPairs
-    pub fn get_preference_or_default(&self, session_id: &str) -> Result<crate::parser::view_level::ViewLevel> {
+    pub fn get_preference_or_default(
+        &self,
+        session_id: &str,
+    ) -> Result<crate::parser::view_level::ViewLevel> {
         match self.get_preference(session_id)? {
             Some(view_level) => Ok(view_level),
             None => Ok(crate::parser::view_level::ViewLevel::default()),
@@ -1886,7 +1905,9 @@ impl ViewLevelPreferenceRepository {
     ///
     /// # 返回
     /// 返回所有偏好记录的列表
-    pub fn get_all_preferences(&self) -> Result<Vec<(String, crate::parser::view_level::ViewLevel)>> {
+    pub fn get_all_preferences(
+        &self,
+    ) -> Result<Vec<(String, crate::parser::view_level::ViewLevel)>> {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT session_id, view_level FROM view_level_preferences ORDER BY updated_at DESC"
@@ -1897,19 +1918,23 @@ impl ViewLevelPreferenceRepository {
                 let view_level_str: String = row.get(1)?;
 
                 // 使用 ? 操作符直接返回 rusqlite::Error
-                let view_level = match crate::parser::view_level::ViewLevel::from_str(&view_level_str) {
-                    Ok(level) => level,
-                    Err(e) => {
-                        return Err(rusqlite::Error::ToSqlConversionFailure(
-                            Box::new(ViewLevelParseError(e)) as Box<dyn std::error::Error + Send + Sync>
-                        ));
-                    }
-                };
+                let view_level =
+                    match crate::parser::view_level::ViewLevel::from_str(&view_level_str) {
+                        Ok(level) => level,
+                        Err(e) => {
+                            return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
+                                ViewLevelParseError(e),
+                            )
+                                as Box<dyn std::error::Error + Send + Sync>));
+                        }
+                    };
 
                 Ok((session_id, view_level))
             })?;
 
-            preferences.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+            preferences
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(Into::into)
         })
     }
 }
@@ -1927,8 +1952,9 @@ mod view_level_preference_tests {
             conn_guard.execute("PRAGMA foreign_keys = ON;", []).unwrap();
 
             // 创建 sessions 表（外键依赖）
-            conn_guard.execute(
-                "CREATE TABLE IF NOT EXISTS sessions (
+            conn_guard
+                .execute(
+                    "CREATE TABLE IF NOT EXISTS sessions (
                     session_id TEXT PRIMARY KEY,
                     project_path TEXT NOT NULL,
                     project_name TEXT NOT NULL,
@@ -1937,8 +1963,9 @@ mod view_level_preference_tests {
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );",
-                [],
-            ).unwrap();
+                    [],
+                )
+                .unwrap();
 
             // 执行迁移
             crate::database::migrations::migrate_v13_impl(&mut conn_guard).unwrap();
@@ -1979,7 +2006,10 @@ mod view_level_preference_tests {
         assert_eq!(non_existent, None);
 
         let non_existent_default = repo.get_preference_or_default("non-existent").unwrap();
-        assert_eq!(non_existent_default, crate::parser::view_level::ViewLevel::QAPairs);
+        assert_eq!(
+            non_existent_default,
+            crate::parser::view_level::ViewLevel::QAPairs
+        );
 
         // 测试更新
         let new_view_level = crate::parser::view_level::ViewLevel::UserOnly;
@@ -2024,10 +2054,17 @@ impl PromptHistoryRepository {
 
     /// 创建新的仓库实例（便捷方法）
     pub fn new() -> Self {
-        Self::from_default_db().unwrap_or_else(|_| {
-            Self {
-                conn: Arc::new(Mutex::new(Connection::open_in_memory().unwrap())),
-            }
+        Self::from_default_db().unwrap_or_else(|e| {
+            log::error!(
+                "从默认数据库创建 PromptGenerationHistoryRepository 失败: {}",
+                e
+            );
+            #[cfg(debug_assertions)]
+            eprintln!(
+                "从默认数据库创建 PromptGenerationHistoryRepository 失败: {:?}",
+                e
+            );
+            std::process::exit(1);
         })
     }
 
@@ -2036,9 +2073,10 @@ impl PromptHistoryRepository {
     where
         F: FnOnce(&rusqlite::Connection) -> Result<R>,
     {
-        let conn = self.conn.lock().map_err(|e| {
-            anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e)
-        })?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| anyhow::anyhow!("获取数据库连接锁失败（Mutex 已被毒化）: {}", e))?;
         f(&conn)
     }
 
@@ -2049,7 +2087,10 @@ impl PromptHistoryRepository {
     ///
     /// # 返回
     /// 返回创建后的历史记录（包含生成的 id）
-    pub fn create_history(&mut self, mut history: crate::database::models::PromptGenerationHistory) -> Result<crate::database::models::PromptGenerationHistory> {
+    pub fn create_history(
+        &mut self,
+        mut history: crate::database::models::PromptGenerationHistory,
+    ) -> Result<crate::database::models::PromptGenerationHistory> {
         let now = Utc::now().to_rfc3339();
 
         let id = self.with_conn_inner(|conn| {
@@ -2085,14 +2126,16 @@ impl PromptHistoryRepository {
     ///
     /// # 返回
     /// 返回所有历史记录的列表，按创建时间倒序排列
-    pub fn get_all_histories(&self) -> Result<Vec<crate::database::models::PromptGenerationHistory>> {
+    pub fn get_all_histories(
+        &self,
+    ) -> Result<Vec<crate::database::models::PromptGenerationHistory>> {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, session_id, original_goal, enhanced_prompt,
                         referenced_sessions, token_stats, confidence,
                         llm_provider, llm_model, language, created_at, is_favorite
                  FROM prompt_generation_history
-                 ORDER BY created_at DESC"
+                 ORDER BY created_at DESC",
             )?;
 
             let histories = stmt.query_map([], |row| {
@@ -2124,7 +2167,11 @@ impl PromptHistoryRepository {
     ///
     /// # 返回
     /// 返回历史记录的列表，按创建时间倒序排列
-    pub fn get_histories_paginated(&self, offset: i64, limit: i64) -> Result<Vec<crate::database::models::PromptGenerationHistory>> {
+    pub fn get_histories_paginated(
+        &self,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<crate::database::models::PromptGenerationHistory>> {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, session_id, original_goal, enhanced_prompt,
@@ -2132,7 +2179,7 @@ impl PromptHistoryRepository {
                         llm_provider, llm_model, language, created_at, is_favorite
                  FROM prompt_generation_history
                  ORDER BY created_at DESC
-                 LIMIT ?1 OFFSET ?2"
+                 LIMIT ?1 OFFSET ?2",
             )?;
 
             let histories = stmt.query_map(params![limit, offset], |row| {
@@ -2160,14 +2207,17 @@ impl PromptHistoryRepository {
     ///
     /// # 参数
     /// - `id`: 历史 ID
-    pub fn get_history_by_id(&self, id: i64) -> Result<Option<crate::database::models::PromptGenerationHistory>> {
+    pub fn get_history_by_id(
+        &self,
+        id: i64,
+    ) -> Result<Option<crate::database::models::PromptGenerationHistory>> {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, session_id, original_goal, enhanced_prompt,
                         referenced_sessions, token_stats, confidence,
                         llm_provider, llm_model, language, created_at, is_favorite
                  FROM prompt_generation_history
-                 WHERE id = ?1"
+                 WHERE id = ?1",
             )?;
 
             let mut rows = stmt.query(params![id])?;
@@ -2242,7 +2292,9 @@ impl PromptHistoryRepository {
     ///
     /// # 返回
     /// 返回所有收藏的历史记录，按创建时间倒序排列
-    pub fn get_favorite_histories(&self) -> Result<Vec<crate::database::models::PromptGenerationHistory>> {
+    pub fn get_favorite_histories(
+        &self,
+    ) -> Result<Vec<crate::database::models::PromptGenerationHistory>> {
         self.with_conn_inner(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, session_id, original_goal, enhanced_prompt,
@@ -2250,7 +2302,7 @@ impl PromptHistoryRepository {
                         llm_provider, llm_model, language, created_at, is_favorite
                  FROM prompt_generation_history
                  WHERE is_favorite = 1
-                 ORDER BY created_at DESC"
+                 ORDER BY created_at DESC",
             )?;
 
             let histories = stmt.query_map([], |row| {

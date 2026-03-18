@@ -7,10 +7,10 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::llm::interface::{
-    LLMService, Message, MessageRole, ModelParams, ChatCompletionResponse,
-    StreamChunk,
+    ChatCompletionResponse, LLMService, Message, MessageRole, ModelParams, StreamChunk,
 };
 
 /// Ollama 默认地址
@@ -32,6 +32,8 @@ impl OllamaProvider {
     /// - `base_url`: Ollama 服务地址（默认 http://127.0.0.1:11434）
     pub fn new(base_url: Option<String>) -> Result<Self> {
         let client = Client::builder()
+            .timeout(Duration::from_secs(300))  // Ollama 本地服务，给更长超时（5 分钟）
+            .connect_timeout(Duration::from_secs(5))
             .build()
             .context("创建 HTTP 客户端失败")?;
 
@@ -59,15 +61,9 @@ impl OllamaProvider {
     }
 
     /// 构建请求体
-    fn build_request(
-        &self,
-        messages: Vec<Message>,
-        params: ModelParams,
-    ) -> Result<OllamaRequest> {
-        let ollama_messages: Vec<OllamaMessage> = messages
-            .into_iter()
-            .map(Self::convert_message)
-            .collect();
+    fn build_request(&self, messages: Vec<Message>, params: ModelParams) -> Result<OllamaRequest> {
+        let ollama_messages: Vec<OllamaMessage> =
+            messages.into_iter().map(Self::convert_message).collect();
 
         Ok(OllamaRequest {
             model: params.model,
@@ -139,43 +135,46 @@ impl OllamaProvider {
         }
 
         // Ollama 流式响应格式与 OpenAI 兼容
-        let stream = response.bytes_stream().map(|chunk_result| match chunk_result {
-            Ok(chunk) => {
-                let text = String::from_utf8_lossy(&chunk);
-                // 解析 SSE 格式（Ollama 使用 OpenAI 兼容格式）
-                for line in text.lines() {
-                    if line.starts_with("data:") {
-                        let json_str = line[5..].trim();
-                        if json_str == "[DONE]" {
-                            return Ok(StreamChunk {
-                                delta: String::new(),
-                                is_finish: true,
-                                finish_reason: Some("stop".to_string()),
-                            });
-                        }
-
-                        if let Ok(resp) = serde_json::from_str::<OllamaStreamResponse>(json_str) {
-                            if let Some(choice) = resp.choices.first() {
-                                let delta = choice.delta.content.clone().unwrap_or_default();
-                                let finish_reason = choice.finish_reason.clone();
-
+        let stream = response
+            .bytes_stream()
+            .map(|chunk_result| match chunk_result {
+                Ok(chunk) => {
+                    let text = String::from_utf8_lossy(&chunk);
+                    // 解析 SSE 格式（Ollama 使用 OpenAI 兼容格式）
+                    for line in text.lines() {
+                        if line.starts_with("data:") {
+                            let json_str = line[5..].trim();
+                            if json_str == "[DONE]" {
                                 return Ok(StreamChunk {
-                                    delta,
-                                    is_finish: finish_reason.is_some(),
-                                    finish_reason,
+                                    delta: String::new(),
+                                    is_finish: true,
+                                    finish_reason: Some("stop".to_string()),
                                 });
+                            }
+
+                            if let Ok(resp) = serde_json::from_str::<OllamaStreamResponse>(json_str)
+                            {
+                                if let Some(choice) = resp.choices.first() {
+                                    let delta = choice.delta.content.clone().unwrap_or_default();
+                                    let finish_reason = choice.finish_reason.clone();
+
+                                    return Ok(StreamChunk {
+                                        delta,
+                                        is_finish: finish_reason.is_some(),
+                                        finish_reason,
+                                    });
+                                }
                             }
                         }
                     }
+                    Ok(StreamChunk {
+                        delta: String::new(),
+                        is_finish: false,
+                        finish_reason: None,
+                    })
                 }
-                Ok(StreamChunk {
-                    delta: String::new(),
-                    is_finish: false,
-                    finish_reason: None,
-                })
-            }
-            Err(e) => Err(anyhow::anyhow!("流式响应错误: {}", e)),
-        });
+                Err(e) => Err(anyhow::anyhow!("流式响应错误: {}", e)),
+            });
 
         Ok(Box::new(Box::pin(stream)))
     }
@@ -329,10 +328,7 @@ mod tests {
     fn test_build_request() {
         let provider = OllamaProvider::default().unwrap();
 
-        let messages = vec![
-            Message::system("You are helpful"),
-            Message::user("Hello"),
-        ];
+        let messages = vec![Message::system("You are helpful"), Message::user("Hello")];
         let params = ModelParams::new("llama3");
 
         let request = provider.build_request(messages, params);

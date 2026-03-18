@@ -2,14 +2,14 @@
 //!
 //! 使用 notify crate 监控 Claude 会话文件变更，并通过 Tauri Events 推送到前端
 
-use anyhow::{Result, Context};
-use notify::{RecommendedWatcher, RecursiveMode, Watcher, EventKind};
+use anyhow::{Context, Result};
+use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use serde::{Deserialize, Serialize};
 
 /// 监控事件
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,7 +64,8 @@ impl SessionWatcher {
     /// 返回线程句柄或错误
     pub fn start(self) -> Result<thread::JoinHandle<()>> {
         // 创建事件接收通道
-        let (event_tx, event_rx): (Sender<notify::Event>, Receiver<notify::Event>) = mpsc::channel();
+        let (event_tx, event_rx): (Sender<notify::Event>, Receiver<notify::Event>) =
+            mpsc::channel();
 
         // 创建 notify watcher
         let mut watcher: RecommendedWatcher = Watcher::new(
@@ -74,10 +75,12 @@ impl SessionWatcher {
                 }
             },
             notify::Config::default(),
-        ).context("创建文件监控器失败")?;
+        )
+        .context("创建文件监控器失败")?;
 
         // 监控目标目录
-        watcher.watch(&self.watch_path, RecursiveMode::Recursive)
+        watcher
+            .watch(&self.watch_path, RecursiveMode::Recursive)
             .context("设置监控目录失败")?;
 
         // 启动处理线程
@@ -102,7 +105,8 @@ impl SessionWatcher {
                 Ok(event) => {
                     // 过滤非 JSONL 文件
                     if let Some(path) = event.paths.first() {
-                        let is_jsonl = path.extension()
+                        let is_jsonl = path
+                            .extension()
                             .and_then(|ext| ext.to_str())
                             .map(|ext| ext == "jsonl")
                             .unwrap_or(false);
@@ -117,7 +121,8 @@ impl SessionWatcher {
                             EventKind::Modify(_) => "modified",
                             EventKind::Remove(_) => "deleted",
                             _ => "other",
-                        }.to_string();
+                        }
+                        .to_string();
 
                         let watch_event = WatchEvent {
                             kind,
@@ -132,8 +137,8 @@ impl SessionWatcher {
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {
                     // 超时：检查是否超过防抖时间
-                    if !debounce_buffer.is_empty()
-                        && last_event_time.elapsed() >= debounce_duration {
+                    if !debounce_buffer.is_empty() && last_event_time.elapsed() >= debounce_duration
+                    {
                         // 防抖时间已过，批量处理事件
                         self.flush_events(&mut debounce_buffer);
                     }
@@ -157,7 +162,8 @@ impl SessionWatcher {
         eprintln!("文件监控器: 处理 {} 个事件", events.len());
 
         // 去重：同一个文件的多个事件只保留最新的
-        let mut unique_events: std::collections::HashMap<String, WatchEvent> = std::collections::HashMap::new();
+        let mut unique_events: std::collections::HashMap<String, WatchEvent> =
+            std::collections::HashMap::new();
         for event in events.drain(..) {
             unique_events.insert(event.path.clone(), event);
         }
@@ -175,8 +181,7 @@ impl SessionWatcher {
 ///
 /// 返回 ~/.claude/projects/ 路径
 pub fn get_claude_projects_dir() -> Result<PathBuf> {
-    let home_dir = dirs::home_dir()
-        .ok_or_else(|| anyhow::anyhow!("无法获取用户目录"))?;
+    let home_dir = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("无法获取用户目录"))?;
 
     Ok(home_dir.join(".claude").join("projects"))
 }

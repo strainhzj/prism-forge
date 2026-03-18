@@ -7,11 +7,11 @@
 //! - 客户端管理器
 //! - API Key 轮换机制
 
-pub mod security;
 pub mod interface;
-pub mod providers;
-pub mod manager;
 pub mod key_rotation;
+pub mod manager;
 pub mod model_resolver;
+pub mod providers;
+pub mod security;
 
 pub use manager::LLMClientManager;

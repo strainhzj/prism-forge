@@ -1,31 +1,32 @@
 // LLM 客户端模块
 // 注意：模块声明顺序很重要，被依赖的模块需要先声明
-pub mod perf;
-mod llm;
-pub mod database;
 mod commands;
 mod commands_prompt_versions;
-mod tokenizer;
+pub mod database;
+pub mod embedding;
+mod llm;
 mod monitor;
 mod parser;
-pub mod embedding;
+pub mod perf;
+mod tokenizer;
 pub use embedding::EmbeddingGenerator;
-pub mod optimizer;
 pub mod command_registry;
-pub mod startup;
 pub mod command_wrapper;
+mod filter_config;
 pub mod logging;
+pub mod optimizer;
 pub mod path_resolver;
+pub mod session_parser;
 pub mod session_reader;
 pub mod session_type_detector;
-mod filter_config;
-pub mod session_parser;
+pub mod startup;
+pub mod intent_analyzer;
 
 // 导入 Tauri 插件
 
-use llm::LLMClientManager;
-use database::migrations;
 use commands::*;
+use database::migrations;
+use llm::LLMClientManager;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -50,8 +51,7 @@ fn get_latest_session_path(project_path: String) -> Result<String, String> {
 /// 解析会话文件（用于前端预览展示）
 #[tauri::command]
 fn parse_session_file(file_path: String) -> Result<Vec<optimizer::ParsedEvent>, String> {
-    optimizer::PromptOptimizer::parse_session_file(&file_path)
-        .map_err(|e| e.to_string())
+    optimizer::PromptOptimizer::parse_session_file(&file_path).map_err(|e| e.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -59,7 +59,7 @@ pub fn run() {
     // 执行启动验证
     eprintln!("[INFO] Starting application startup validation...");
     let validation_result = startup::perform_startup_validation();
-    
+
     if !validation_result.success {
         eprintln!("[ERROR] Startup validation failed!");
         for error in &validation_result.errors {
@@ -201,6 +201,29 @@ pub fn run() {
             commands_prompt_versions::cmd_check_config_updated,
             commands_prompt_versions::cmd_cleanup_legacy_templates,
             commands_prompt_versions::cmd_delete_prompt_template_by_name,
+            // 项目技术栈管理命令
+            cmd_save_project_tech_stack,
+            cmd_get_project_tech_stack,
+            cmd_detect_project_tech_stack,
+            cmd_detect_and_save_project_tech_stack,
+            // 开场白意图分析命令
+            cmd_analyze_opening_intent,
+            // 问答对检测命令
+            cmd_detect_qa_pairs,
+            // 意图分析历史管理命令
+            cmd_save_intent_analysis,
+            cmd_get_intent_analysis_history,
+            cmd_clear_intent_analysis_history,
+            // 问答对决策分析命令
+            cmd_analyze_decision,
+            // 决策检测命令（规则引擎）
+            cmd_detect_decisions,
+            cmd_get_decision_keywords,
+            cmd_get_decision_keywords_by_language,
+            cmd_get_decision_keywords_by_type,
+            cmd_upsert_decision_keyword,
+            cmd_delete_decision_keyword,
+            cmd_import_decision_keywords,
         ])
         .run(tauri::generate_context!())
         .map_err(|e| {

@@ -41,7 +41,20 @@ import type {
   PromptCategory,
   PromptLibraryFilters
 } from '@/types/promptLibrary';
-import type { Prompt } from '@/types/generated';
+
+interface UnifiedPromptItem {
+  id: number;
+  templateId: number;
+  name: string;
+  content: string;
+  description: string | null;
+  scenario: string;
+  language: string;
+  isSystem: boolean;
+  isActive: boolean;
+  versionNumber: number;
+  createdAt: string;
+}
 
 export interface PromptLibraryProps {
   /**
@@ -116,44 +129,38 @@ export function PromptLibrary({
         meta_template: 'meta_template'
       };
 
-      const prompts = await invokeWithRetry<Prompt[]>('cmd_get_prompts', {
+      const prompts = await invokeWithRetry<UnifiedPromptItem[]>('cmd_get_prompts_unified', {
         scenario: scenarioMap[activeTab],
         language: currentLanguage, // P0-3: 使用动态语言
         search: filters.search || undefined
       });
 
       // P1-2: 验证并转换 Prompt 为 PromptLibraryItem 格式
-      const validCategories = Object.keys(scenarioMap);
-      const libraryItems: PromptLibraryItem[] = prompts.map(p => {
-        // 处理 category 可能为 null 的情况
-        const category = p.category && validCategories.includes(p.category)
-          ? (p.category as PromptCategory)
-          : 'meta_template';
-
-        // 如果是 meta_template，返回 MetaTemplate 类型
-        if (category === 'meta_template') {
+      const libraryItems: PromptLibraryItem[] = prompts.map((p) => {
+        if (activeTab === 'meta_template') {
           return {
-            id: p.id !== null ? Number(p.id) : undefined,
+            id: p.id,
             key: p.name,
             name: p.name,
             content: p.content,
-            description: p.description ?? undefined, // 处理 null
-            is_active: true, // 默认启用
-            created_at: p.createdAt ?? undefined,
-            updated_at: p.updatedAt ?? undefined,
-          } as const;
+            description: p.description ?? undefined,
+            is_active: p.isActive,
+            created_at: p.createdAt,
+            updated_at: p.createdAt
+          };
         }
 
-        // 否则返回 SavedPrompt 类型
         return {
-          id: p.id !== null ? Number(p.id) : undefined,
-          category: category,
+          id: p.id,
+          session_id: undefined,
+          category: activeTab,
           title: p.name,
           content: p.content,
-          rating: (p as any).rating,
-          usage_count: (p as any).usage_count || 0,
-          created_at: p.createdAt ?? new Date().toISOString(),
-        } as const;
+          rating: undefined,
+          usage_count: 0,
+          tokens: undefined,
+          created_at: p.createdAt
+        };
       });
 
       setItems(libraryItems);

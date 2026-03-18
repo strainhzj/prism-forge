@@ -95,7 +95,13 @@ impl PerformanceMonitor {
 
     /// Get average duration for an operation type
     pub fn get_average_duration(&self, operation_name: &str) -> Option<Duration> {
-        let metrics = self.metrics.lock().ok()?;
+        let metrics = match self.metrics.lock() {
+            Ok(m) => m,
+            Err(e) => {
+                log::error!("获取性能指标锁失败（Mutex 已被毒化）: {}", e);
+                return None;
+            }
+        };
         let matching: Vec<_> = metrics
             .iter()
             .filter(|m| m.name == operation_name)
@@ -111,7 +117,13 @@ impl PerformanceMonitor {
 
     /// Get success rate for an operation type
     pub fn get_success_rate(&self, operation_name: &str) -> Option<f64> {
-        let metrics = self.metrics.lock().ok()?;
+        let metrics = match self.metrics.lock() {
+            Ok(m) => m,
+            Err(e) => {
+                log::error!("获取性能指标锁失败（Mutex 已被毒化）: {}", e);
+                return None;
+            }
+        };
         let matching: Vec<_> = metrics
             .iter()
             .filter(|m| m.name == operation_name)
@@ -134,7 +146,13 @@ impl PerformanceMonitor {
 
     /// Get all recorded metrics
     pub fn get_all_metrics(&self) -> Vec<OperationMetrics> {
-        self.metrics.lock().map(|m| m.clone()).unwrap_or_default()
+        match self.metrics.lock() {
+            Ok(m) => m.clone(),
+            Err(e) => {
+                log::error!("获取性能指标锁失败（Mutex 已被毒化）: {}", e);
+                Vec::new()
+            }
+        }
     }
 
     /// Clear all recorded metrics
@@ -275,7 +293,7 @@ mod tests {
     fn test_record_metrics() {
         let monitor = PerformanceMonitor::new();
         monitor.record("test_op", Duration::from_millis(100), true);
-        
+
         let metrics = monitor.get_all_metrics();
         assert_eq!(metrics.len(), 1);
         assert_eq!(metrics[0].name, "test_op");
@@ -287,7 +305,7 @@ mod tests {
         let monitor = PerformanceMonitor::new();
         monitor.record("test_op", Duration::from_millis(100), true);
         monitor.record("test_op", Duration::from_millis(200), true);
-        
+
         let avg = monitor.get_average_duration("test_op").unwrap();
         assert_eq!(avg, Duration::from_millis(150));
     }
@@ -297,7 +315,7 @@ mod tests {
         let monitor = PerformanceMonitor::new();
         monitor.record("test_op", Duration::from_millis(100), true);
         monitor.record("test_op", Duration::from_millis(100), false);
-        
+
         let rate = monitor.get_success_rate("test_op").unwrap();
         assert!((rate - 0.5).abs() < 0.001);
     }
@@ -316,7 +334,7 @@ mod tests {
         let timer = Timer::start_with_monitor("test_op", monitor.clone());
         thread::sleep(Duration::from_millis(10));
         timer.stop(true);
-        
+
         let metrics = monitor.get_all_metrics();
         assert_eq!(metrics.len(), 1);
     }
@@ -327,7 +345,7 @@ mod tests {
         monitor.record("op1", Duration::from_millis(100), true);
         monitor.record("op1", Duration::from_millis(200), true);
         monitor.record("op2", Duration::from_millis(50), false);
-        
+
         let summary = monitor.generate_summary();
         assert_eq!(summary.total_operations, 3);
         assert_eq!(summary.operation_stats.len(), 2);

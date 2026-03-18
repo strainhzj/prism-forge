@@ -17,9 +17,9 @@
 //! - **流式解析支持**: 利用现有的 JsonlParser，在解析时应用过滤逻辑
 //! - **状态持久化**: 新增 view_level_preferences 表存储每个会话的等级选择
 
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use anyhow::Result;
 
 use crate::database::models::Message;
 
@@ -207,10 +207,7 @@ impl MessageFilter {
         match self.view_level {
             ViewLevel::Full => true,
             ViewLevel::Conversation => {
-                matches!(
-                    message.msg_type.as_str(),
-                    "user" | "assistant" | "thinking"
-                )
+                matches!(message.msg_type.as_str(), "user" | "assistant" | "thinking")
             }
             ViewLevel::QAPairs => {
                 // QAPairs 需要特殊处理，在 extract_qa_pairs 中实现
@@ -261,9 +258,16 @@ impl MessageFilter {
     /// - 包含 <tool_use_error> 或 <system-reminder> 的消息
     /// - system 类型的消息
     ///
-    /// **步骤 2: 从后向前扫描配对**
+    /// **步骤 2: 合并用户消息与技能消息**
     ///
-    /// 1. 从后向前扫描过滤后的消息列表
+    /// 将用户消息与其直系技能子消息合并：
+    /// - 识别技能消息：内容包含 "Base directory for this skill"
+    /// - 合并策略：将技能内容追加到用户消息，用分隔符间隔
+    /// - 合并后从列表中移除技能消息
+    ///
+    /// **步骤 3: 从后向前扫描配对**
+    ///
+    /// 1. 从后向前扫描合并后的消息列表
     /// 2. 遇到 user 时，向后查找第一个 assistant 作为答案
     /// 3. 如果遇到另一个 user，停止查找（该 user 没有答案）
     ///
@@ -304,13 +308,16 @@ impl MessageFilter {
         // 步骤 1: 预过滤，移除不适合问答对的消息
         let filtered_messages = self.pre_filter_for_qa(messages);
 
+        // 步骤 2: 合并用户消息与技能消息
+        let merged_messages = self.merge_user_with_skill_messages(filtered_messages);
+
         let mut qa_pairs = Vec::new();
 
-        // 步骤 2: 从后向前扫描，配对 user 和 assistant
-        let mut i = filtered_messages.len();
+        // 步骤 3: 从后向前扫描，配对 user 和 assistant
+        let mut i = merged_messages.len();
         while i > 0 {
             i -= 1;
-            let msg = &filtered_messages[i];
+            let msg = &merged_messages[i];
 
             match msg.msg_type.as_str() {
                 "user" => {
@@ -319,8 +326,8 @@ impl MessageFilter {
 
                     // 从当前 user 之后开始向后找 assistant
                     let mut j = i + 1;
-                    while j < filtered_messages.len() {
-                        let next_msg = &filtered_messages[j];
+                    while j < merged_messages.len() {
+                        let next_msg = &merged_messages[j];
                         match next_msg.msg_type.as_str() {
                             "assistant" => {
                                 // 找到 assistant，记录为答案
@@ -389,7 +396,8 @@ impl MessageFilter {
                 // 检查 message.content 数组
                 if let Some(content) = parsed.get("content").and_then(|v| v.as_array()) {
                     if !content.is_empty() {
-                        if let Some(content_type) = content[0].get("type").and_then(|v| v.as_str()) {
+                        if let Some(content_type) = content[0].get("type").and_then(|v| v.as_str())
+                        {
                             return content_type == "tool_use";
                         }
                     }
@@ -413,14 +421,28 @@ impl MessageFilter {
         if let Some(ref summary) = msg.summary {
             // 尝试解析 JSON
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(summary) {
+                // 首先检查顶层的 type 字段
+                if let Some(type_val) = parsed.get("type").and_then(|v| v.as_str()) {
+                    if type_val == "tool_result" {
+                        return true;
+                    }
+                }
+
                 // 检查 message.content 数组
                 if let Some(content) = parsed.get("content").and_then(|v| v.as_array()) {
                     if !content.is_empty() {
-                        if let Some(content_type) = content[0].get("type").and_then(|v| v.as_str()) {
+                        if let Some(content_type) = content[0].get("type").and_then(|v| v.as_str())
+                        {
                             return content_type == "tool_result";
                         }
                     }
                 }
+            }
+
+            // 回退：检查 summary 中是否包含 "tool_result" 字符串
+            // 注意：这是一个简单的启发式方法，可能会误判
+            if summary.contains("tool_result") {
+                return true;
             }
         }
 
@@ -432,8 +454,7 @@ impl MessageFilter {
     /// 检查消息内容是否包含 <tool_use_error> 或 <system-reminder> 标签。
     fn contains_system_tags(&self, msg: &Message) -> bool {
         if let Some(ref summary) = msg.summary {
-            return summary.contains("<tool_use_error>") ||
-                   summary.contains("<system-reminder>");
+            return summary.contains("<tool_use_error>") || summary.contains("<system-reminder>");
         }
         false
     }
@@ -499,6 +520,178 @@ impl MessageFilter {
             })
             .collect()
     }
+
+    // ========== 消息合并方法 ==========
+
+    /// 合并用户消息与技能消息
+    ///
+    /// 将用户消息及其直系技能子消息合并为一条消息。
+    ///
+    /// # 算法
+    ///
+    /// 1. 遍历消息列表
+    /// 2. 当遇到 user 消息时，查找其直系技能子消息（parentUuid == user.uuid）
+    /// 3. 如果找到技能消息，合并其内容到用户消息
+    /// 4. 从列表中移除已合并的技能消息
+    ///
+    /// # 参数
+    ///
+    /// - `messages`: 预过滤后的消息列表
+    ///
+    /// # 返回
+    ///
+    /// 合并后的消息列表（技能消息已被移除）
+    fn merge_user_with_skill_messages(&self, messages: Vec<Message>) -> Vec<Message> {
+        use std::collections::HashSet;
+
+        #[cfg(debug_assertions)]
+        {
+            eprintln!("🔗 [merge_user_with_skill_messages] 开始合并，原始消息数: {}", messages.len());
+        }
+
+        let mut result = Vec::new();
+        let mut merged_uuids = HashSet::new();
+
+        for msg in &messages {
+            // 如果这条消息已经被合并过，跳过
+            if merged_uuids.contains(&msg.uuid) {
+                continue;
+            }
+
+            if msg.msg_type == "user" {
+                // 查找该用户消息的直系技能子消息
+                let skill_children: Vec<&Message> = messages
+                    .iter()
+                    .filter(|m| {
+                        // parentUuid 指向当前用户消息
+                        m.parent_uuid.as_ref() == Some(&msg.uuid)
+                        // 且是技能消息
+                        && self.is_skill_invocation_message(m)
+                    })
+                    .collect();
+
+                if !skill_children.is_empty() {
+                    // 按原始顺序（timestamp）排序技能消息
+                    let mut sorted_skills = skill_children;
+                    sorted_skills.sort_by_key(|m| &m.timestamp);
+
+                    // 合并内容
+                    let merged_content = self.merge_message_contents(msg, &sorted_skills);
+
+                    // 创建合并后的消息
+                    let mut merged_msg = msg.clone();
+                    merged_msg.summary = Some(merged_content.clone());
+                    merged_msg.content = Some(merged_content);
+
+                    #[cfg(debug_assertions)]
+                    {
+                        let user_uuid_preview = truncate_str_to_chars(&msg.uuid, 8);
+                        eprintln!(
+                            "  ✅ 合并用户消息 {} 与 {} 个技能消息",
+                            user_uuid_preview,
+                            sorted_skills.len()
+                        );
+                    }
+
+                    // 标记技能消息为已合并
+                    for skill in &sorted_skills {
+                        merged_uuids.insert(skill.uuid.clone());
+
+                        #[cfg(debug_assertions)]
+                        {
+                            let skill_uuid_preview = truncate_str_to_chars(&skill.uuid, 8);
+                            eprintln!("    - 合并技能消息: {}", skill_uuid_preview);
+                        }
+                    }
+
+                    result.push(merged_msg);
+                } else {
+                    // 没有技能子消息，直接添加原消息
+                    result.push(msg.clone());
+                }
+            } else if msg.msg_type == "assistant" {
+                // assistant 消息直接添加（不会被合并）
+                result.push(msg.clone());
+            }
+            // 技能消息不添加（已被合并）
+        }
+
+        #[cfg(debug_assertions)]
+        {
+            eprintln!(
+                "🔗 [merge_user_with_skill_messages] 合并完成，最终消息数: {}",
+                result.len()
+            );
+        }
+
+        result
+    }
+
+    /// 合并消息内容
+    ///
+    /// 将用户消息和技能消息的内容合并为一个格式化的字符串。
+    /// 使用分隔符间隔正文内容和技能内容。
+    ///
+    /// # 参数
+    ///
+    /// - `user_msg`: 用户消息
+    /// - `skill_msgs`: 技能消息列表（已按 timestamp 排序）
+    ///
+    /// # 返回
+    ///
+    /// 合并后的内容字符串
+    fn merge_message_contents(&self, user_msg: &Message, skill_msgs: &[&Message]) -> String {
+        let mut parts = Vec::new();
+
+        // 添加用户消息内容
+        if let Some(ref user_content) = user_msg.summary {
+            parts.push(user_content.clone());
+        }
+
+        // 添加技能消息内容（使用分隔符）
+        for skill_msg in skill_msgs {
+            if let Some(ref skill_content) = skill_msg.summary {
+                // 使用明显的分隔符标记技能内容
+                parts.push(format!("\n\n---\n\n{}", skill_content));
+            }
+        }
+
+        parts.join("")
+    }
+
+    /// 判断是否为技能调用消息
+    ///
+    /// 通过内容特征识别技能消息。
+    ///
+    /// # 识别特征
+    ///
+    /// - 内容包含 "Base directory for this skill"
+    ///
+    /// # 参数
+    ///
+    /// - `msg`: 要判断的消息
+    ///
+    /// # 返回
+    ///
+    /// - `true`: 是技能调用消息
+    /// - `false`: 不是技能调用消息
+    fn is_skill_invocation_message(&self, msg: &Message) -> bool {
+        // 检查 summary 字段
+        if let Some(ref summary) = msg.summary {
+            if summary.contains("Base directory for this skill") {
+                return true;
+            }
+        }
+
+        // 检查 content 字段
+        if let Some(ref content) = msg.content {
+            if content.contains("Base directory for this skill") {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 #[cfg(test)]
@@ -550,10 +743,114 @@ mod tests {
     #[test]
     fn test_view_level_from_str() {
         assert_eq!(ViewLevel::from_str("full").unwrap(), ViewLevel::Full);
-        assert_eq!(ViewLevel::from_str("conversation").unwrap(), ViewLevel::Conversation);
+        assert_eq!(
+            ViewLevel::from_str("conversation").unwrap(),
+            ViewLevel::Conversation
+        );
         assert_eq!(ViewLevel::from_str("qa_pairs").unwrap(), ViewLevel::QAPairs);
-        assert_eq!(ViewLevel::from_str("assistant_only").unwrap(), ViewLevel::AssistantOnly);
-        assert_eq!(ViewLevel::from_str("user_only").unwrap(), ViewLevel::UserOnly);
+
+        // 新增：测试技能消息识别
+        let filter = MessageFilter::new(ViewLevel::QAPairs);
+
+        // 测试：包含 "Base directory for this skill" 的消息是技能消息
+        let skill_msg = create_test_message_with_summary(
+            "user",
+            "skill-uuid",
+            "Base directory for this skill: /path/to/skill"
+        );
+        assert!(filter.is_skill_invocation_message(&skill_msg));
+
+        // 测试：普通用户消息不是技能消息
+        let user_msg = create_test_message_with_summary(
+            "user",
+            "user-uuid",
+            "Help me implement feature X"
+        );
+        assert!(!filter.is_skill_invocation_message(&user_msg));
+    }
+
+    #[test]
+    fn test_merge_user_with_skill_messages() {
+        let filter = MessageFilter::new(ViewLevel::QAPairs);
+
+        // 创建测试消息：
+        // 1. 用户消息
+        // 2. 技能消息（parentUuid = 用户消息UUID）
+        // 3. 助手回复
+        let user_msg = create_test_message_with_summary("user", "user-123", "Help me code");
+        let skill_msg = Message {
+            uuid: "skill-456".to_string(),
+            parent_uuid: Some("user-123".to_string()),
+            msg_type: "user".to_string(), // 技能消息可能被标记为 user 类型
+            summary: Some("Base directory for this skill: /path".to_string()),
+            ..create_test_message("user", "skill-456", Some("user-123"))
+        };
+        let assistant_msg = create_test_message_with_summary("assistant", "assistant-789", "Sure, I'll help");
+
+        let messages = vec![user_msg.clone(), skill_msg, assistant_msg.clone()];
+
+        // 执行合并
+        let merged = filter.merge_user_with_skill_messages(messages);
+
+        // 验证：
+        // 1. 技能消息被移除
+        // 2. 用户消息内容包含原文和技能内容
+        // 3. 助手消息保留
+        assert_eq!(merged.len(), 2); // 用户消息(合并后) + 助手消息
+
+        // 检查第一条是合并后的用户消息
+        assert_eq!(merged[0].uuid, "user-123");
+        assert!(merged[0].summary.as_ref().unwrap().contains("Help me code"));
+        assert!(merged[0].summary.as_ref().unwrap().contains("Base directory for this skill"));
+
+        // 检查第二条是助手消息
+        assert_eq!(merged[1].uuid, "assistant-789");
+    }
+
+    #[test]
+    fn test_extract_qa_pairs_with_skill_merge() {
+        let filter = MessageFilter::new(ViewLevel::QAPairs);
+
+        // 创建完整的测试场景：
+        // 用户消息 -> 技能消息 -> 助手回复
+        let user_msg = create_test_message_with_summary("user", "user-123", "Help me code");
+        let skill_msg = Message {
+            uuid: "skill-456".to_string(),
+            parent_uuid: Some("user-123".to_string()),
+            msg_type: "user".to_string(),
+            summary: Some("Base directory for this skill: /path".to_string()),
+            ..create_test_message("user", "skill-456", Some("user-123"))
+        };
+        let assistant_msg = create_test_message_with_summary("assistant", "assistant-789", "Sure, I'll help");
+
+        let messages = vec![user_msg, skill_msg, assistant_msg];
+
+        // 提取问答对
+        let qa_pairs = filter.extract_qa_pairs(messages);
+
+        // 验证：应该生成一个问答对
+        assert_eq!(qa_pairs.len(), 1);
+
+        // 验证：问题是合并后的用户消息
+        assert_eq!(qa_pairs[0].question.uuid, "user-123");
+        assert!(qa_pairs[0].question.summary.as_ref().unwrap().contains("Help me code"));
+        assert!(qa_pairs[0].question.summary.as_ref().unwrap().contains("Base directory for this skill"));
+
+        // 验证：答案是助手回复
+        assert!(qa_pairs[0].answer.is_some());
+        assert_eq!(qa_pairs[0].answer.as_ref().unwrap().uuid, "assistant-789");
+    }
+
+    #[test]
+    fn test_view_level_from_str_other_values() {
+        assert_eq!(
+            ViewLevel::from_str("assistant_only").unwrap(),
+            ViewLevel::AssistantOnly
+        );
+        assert_eq!(
+            ViewLevel::from_str("user_only").unwrap(),
+            ViewLevel::UserOnly
+        );
         assert!(ViewLevel::from_str("invalid").is_err());
     }
 
@@ -607,7 +904,7 @@ mod tests {
         let user_msg_with_tool_result = create_test_message_with_summary(
             "user",
             "uuid2",
-            r#"{"type":"tool_result","content":"some content"}"#
+            r#"{"type":"tool_result","content":"some content"}"#,
         );
         assert!(!filter.should_include(&user_msg_with_tool_result));
 
@@ -615,16 +912,13 @@ mod tests {
         let user_msg_with_tool_result_spaced = create_test_message_with_summary(
             "user",
             "uuid3",
-            r#"{"type": "tool_result","content":"some content"}"#
+            r#"{"type": "tool_result","content":"some content"}"#,
         );
         assert!(!filter.should_include(&user_msg_with_tool_result_spaced));
 
         // 包含 tool_result 字符串的用户消息应该被过滤
-        let user_msg_with_tool_result_text = create_test_message_with_summary(
-            "user",
-            "uuid4",
-            "some text with tool_result inside"
-        );
+        let user_msg_with_tool_result_text =
+            create_test_message_with_summary("user", "uuid4", "some text with tool_result inside");
         assert!(!filter.should_include(&user_msg_with_tool_result_text));
     }
 
@@ -647,17 +941,28 @@ mod tests {
         let assistant_msg2 = create_test_message("assistant", "uuid4", None);
 
         // 顺序：user1, assistant1, user2, assistant2
-        let messages = vec![user_msg1.clone(), assistant_msg1.clone(), user_msg2.clone(), assistant_msg2.clone()];
+        let messages = vec![
+            user_msg1.clone(),
+            assistant_msg1.clone(),
+            user_msg2.clone(),
+            assistant_msg2.clone(),
+        ];
         let qa_pairs = filter.extract_qa_pairs(messages);
 
         // 从后向前：assistant2 -> user2, assistant1 -> user1
         assert_eq!(qa_pairs.len(), 2);
         assert_eq!(qa_pairs[0].question.uuid, user_msg1.uuid);
         assert!(qa_pairs[0].answer.is_some());
-        assert_eq!(qa_pairs[0].answer.as_ref().unwrap().uuid, assistant_msg1.uuid);
+        assert_eq!(
+            qa_pairs[0].answer.as_ref().unwrap().uuid,
+            assistant_msg1.uuid
+        );
         assert_eq!(qa_pairs[1].question.uuid, user_msg2.uuid);
         assert!(qa_pairs[1].answer.is_some());
-        assert_eq!(qa_pairs[1].answer.as_ref().unwrap().uuid, assistant_msg2.uuid);
+        assert_eq!(
+            qa_pairs[1].answer.as_ref().unwrap().uuid,
+            assistant_msg2.uuid
+        );
     }
 
     #[test]
@@ -671,13 +976,15 @@ mod tests {
         let messages = vec![user_msg1.clone(), assistant_msg1.clone(), user_msg2.clone()];
         let qa_pairs = filter.extract_qa_pairs(messages);
 
-        // 从后向前：user2 没有答案（最后是 user），assistant1 -> user1
-        assert_eq!(qa_pairs.len(), 2);
+        // 从后向前：user2 没有答案（不创建问答对），assistant1 -> user1
+        // 只有有答案的用户消息才会创建问答对
+        assert_eq!(qa_pairs.len(), 1);
         assert_eq!(qa_pairs[0].question.uuid, user_msg1.uuid);
         assert!(qa_pairs[0].answer.is_some());
-        assert_eq!(qa_pairs[0].answer.as_ref().unwrap().uuid, assistant_msg1.uuid);
-        assert_eq!(qa_pairs[1].question.uuid, user_msg2.uuid);
-        assert!(qa_pairs[1].answer.is_none());
+        assert_eq!(
+            qa_pairs[0].answer.as_ref().unwrap().uuid,
+            assistant_msg1.uuid
+        );
     }
 
     #[test]
@@ -689,18 +996,24 @@ mod tests {
         let assistant_msg = create_test_message("assistant", "uuid4", None);
 
         // 顺序：user1, thinking, user2, assistant
-        let messages = vec![user_msg1.clone(), thinking_msg, user_msg2.clone(), assistant_msg.clone()];
+        let messages = vec![
+            user_msg1.clone(),
+            thinking_msg,
+            user_msg2.clone(),
+            assistant_msg.clone(),
+        ];
         let qa_pairs = filter.extract_qa_pairs(messages);
 
         // 新逻辑：thinking 被预过滤，过滤后序列：[user1, user2, assistant]
-        // 从后向前：assistant -> user2（配对），user1 -> 无答案（遇到 user2 停止）
-        assert_eq!(qa_pairs.len(), 2);
-        assert_eq!(qa_pairs[0].question.uuid, user_msg1.uuid);
-        assert!(qa_pairs[0].answer.is_none()); // user1 无答案
-
-        assert_eq!(qa_pairs[1].question.uuid, user_msg2.uuid);
-        assert!(qa_pairs[1].answer.is_some());
-        assert_eq!(qa_pairs[1].answer.as_ref().unwrap().uuid, assistant_msg.uuid);
+        // 从后向前：assistant -> user2（配对），user1 -> 无答案（不创建问答对）
+        // 只有有答案的用户消息才会创建问答对
+        assert_eq!(qa_pairs.len(), 1);
+        assert_eq!(qa_pairs[0].question.uuid, user_msg2.uuid);
+        assert!(qa_pairs[0].answer.is_some());
+        assert_eq!(
+            qa_pairs[0].answer.as_ref().unwrap().uuid,
+            assistant_msg.uuid
+        );
     }
 
     #[test]
@@ -713,7 +1026,13 @@ mod tests {
         let assistant2 = create_test_message("assistant", "uuid5", None);
 
         // 典型的对话模式：user -> assistant -> user -> thinking -> assistant
-        let messages = vec![user1.clone(), assistant1.clone(), user2.clone(), thinking, assistant2.clone()];
+        let messages = vec![
+            user1.clone(),
+            assistant1.clone(),
+            user2.clone(),
+            thinking,
+            assistant2.clone(),
+        ];
         let qa_pairs = filter.extract_qa_pairs(messages);
 
         // 从后向前：assistant2 -> user2（跳过 thinking），assistant1 -> user1
@@ -735,16 +1054,20 @@ mod tests {
         let user2 = create_test_message("user", "uuid4", None);
 
         // 连续的 assistant：user -> assistant -> assistant -> user
-        let messages = vec![user1.clone(), assistant1.clone(), assistant2.clone(), user2.clone()];
+        let messages = vec![
+            user1.clone(),
+            assistant1.clone(),
+            assistant2.clone(),
+            user2.clone(),
+        ];
         let qa_pairs = filter.extract_qa_pairs(messages);
 
-        // 从后向前：user2 没有答案，连续的 assistant 只取最后一个（assistant2）-> user1
-        assert_eq!(qa_pairs.len(), 2);
+        // 从后向前：user2 没有答案（不创建问答对），连续的 assistant 只取最后一个（assistant2）-> user1
+        // 只有有答案的用户消息才会创建问答对
+        assert_eq!(qa_pairs.len(), 1);
         assert_eq!(qa_pairs[0].question.uuid, user1.uuid);
         assert!(qa_pairs[0].answer.is_some());
         assert_eq!(qa_pairs[0].answer.as_ref().unwrap().uuid, assistant2.uuid); // 注意是 assistant2
-        assert_eq!(qa_pairs[1].question.uuid, user2.uuid);
-        assert!(qa_pairs[1].answer.is_none());
     }
 
     #[test]
@@ -768,17 +1091,11 @@ mod tests {
 
         // 新逻辑：只有最后一个 user3 才能配对到 assistant，user1 和 user2 无答案
         // 过滤后序列：[user1, user2, user3, assistant1, assistant2]
-        // 从后向前：assistant2 -> user3（配对），user2 -> 无答案（遇到 user3），user1 -> 无答案（遇到 user2）
-        assert_eq!(qa_pairs.len(), 3);
-        assert_eq!(qa_pairs[0].question.uuid, user1.uuid);
-        assert!(qa_pairs[0].answer.is_none()); // user1 无答案
-
-        assert_eq!(qa_pairs[1].question.uuid, user2.uuid);
-        assert!(qa_pairs[1].answer.is_none()); // user2 无答案
-
-        assert_eq!(qa_pairs[2].question.uuid, user3.uuid);
-        assert!(qa_pairs[2].answer.is_some()); // user3 有答案
-        assert_eq!(qa_pairs[2].answer.as_ref().unwrap().uuid, assistant2.uuid);
+        // 从后向前：assistant2 -> user3（配对），user2 -> 无答案（不创建问答对），user1 -> 无答案（不创建问答对）
+        // 只有有答案的用户消息才会创建问答对
+        assert_eq!(qa_pairs.len(), 1);
+        assert_eq!(qa_pairs[0].question.uuid, user3.uuid);
+        assert!(qa_pairs[0].answer.is_some());
     }
 
     #[test]
@@ -803,19 +1120,17 @@ mod tests {
         let qa_pairs = filter.extract_qa_pairs(messages);
 
         // 新逻辑：thinking 被预过滤，过滤后序列：[user1, assistant1, user2, user3, assistant2]
-        // 从后向前：assistant2 -> user3（配对），user2 -> 无答案（遇到 user3）
-        //          assistant1 -> user1（配对）
-        assert_eq!(qa_pairs.len(), 3);
+        // 从后向前：assistant2 -> user3（配对），user2 -> 无答案（遇到 user3，不创建问答对）
+        // assistant1 -> user1（配对）
+        // 只有有答案的用户消息才会创建问答对
+        assert_eq!(qa_pairs.len(), 2);
         assert_eq!(qa_pairs[0].question.uuid, user1.uuid);
         assert!(qa_pairs[0].answer.is_some());
         assert_eq!(qa_pairs[0].answer.as_ref().unwrap().uuid, assistant1.uuid);
 
-        assert_eq!(qa_pairs[1].question.uuid, user2.uuid);
-        assert!(qa_pairs[1].answer.is_none()); // user2 无答案
-
-        assert_eq!(qa_pairs[2].question.uuid, user3.uuid);
-        assert!(qa_pairs[2].answer.is_some()); // user3 有答案
-        assert_eq!(qa_pairs[2].answer.as_ref().unwrap().uuid, assistant2.uuid);
+        assert_eq!(qa_pairs[1].question.uuid, user3.uuid);
+        assert!(qa_pairs[1].answer.is_some());
+        assert_eq!(qa_pairs[1].answer.as_ref().unwrap().uuid, assistant2.uuid);
     }
 
     #[test]

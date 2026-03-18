@@ -5,7 +5,7 @@
  * 包含目标输入、会话选择、生成、预览、统计、复制/保存功能
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Wand2, Copy, Save, Check, Loader2, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { cn } from '@/lib/utils';
@@ -180,10 +180,6 @@ export function PromptBuilder({
 
       setSaved(true);
       showAlert('success', '提示词保存成功');
-
-      // P2-6: 使用清理函数替代 setTimeout
-      const timer = setTimeout(() => setSaved(false), 2000);
-      return () => clearTimeout(timer);
     } catch (err) {
       console.error('保存失败:', err);
       // P0-1: 使用 Alert 替代 alert()
@@ -212,6 +208,12 @@ export function PromptBuilder({
     setError(null);
     setSaved(false);
   }, []);
+
+  useEffect(() => {
+    if (!saved) return;
+    const timer = setTimeout(() => setSaved(false), 2000);
+    return () => clearTimeout(timer);
+  }, [saved]);
 
   return (
     <div className={cn('space-y-4', className)}>

@@ -55,7 +55,7 @@ function getProviderIcon(providerType: string): string {
     'google': 'G',
     'googlevertex': 'V',
     'azureopenai': 'A',
-    'openai-compatible': 'C',
+    'openaicompatible': 'C',
   };
   return typeMap[providerType] || providerType.charAt(0).toUpperCase();
 }

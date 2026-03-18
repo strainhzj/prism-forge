@@ -1,7 +1,7 @@
 //! Error types for command registration system
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
-use serde::{Serialize, Deserialize};
 
 /// Command registration and execution errors
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,7 +85,10 @@ impl CommandError {
 
     pub fn dependency_missing(command_name: &str, dependency: &str) -> Self {
         Self::new(
-            format!("Command '{}' missing dependency: {}", command_name, dependency),
+            format!(
+                "Command '{}' missing dependency: {}",
+                command_name, dependency
+            ),
             ErrorType::DependencyMissing,
         )
     }

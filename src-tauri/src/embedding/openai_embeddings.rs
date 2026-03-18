@@ -7,9 +7,7 @@
 use anyhow::{Context, Result};
 use async_openai::{
     config::OpenAIConfig,
-    types::{
-        CreateEmbeddingRequestArgs, EmbeddingInput,
-    },
+    types::{CreateEmbeddingRequestArgs, EmbeddingInput},
     Client,
 };
 use std::sync::Arc;
@@ -50,8 +48,7 @@ impl OpenAIEmbeddings {
         }
 
         // 创建 OpenAI 配置
-        let config = OpenAIConfig::default()
-            .with_api_key(api_key);
+        let config = OpenAIConfig::default().with_api_key(api_key);
 
         // 创建 OpenAI 客户端
         let client = Client::with_config(config);
@@ -174,11 +171,8 @@ impl OpenAIEmbeddings {
                 .context("批量调用 OpenAI Embeddings API 失败")?;
 
             // 提取向量（按顺序）
-            let mut vectors: Vec<Vec<f32>> = response
-                .data
-                .into_iter()
-                .map(|e| e.embedding)
-                .collect();
+            let mut vectors: Vec<Vec<f32>> =
+                response.data.into_iter().map(|e| e.embedding).collect();
 
             all_vectors.append(&mut vectors);
         }
@@ -230,10 +224,7 @@ impl OpenAIEmbeddings {
     /// # 费率
     /// text-embedding-3-small: $0.00002 / 1K tokens
     pub fn estimate_cost(&self, texts: &[String]) -> f64 {
-        let total_tokens: usize = texts
-            .iter()
-            .map(|t| self.estimate_tokens(t))
-            .sum();
+        let total_tokens: usize = texts.iter().map(|t| self.estimate_tokens(t)).sum();
 
         let price_per_1k_tokens = 0.00002;
         (total_tokens as f64 / 1000.0) * price_per_1k_tokens
@@ -264,7 +255,8 @@ mod tests {
 
     #[test]
     fn test_custom_model() {
-        let generator = OpenAIEmbeddings::new("test-key", Some("text-embedding-3-large".to_string()));
+        let generator =
+            OpenAIEmbeddings::new("test-key", Some("text-embedding-3-large".to_string()));
         assert!(generator.is_ok());
 
         let gen = generator.unwrap();
@@ -308,10 +300,7 @@ mod tests {
     fn test_estimate_cost_batch() {
         let generator = OpenAIEmbeddings::new("test-key", None).unwrap();
 
-        let texts = vec![
-            "test message".to_string(),
-            "another test".to_string(),
-        ];
+        let texts = vec!["test message".to_string(), "another test".to_string()];
 
         let cost = generator.estimate_cost(&texts);
         assert!(cost > 0.0);

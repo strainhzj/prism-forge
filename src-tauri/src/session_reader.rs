@@ -3,13 +3,13 @@
 //! 从 Claude Code 会话文件（.jsonl）中提取 summary 信息
 //! 支持多级 fallback 策略获取会话显示名称
 
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use thiserror::Error;
-use regex::Regex;
+use tokio::sync::RwLock;
 
 // ==================== 辅助函数 ====================
 
@@ -132,7 +132,9 @@ pub enum SessionReaderError {
 ///
 /// # 返回
 /// 返回 `SessionSummary` 或错误
-pub async fn read_summary_from_file(file_path: &Path) -> Result<SessionSummary, SessionReaderError> {
+pub async fn read_summary_from_file(
+    file_path: &Path,
+) -> Result<SessionSummary, SessionReaderError> {
     // 检查文件是否存在
     if !file_path.exists() {
         return Err(SessionReaderError::FileNotFound(file_path.to_path_buf()));
@@ -201,7 +203,10 @@ impl SessionDisplayName {
         // 策略 2: 提取第一个真正的 user message（在 local-command-stdout 之后）
         if let Ok(name) = Self::extract_first_real_user_message(file_path, &session_id).await {
             #[cfg(debug_assertions)]
-            eprintln!("[SessionDisplayName] 使用第一个真正的 user message: {}", name.name);
+            eprintln!(
+                "[SessionDisplayName] 使用第一个真正的 user message: {}",
+                name.name
+            );
 
             return Ok(name);
         }
@@ -223,7 +228,10 @@ impl SessionDisplayName {
         // 策略 4: 从会话内容智能提取
         if let Ok(name) = Self::extract_from_content(file_path, &session_id).await {
             #[cfg(debug_assertions)]
-            eprintln!("[SessionDisplayName] 从内容提取: {} (来源: 智能提取)", name.name);
+            eprintln!(
+                "[SessionDisplayName] 从内容提取: {} (来源: 智能提取)",
+                name.name
+            );
 
             return Ok(name);
         }
@@ -245,7 +253,10 @@ impl SessionDisplayName {
         session_id: &str,
     ) -> Result<Self, SessionReaderError> {
         let content = tokio::fs::read_to_string(file_path).await?;
-        let first_line = content.lines().next().ok_or(SessionReaderError::EmptyFile)?;
+        let first_line = content
+            .lines()
+            .next()
+            .ok_or(SessionReaderError::EmptyFile)?;
 
         let record: SummaryRecord = serde_json::from_str(first_line)?;
 
@@ -427,7 +438,16 @@ impl SessionDisplayName {
     fn read_last_n_messages(content: &str, n: usize) -> Vec<Message> {
         content
             .lines()
-            .filter_map(|line| serde_json::from_str::<Message>(line).ok())
+            .filter_map(|line| {
+                match serde_json::from_str::<Message>(line) {
+                    Ok(msg) => Some(msg),
+                    Err(e) => {
+                        #[cfg(debug_assertions)]
+                        eprintln!("[SessionReader] 解析 JSON 行失败，已跳过: {}", e);
+                        None
+                    }
+                }
+            })
             .rev()
             .take(n)
             .collect()
@@ -564,9 +584,7 @@ pub async fn batch_read_summaries(
 ) -> Vec<Result<SessionSummary, SessionReaderError>> {
     use futures::future::join_all;
 
-    let futures = file_paths
-        .iter()
-        .map(|path| read_summary_from_file(path));
+    let futures = file_paths.iter().map(|path| read_summary_from_file(path));
 
     join_all(futures).await
 }
@@ -613,7 +631,9 @@ pub async fn load_history_cache(
     for line in content.lines() {
         if let Ok(record) = serde_json::from_str::<HistoryRecord>(line) {
             // 只保留每个会话的第一次记录（最早的）
-            display_names.entry(record.session_id).or_insert(record.display);
+            display_names
+                .entry(record.session_id)
+                .or_insert(record.display);
         }
     }
 
@@ -645,9 +665,9 @@ mod tests {
         let session_file = temp_dir.join("test-session.jsonl");
 
         let mut file = fs::File::create(&session_file).await.unwrap();
-        file.write_all(
-            br#"{"type":"summary","summary":"Test Summary","leafUuid":"uuid-123"}}"#
-        ).await.unwrap();
+        file.write_all(br#"{"type":"summary","summary":"Test Summary","leafUuid":"uuid-123"}}"#)
+            .await
+            .unwrap();
 
         // 读取 summary
         let summary = read_summary_from_file(&session_file).await.unwrap();
@@ -668,9 +688,9 @@ mod tests {
 
         // 创建测试文件
         let mut file = fs::File::create(&session_file).await.unwrap();
-        file.write_all(
-            br#"{"type":"summary","summary":"Cache Test","leafUuid":"uuid-456"}}"#
-        ).await.unwrap();
+        file.write_all(br#"{"type":"summary","summary":"Cache Test","leafUuid":"uuid-456"}}"#)
+            .await
+            .unwrap();
 
         // 第一次加载（从文件）
         let summary1 = cache.get_or_load(&session_file).await.unwrap();

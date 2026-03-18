@@ -6,15 +6,18 @@
 //! - 实例化对应的 Provider 客户端
 
 use anyhow::{Context, Result};
-use std::sync::{Arc, Mutex};
 use secrecy::ExposeSecret;
+use std::sync::{Arc, Mutex};
 
-use crate::database::{ApiProvider, ApiProviderType, ApiProviderRepository};
-use crate::llm::security::ApiKeyStorage;
+use crate::database::{ApiProvider, ApiProviderRepository, ApiProviderType};
 use crate::llm::interface::{LLMService, TestConnectionResult};
-use crate::llm::providers::{OpenAIProvider, AnthropicProvider, OllamaProvider, XAIProvider, GoogleProvider, GoogleVertexProvider};
 use crate::llm::key_rotation::ApiKeyRotator;
 use crate::llm::model_resolver::ModelResolver;
+use crate::llm::providers::{
+    AnthropicProvider, GoogleProvider, GoogleVertexProvider, OllamaProvider, OpenAIProvider,
+    XAIProvider,
+};
+use crate::llm::security::ApiKeyStorage;
 
 /// LLM 客户端管理器
 pub struct LLMClientManager {
@@ -55,18 +58,21 @@ impl LLMClientManager {
         let provider = {
             let repo = self.repository.lock().unwrap();
             repo.get_active_provider()?
-        }.context("未设置活跃的 API 提供商，请先在设置中配置")?;
+        }
+        .context("未设置活跃的 API 提供商，请先在设置中配置")?;
+
+        #[cfg(debug_assertions)]
+        eprintln!("[LLMClientManager::get_active_client] 获取到活跃提供商: id={:?}, name={}", provider.id, provider.name);
 
         self.create_client_from_provider(&provider)
     }
 
     /// 从提供商配置创建客户端
-    fn create_client_from_provider(
-        &self,
-        provider: &ApiProvider,
-    ) -> Result<Box<dyn LLMService>> {
+    fn create_client_from_provider(&self, provider: &ApiProvider) -> Result<Box<dyn LLMService>> {
         match provider.provider_type {
-            ApiProviderType::OpenAI | ApiProviderType::AzureOpenAI | ApiProviderType::OpenAICompatible => {
+            ApiProviderType::OpenAI
+            | ApiProviderType::AzureOpenAI
+            | ApiProviderType::OpenAICompatible => {
                 // 从 keyring 获取 API Key
                 let api_key_ref = provider
                     .api_key_ref
@@ -74,16 +80,20 @@ impl LLMClientManager {
                     .context(format!("{:?} 提供商未配置 API Key", provider.provider_type))?;
 
                 let stored_key = ApiKeyStorage::get_api_key(provider.id.unwrap_or(0))
-                    .with_context(|| format!("无法获取 {:?} API Key (provider_id={})", provider.provider_type, provider.id.unwrap_or(0)))?;
+                    .with_context(|| {
+                        format!(
+                            "无法获取 {:?} API Key (provider_id={})",
+                            provider.provider_type,
+                            provider.id.unwrap_or(0)
+                        )
+                    })?;
 
                 // 暴露密钥进行轮换处理
                 let key_str = stored_key.expose_secret();
 
                 // 处理多密钥轮换
-                let (selected_key, _new_config) = self.select_api_key_with_rotation(
-                    key_str,
-                    provider.config_json.as_deref(),
-                )?;
+                let (selected_key, _new_config) =
+                    self.select_api_key_with_rotation(key_str, provider.config_json.as_deref())?;
 
                 // 对于 Azure OpenAI，需要额外配置 api_version
                 let base_url = if provider.provider_type == ApiProviderType::AzureOpenAI {
@@ -118,15 +128,18 @@ impl LLMClientManager {
                     .context("Anthropic 提供商未配置 API Key")?;
 
                 let stored_key = ApiKeyStorage::get_api_key(provider.id.unwrap_or(0))
-                    .with_context(|| format!("无法获取 Anthropic API Key (provider_id={})", provider.id.unwrap_or(0)))?;
+                    .with_context(|| {
+                        format!(
+                            "无法获取 Anthropic API Key (provider_id={})",
+                            provider.id.unwrap_or(0)
+                        )
+                    })?;
 
                 let key_str = stored_key.expose_secret();
 
                 // 处理多密钥轮换
-                let (selected_key, _new_config) = self.select_api_key_with_rotation(
-                    key_str,
-                    provider.config_json.as_deref(),
-                )?;
+                let (selected_key, _new_config) =
+                    self.select_api_key_with_rotation(key_str, provider.config_json.as_deref())?;
 
                 let client = AnthropicProvider::with_ref(
                     secrecy::SecretString::new(selected_key.into()),
@@ -149,15 +162,18 @@ impl LLMClientManager {
                     .context("X AI 提供商未配置 API Key")?;
 
                 let stored_key = ApiKeyStorage::get_api_key(provider.id.unwrap_or(0))
-                    .with_context(|| format!("无法获取 X AI API Key (provider_id={})", provider.id.unwrap_or(0)))?;
+                    .with_context(|| {
+                        format!(
+                            "无法获取 X AI API Key (provider_id={})",
+                            provider.id.unwrap_or(0)
+                        )
+                    })?;
 
                 let key_str = stored_key.expose_secret();
 
                 // 处理多密钥轮换
-                let (selected_key, _new_config) = self.select_api_key_with_rotation(
-                    key_str,
-                    provider.config_json.as_deref(),
-                )?;
+                let (selected_key, _new_config) =
+                    self.select_api_key_with_rotation(key_str, provider.config_json.as_deref())?;
 
                 let client = XAIProvider::with_ref(
                     secrecy::SecretString::new(selected_key.into()),
@@ -215,15 +231,18 @@ impl LLMClientManager {
                         .context("Google ML Dev API 提供商未配置 API Key")?;
 
                     let stored_key = ApiKeyStorage::get_api_key(provider.id.unwrap_or(0))
-                        .with_context(|| format!("无法获取 Google API Key (provider_id={})", provider.id.unwrap_or(0)))?;
+                        .with_context(|| {
+                            format!(
+                                "无法获取 Google API Key (provider_id={})",
+                                provider.id.unwrap_or(0)
+                            )
+                        })?;
 
                     let key_str = stored_key.expose_secret();
 
                     // 处理多密钥轮换
-                    let (selected_key, _new_config) = self.select_api_key_with_rotation(
-                        key_str,
-                        provider.config_json.as_deref(),
-                    )?;
+                    let (selected_key, _new_config) = self
+                        .select_api_key_with_rotation(key_str, provider.config_json.as_deref())?;
 
                     let client = GoogleProvider::with_ref(
                         secrecy::SecretString::new(selected_key.into()),
@@ -242,15 +261,18 @@ impl LLMClientManager {
                     .context("Google Vertex AI 提供商未配置 API Key")?;
 
                 let stored_key = ApiKeyStorage::get_api_key(provider.id.unwrap_or(0))
-                    .with_context(|| format!("无法获取 Google Vertex AI API Key (provider_id={})", provider.id.unwrap_or(0)))?;
+                    .with_context(|| {
+                        format!(
+                            "无法获取 Google Vertex AI API Key (provider_id={})",
+                            provider.id.unwrap_or(0)
+                        )
+                    })?;
 
                 let key_str = stored_key.expose_secret();
 
                 // 处理多密钥轮换
-                let (selected_key, _new_config) = self.select_api_key_with_rotation(
-                    key_str,
-                    provider.config_json.as_deref(),
-                )?;
+                let (selected_key, _new_config) =
+                    self.select_api_key_with_rotation(key_str, provider.config_json.as_deref())?;
 
                 let client = GoogleVertexProvider::with_ref(
                     secrecy::SecretString::new(selected_key.into()),
@@ -268,8 +290,15 @@ impl LLMClientManager {
     /// # 参数
     /// - `provider_id`: 要设置为活跃的提供商 ID
     pub fn switch_provider(&self, provider_id: i64) -> Result<()> {
+        #[cfg(debug_assertions)]
+        eprintln!("[LLMClientManager::switch_provider] 开始切换，provider_id={}", provider_id);
+
         let repo = self.repository.lock().unwrap();
-        repo.set_active_provider(provider_id)?;
+        let rows_affected = repo.set_active_provider(provider_id)?;
+
+        #[cfg(debug_assertions)]
+        eprintln!("[LLMClientManager::switch_provider] 数据库更新完成，影响行数: {}", rows_affected);
+
         Ok(())
     }
 
@@ -280,30 +309,40 @@ impl LLMClientManager {
     }
 
     /// 测试提供商连接
-    /// 
+    ///
     /// 使用提供商配置的模型（或默认模型）进行连接测试
     pub async fn test_provider(&self, provider_id: i64) -> Result<TestConnectionResult> {
         #[cfg(debug_assertions)]
-        eprintln!("[LLMClientManager] test_provider called for provider_id={}", provider_id);
+        eprintln!(
+            "[LLMClientManager] test_provider called for provider_id={}",
+            provider_id
+        );
 
         let provider = {
             let repo = self.repository.lock().unwrap();
             repo.get_provider_by_id(provider_id)?
-        }.context("提供商不存在")?;
+        }
+        .context("提供商不存在")?;
 
         #[cfg(debug_assertions)]
         eprintln!("[LLMClientManager] Found provider: {:?}", provider.name);
 
-        let client = self.create_client_from_provider(&provider)
+        let client = self
+            .create_client_from_provider(&provider)
             .with_context(|| format!("创建客户端失败: provider_id={}", provider_id))?;
 
         // 获取有效模型（配置的模型或默认模型）
         let model = provider.effective_model();
 
         #[cfg(debug_assertions)]
-        eprintln!("[LLMClientManager] Client created, testing connection with model '{}'...", model);
+        eprintln!(
+            "[LLMClientManager] Client created, testing connection with model '{}'...",
+            model
+        );
 
-        let result = client.test_connection_with_model(model).await
+        let result = client
+            .test_connection_with_model(model)
+            .await
             .with_context(|| format!("测试连接失败: provider={}", provider.name))?;
 
         #[cfg(debug_assertions)]
@@ -382,7 +421,8 @@ impl LLMClientManager {
     /// 用于需要访问提供商元数据（如模型配置、类型等）的场景
     pub fn get_active_provider_config(&self) -> Result<ApiProvider> {
         let repo = self.repository.lock().unwrap();
-        repo.get_active_provider()?.context("未设置活跃的 API 提供商，请先在设置中配置")
+        repo.get_active_provider()?
+            .context("未设置活跃的 API 提供商，请先在设置中配置")
     }
 
     /// 根据提供商类型获取提供商配置
@@ -457,7 +497,10 @@ impl LLMClientManager {
     /// assert_eq!(resolved.model_id, "gpt-4o");
     /// assert_eq!(resolved.provider_type, Some(ApiProviderType::OpenAI));
     /// ```
-    pub fn resolve_model(&self, model_id: &str) -> Result<crate::llm::model_resolver::ResolvedModel> {
+    pub fn resolve_model(
+        &self,
+        model_id: &str,
+    ) -> Result<crate::llm::model_resolver::ResolvedModel> {
         // 获取活跃提供商类型作为 fallback
         let fallback_provider = {
             let repo = self.repository.lock().unwrap();

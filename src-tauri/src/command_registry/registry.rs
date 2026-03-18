@@ -2,10 +2,10 @@
 //!
 //! 管理所有 Tauri 命令的注册和验证
 
+use crate::command_registry::errors::{CommandError, ErrorType};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::SystemTime;
-use serde::{Serialize, Deserialize};
-use crate::command_registry::errors::{CommandError, ErrorType};
 
 /// Command registry that manages all Tauri commands
 #[derive(Debug, Clone)]
@@ -113,8 +113,11 @@ impl CommandRegistry {
             if !self.registered_commands.contains_key(dep) {
                 // For now, we'll allow registration but mark as unverified
                 // The dependency will be checked during verification
-                self.add_history_entry(&info.name, CommandEventType::DependencyResolved, 
-                    format!("Dependency '{}' not yet available during registration", dep));
+                self.add_history_entry(
+                    &info.name,
+                    CommandEventType::DependencyResolved,
+                    format!("Dependency '{}' not yet available during registration", dep),
+                );
             }
         }
 
@@ -122,8 +125,14 @@ impl CommandRegistry {
         self.initialization_order.push(info.name.clone());
 
         // Add history entry for registration
-        self.add_history_entry(&info.name, CommandEventType::Registered, 
-            format!("Command registered with {} dependencies", info.dependencies.len()));
+        self.add_history_entry(
+            &info.name,
+            CommandEventType::Registered,
+            format!(
+                "Command registered with {} dependencies",
+                info.dependencies.len()
+            ),
+        );
 
         // Register the command
         self.registered_commands.insert(info.name.clone(), info);
@@ -143,10 +152,15 @@ impl CommandRegistry {
                 } else {
                     // Check if dependency is in a valid state
                     if let Some(dep_info) = self.registered_commands.get(dep) {
-                        if matches!(dep_info.status, CommandStatus::Failed(_) | CommandStatus::Disabled) {
+                        if matches!(
+                            dep_info.status,
+                            CommandStatus::Failed(_) | CommandStatus::Disabled
+                        ) {
                             errors.push(CommandError::new(
-                                format!("Command '{}' depends on '{}' which is in invalid state: {:?}", 
-                                    name, dep, dep_info.status),
+                                format!(
+                                    "Command '{}' depends on '{}' which is in invalid state: {:?}",
+                                    name, dep, dep_info.status
+                                ),
                                 ErrorType::DependencyMissing,
                             ));
                         }
@@ -188,10 +202,15 @@ impl CommandRegistry {
                 } else {
                     // Check if dependency is in a valid state
                     if let Some(dep_info) = self.registered_commands.get(dep) {
-                        if matches!(dep_info.status, CommandStatus::Failed(_) | CommandStatus::Disabled) {
+                        if matches!(
+                            dep_info.status,
+                            CommandStatus::Failed(_) | CommandStatus::Disabled
+                        ) {
                             errors.push(CommandError::new(
-                                format!("Command '{}' depends on '{}' which is in invalid state: {:?}", 
-                                    name, dep, dep_info.status),
+                                format!(
+                                    "Command '{}' depends on '{}' which is in invalid state: {:?}",
+                                    name, dep, dep_info.status
+                                ),
                                 ErrorType::DependencyMissing,
                             ));
                         }
@@ -225,27 +244,41 @@ impl CommandRegistry {
 
     /// Perform comprehensive validation of a specific command
     pub fn validate_command(&mut self, name: &str) -> Result<(), CommandError> {
-        let command_info = self.registered_commands.get(name)
+        let command_info = self
+            .registered_commands
+            .get(name)
             .ok_or_else(|| CommandError::command_not_found(name))?;
 
         // Check all dependencies are available and valid
         for dep in &command_info.dependencies {
             if !self.registered_commands.contains_key(dep) {
                 let error = CommandError::dependency_missing(name, dep);
-                self.add_history_entry(name, CommandEventType::ValidationFailed, 
-                    format!("Missing dependency: {}", dep));
+                self.add_history_entry(
+                    name,
+                    CommandEventType::ValidationFailed,
+                    format!("Missing dependency: {}", dep),
+                );
                 return Err(error);
             }
 
             // Check dependency status
             if let Some(dep_info) = self.registered_commands.get(dep) {
-                if matches!(dep_info.status, CommandStatus::Failed(_) | CommandStatus::Disabled) {
+                if matches!(
+                    dep_info.status,
+                    CommandStatus::Failed(_) | CommandStatus::Disabled
+                ) {
                     let error = CommandError::new(
-                        format!("Dependency '{}' is not available (status: {:?})", dep, dep_info.status),
+                        format!(
+                            "Dependency '{}' is not available (status: {:?})",
+                            dep, dep_info.status
+                        ),
                         ErrorType::DependencyMissing,
                     );
-                    self.add_history_entry(name, CommandEventType::ValidationFailed, 
-                        format!("Dependency '{}' in invalid state", dep));
+                    self.add_history_entry(
+                        name,
+                        CommandEventType::ValidationFailed,
+                        format!("Dependency '{}' in invalid state", dep),
+                    );
                     return Err(error);
                 }
             }
@@ -259,8 +292,11 @@ impl CommandRegistry {
             }
         }
 
-        self.add_history_entry(name, CommandEventType::ValidationPassed, 
-            "Command validation successful".to_string());
+        self.add_history_entry(
+            name,
+            CommandEventType::ValidationPassed,
+            "Command validation successful".to_string(),
+        );
 
         Ok(())
     }
@@ -272,8 +308,9 @@ impl CommandRegistry {
 
     /// Get detailed command status information
     pub fn get_command_status_detailed(&self, name: &str) -> Option<CommandStatusInfo> {
-        self.registered_commands.get(name).map(|info| {
-            CommandStatusInfo {
+        self.registered_commands
+            .get(name)
+            .map(|info| CommandStatusInfo {
                 name: info.name.clone(),
                 status: info.status.clone(),
                 last_verified: info.last_verified,
@@ -281,8 +318,7 @@ impl CommandRegistry {
                 call_count: info.call_count,
                 dependencies: info.dependencies.clone(),
                 dependency_status: self.get_dependency_status(&info.dependencies),
-            }
-        })
+            })
     }
 
     /// List all available commands
@@ -340,8 +376,11 @@ impl CommandRegistry {
             info.last_called = Some(SystemTime::now());
             info.call_count += 1;
         }
-        self.add_history_entry(name, CommandEventType::Called, 
-            "Command executed".to_string());
+        self.add_history_entry(
+            name,
+            CommandEventType::Called,
+            "Command executed".to_string(),
+        );
     }
 
     /// Check if a command exists
@@ -368,13 +407,18 @@ impl CommandRegistry {
     }
 
     /// Add a history entry for a command
-    fn add_history_entry(&mut self, command_name: &str, event_type: CommandEventType, details: String) {
+    fn add_history_entry(
+        &mut self,
+        command_name: &str,
+        event_type: CommandEventType,
+        details: String,
+    ) {
         let entry = CommandHistoryEntry {
             timestamp: SystemTime::now(),
             event_type,
             details,
         };
-        
+
         self.command_history
             .entry(command_name.to_string())
             .or_insert_with(Vec::new)
@@ -394,12 +438,19 @@ impl CommandRegistry {
     }
 
     /// Update command status
-    pub fn update_command_status(&mut self, name: &str, status: CommandStatus) -> Result<(), CommandError> {
+    pub fn update_command_status(
+        &mut self,
+        name: &str,
+        status: CommandStatus,
+    ) -> Result<(), CommandError> {
         if let Some(info) = self.registered_commands.get_mut(name) {
             let old_status = info.status.clone();
             info.status = status.clone();
-            self.add_history_entry(name, CommandEventType::StatusChanged, 
-                format!("Status changed from {:?} to {:?}", old_status, status));
+            self.add_history_entry(
+                name,
+                CommandEventType::StatusChanged,
+                format!("Status changed from {:?} to {:?}", old_status, status),
+            );
             Ok(())
         } else {
             Err(CommandError::command_not_found(name))
@@ -411,11 +462,14 @@ impl CommandRegistry {
         if let Some(info) = self.registered_commands.remove(name) {
             // Remove from initialization order
             self.initialization_order.retain(|cmd| cmd != name);
-            
+
             // Record unregistration in history
-            self.add_history_entry(name, CommandEventType::StatusChanged, 
-                "Command unregistered".to_string());
-            
+            self.add_history_entry(
+                name,
+                CommandEventType::StatusChanged,
+                "Command unregistered".to_string(),
+            );
+
             Ok(info)
         } else {
             Err(CommandError::command_not_found(name))
@@ -427,10 +481,9 @@ impl CommandRegistry {
         self.registered_commands
             .iter()
             .filter(|(_, info)| {
-                matches!(info.status, 
-                    CommandStatus::Failed(_) | 
-                    CommandStatus::Disabled | 
-                    CommandStatus::Unverified
+                matches!(
+                    info.status,
+                    CommandStatus::Failed(_) | CommandStatus::Disabled | CommandStatus::Unverified
                 )
             })
             .map(|(name, _)| name.clone())
@@ -505,7 +558,7 @@ mod tests {
     fn test_command_registration() {
         let mut registry = CommandRegistry::new();
         let command_info = CommandInfo::new("test_command".to_string()).mark_registered();
-        
+
         let result = registry.register_command(command_info);
         assert!(result.is_ok());
         assert_eq!(registry.command_count(), 1);
@@ -518,10 +571,10 @@ mod tests {
         let mut registry = CommandRegistry::new();
         let command_info1 = CommandInfo::new("test_command".to_string()).mark_registered();
         let command_info2 = CommandInfo::new("test_command".to_string()).mark_registered();
-        
+
         registry.register_command(command_info1).unwrap();
         let result = registry.register_command(command_info2);
-        
+
         assert!(result.is_err());
         assert_eq!(registry.command_count(), 1);
     }
@@ -530,11 +583,11 @@ mod tests {
     fn test_empty_command_name() {
         let mut registry = CommandRegistry::new();
         let command_info = CommandInfo::new("".to_string());
-        
+
         let result = registry.register_command(command_info);
         assert!(result.is_err());
         assert_eq!(registry.command_count(), 0);
-        
+
         // Test whitespace-only names
         let whitespace_command = CommandInfo::new("   ".to_string());
         let result2 = registry.register_command(whitespace_command);
@@ -545,21 +598,21 @@ mod tests {
     #[test]
     fn test_command_validation() {
         let mut registry = CommandRegistry::new();
-        
+
         // Register a command with dependencies
         let dep_command = CommandInfo::new("dependency_command".to_string()).mark_registered();
         registry.register_command(dep_command).unwrap();
-        
+
         let main_command = CommandInfo::with_dependencies(
-            "main_command".to_string(), 
-            vec!["dependency_command".to_string()]
+            "main_command".to_string(),
+            vec!["dependency_command".to_string()],
         );
         registry.register_command(main_command).unwrap();
-        
+
         // Validate the main command
         let result = registry.validate_command("main_command");
         assert!(result.is_ok());
-        
+
         // Check that status was updated
         let status = registry.get_command_status("main_command");
         assert!(matches!(status, Some(CommandStatus::Registered)));
@@ -570,11 +623,11 @@ mod tests {
         let mut registry = CommandRegistry::new();
         let command_info = CommandInfo::new("test_command".to_string()).mark_registered();
         registry.register_command(command_info).unwrap();
-        
+
         // Record some calls
         registry.record_command_call("test_command");
         registry.record_command_call("test_command");
-        
+
         let info = registry.get_command_info("test_command").unwrap();
         assert_eq!(info.call_count, 2);
         assert!(info.last_called.is_some());
@@ -585,12 +638,12 @@ mod tests {
         let mut registry = CommandRegistry::new();
         let command_info = CommandInfo::new("test_command".to_string()).mark_registered();
         registry.register_command(command_info).unwrap();
-        
+
         // History should contain registration event
         let history = registry.get_command_history("test_command");
         assert!(history.is_some());
         assert!(!history.unwrap().is_empty());
-        
+
         // Record a call and check history
         registry.record_command_call("test_command");
         let history = registry.get_command_history("test_command").unwrap();
@@ -600,21 +653,19 @@ mod tests {
     #[test]
     fn test_detailed_status_info() {
         let mut registry = CommandRegistry::new();
-        
+
         // Register dependency
         let dep_command = CommandInfo::new("dep".to_string()).mark_registered();
         registry.register_command(dep_command).unwrap();
-        
+
         // Register main command with dependency
-        let main_command = CommandInfo::with_dependencies(
-            "main".to_string(), 
-            vec!["dep".to_string()]
-        );
+        let main_command =
+            CommandInfo::with_dependencies("main".to_string(), vec!["dep".to_string()]);
         registry.register_command(main_command).unwrap();
-        
+
         let status_info = registry.get_command_status_detailed("main");
         assert!(status_info.is_some());
-        
+
         let info = status_info.unwrap();
         assert_eq!(info.name, "main");
         assert_eq!(info.dependencies.len(), 1);

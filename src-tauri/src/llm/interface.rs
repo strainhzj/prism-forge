@@ -303,10 +303,7 @@ pub fn categorize_error(error: &str) -> (ConnectionErrorType, String) {
         || error_lower.contains("504")
         || error_lower.contains("internal server")
     {
-        return (
-            ConnectionErrorType::Server,
-            "服务器内部错误".to_string(),
-        );
+        return (ConnectionErrorType::Server, "服务器内部错误".to_string());
     }
 
     // 网络错误
@@ -331,10 +328,7 @@ pub fn categorize_error(error: &str) -> (ConnectionErrorType, String) {
         || error_lower.contains("bad request")
         || error_lower.contains("400")
     {
-        return (
-            ConnectionErrorType::Request,
-            format!("请求失败: {}", error),
-        );
+        return (ConnectionErrorType::Request, format!("请求失败: {}", error));
     }
 
     // 未知错误
@@ -421,18 +415,27 @@ pub trait LLMService: Send + Sync {
             .with_temperature(0.0);
 
         #[cfg(debug_assertions)]
-        eprintln!("[LLMService] test_connection_with_model: sending test request with model '{}'...", model);
+        eprintln!(
+            "[LLMService] test_connection_with_model: sending test request with model '{}'...",
+            model
+        );
 
         match self.chat_completion(messages, params).await {
             Ok(response) => {
                 #[cfg(debug_assertions)]
-                eprintln!("[LLMService] test_connection_with_model: success, response: {:?}", response.content);
+                eprintln!(
+                    "[LLMService] test_connection_with_model: success, response: {:?}",
+                    response.content
+                );
                 Ok(TestConnectionResult::success())
             }
             Err(e) => {
                 let error_msg = e.to_string();
                 #[cfg(debug_assertions)]
-                eprintln!("[LLMService] test_connection_with_model: error: {}", error_msg);
+                eprintln!(
+                    "[LLMService] test_connection_with_model: error: {}",
+                    error_msg
+                );
 
                 // 分析错误类型，所有错误都返回失败
                 let (error_type, message) = categorize_error(&error_msg);
@@ -445,7 +448,7 @@ pub trait LLMService: Send + Sync {
     ///
     /// 发送一个简单的请求验证配置是否正确
     /// 返回 TestConnectionResult 包含详细的成功/失败信息
-    /// 
+    ///
     /// 注意：此方法使用 gpt-3.5-turbo 作为默认测试模型
     /// 如需使用配置的模型，请使用 test_connection_with_model
     async fn test_connection(&self) -> Result<TestConnectionResult> {
@@ -538,8 +541,7 @@ mod tests {
 
     #[test]
     fn test_model_params_serialization() {
-        let params = ModelParams::new("gpt-3.5-turbo")
-            .with_temperature(0.8);
+        let params = ModelParams::new("gpt-3.5-turbo").with_temperature(0.8);
         let json = serde_json::to_string(&params).unwrap();
         assert!(json.contains(r#""model":"gpt-3.5-turbo""#));
         assert!(json.contains(r#""temperature":0.8"#));
@@ -639,11 +641,7 @@ mod tests {
 
     #[test]
     fn test_categorize_unknown_errors() {
-        let unknown_errors = [
-            "some random error",
-            "unexpected issue",
-            "未知错误",
-        ];
+        let unknown_errors = ["some random error", "unexpected issue", "未知错误"];
 
         for error in unknown_errors {
             let (error_type, _) = categorize_error(error);

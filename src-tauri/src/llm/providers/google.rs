@@ -11,10 +11,10 @@ use futures::{Stream, StreamExt};
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::llm::interface::{
-    LLMService, Message, MessageRole, ModelParams, ChatCompletionResponse,
-    StreamChunk,
+    ChatCompletionResponse, LLMService, Message, MessageRole, ModelParams, StreamChunk,
 };
 
 /// Google API 类型
@@ -81,6 +81,8 @@ impl GoogleProvider {
     /// - `base_url`: API 基础 URL
     pub fn new(api_key: SecretString, _base_url: String) -> Result<Self> {
         let client = Client::builder()
+            .timeout(Duration::from_secs(120))
+            .connect_timeout(Duration::from_secs(10))
             .build()
             .context("创建 HTTP 客户端失败")?;
 
@@ -99,6 +101,8 @@ impl GoogleProvider {
     /// 使用 API Key 引用创建提供商
     pub fn with_ref(api_key: SecretString, base_url: String, api_key_ref: String) -> Result<Self> {
         let client = Client::builder()
+            .timeout(Duration::from_secs(120))
+            .connect_timeout(Duration::from_secs(10))
             .build()
             .context("创建 HTTP 客户端失败")?;
 
@@ -128,6 +132,8 @@ impl GoogleProvider {
         access_token: Option<String>,
     ) -> Result<Self> {
         let client = Client::builder()
+            .timeout(Duration::from_secs(120))
+            .connect_timeout(Duration::from_secs(10))
             .build()
             .context("创建 HTTP 客户端失败")?;
 
@@ -138,7 +144,8 @@ impl GoogleProvider {
                 api_key: None,
                 project: Some(project),
                 location,
-                base_url: base_url.unwrap_or_else(|| "https://us-central1-aiplatform.googleapis.com".to_string()),
+                base_url: base_url
+                    .unwrap_or_else(|| "https://us-central1-aiplatform.googleapis.com".to_string()),
                 access_token,
             },
             _api_key_ref: None,
@@ -174,16 +181,10 @@ impl GoogleProvider {
     }
 
     /// 构建请求体
-    fn build_request(
-        &self,
-        messages: Vec<Message>,
-        params: ModelParams,
-    ) -> Result<GeminiRequest> {
+    fn build_request(&self, messages: Vec<Message>, params: ModelParams) -> Result<GeminiRequest> {
         // 将所有消息转换为 Google 格式
-        let contents: Vec<GeminiContent> = messages
-            .into_iter()
-            .map(Self::convert_message)
-            .collect();
+        let contents: Vec<GeminiContent> =
+            messages.into_iter().map(Self::convert_message).collect();
 
         Ok(GeminiRequest {
             contents,
@@ -201,7 +202,10 @@ impl GoogleProvider {
         match self.config.api_type {
             GoogleApiType::MlDev => {
                 let stream_suffix = if stream { "&alt=sse" } else { "" };
-                let api_key = self.config.api_key.as_ref()
+                let api_key = self
+                    .config
+                    .api_key
+                    .as_ref()
                     .map(|k| k.expose_secret().to_string())
                     .unwrap_or_default();
                 // ML Dev API URL 格式
@@ -211,9 +215,17 @@ impl GoogleProvider {
                 )
             }
             GoogleApiType::VertexAi => {
-                let project = self.config.project.as_ref().expect("Vertex AI 需要 project ID");
+                let project = self
+                    .config
+                    .project
+                    .as_ref()
+                    .expect("Vertex AI 需要 project ID");
                 let location = &self.config.location;
-                let stream_suffix = if stream { ":streamGenerateContent" } else { ":generateContent" };
+                let stream_suffix = if stream {
+                    ":streamGenerateContent"
+                } else {
+                    ":generateContent"
+                };
                 // Vertex AI URL 格式
                 format!(
                     "{}/v1/projects/{}/locations/{}/publishers/google/models/{}{}",
@@ -313,55 +325,60 @@ impl GoogleProvider {
             ));
         }
 
-        let stream = response.bytes_stream().map(|chunk_result| match chunk_result {
-            Ok(chunk) => {
-                let text = String::from_utf8_lossy(&chunk);
-                // 解析 SSE 格式
-                for line in text.lines() {
-                    if line.starts_with("data:") {
-                        let json_str = line[5..].trim();
-                        if json_str.is_empty() {
-                            continue;
-                        }
+        let stream = response
+            .bytes_stream()
+            .map(|chunk_result| match chunk_result {
+                Ok(chunk) => {
+                    let text = String::from_utf8_lossy(&chunk);
+                    // 解析 SSE 格式
+                    for line in text.lines() {
+                        if line.starts_with("data:") {
+                            let json_str = line[5..].trim();
+                            if json_str.is_empty() {
+                                continue;
+                            }
 
-                        if let Ok(event) = serde_json::from_str::<StreamResponse>(json_str) {
-                            if let Some(candidates) = event.candidates {
-                                if !candidates.is_empty() {
-                                    if let Some(content) = &candidates[0].content {
-                                        if !content.parts.is_empty() {
-                                            // 检查第一个 part 是否是 Text 类型
-                                            if let GeminiPart::Text { text } = &content.parts[0] {
-                                                return Ok(StreamChunk {
-                                                    delta: text.clone(),
-                                                    is_finish: false,
-                                                    finish_reason: None,
-                                                });
+                            if let Ok(event) = serde_json::from_str::<StreamResponse>(json_str) {
+                                if let Some(candidates) = event.candidates {
+                                    if !candidates.is_empty() {
+                                        if let Some(content) = &candidates[0].content {
+                                            if !content.parts.is_empty() {
+                                                // 检查第一个 part 是否是 Text 类型
+                                                if let GeminiPart::Text { text } = &content.parts[0]
+                                                {
+                                                    return Ok(StreamChunk {
+                                                        delta: text.clone(),
+                                                        is_finish: false,
+                                                        finish_reason: None,
+                                                    });
+                                                }
                                             }
                                         }
-                                    }
-                                    // 检查 finish_reason
-                                    if let Some(finish_reason) = &candidates[0].finish_reason {
-                                        if finish_reason == "STOP" || finish_reason == "MAX_TOKENS" {
-                                            return Ok(StreamChunk {
-                                                delta: String::new(),
-                                                is_finish: true,
-                                                finish_reason: Some(finish_reason.clone()),
-                                            });
+                                        // 检查 finish_reason
+                                        if let Some(finish_reason) = &candidates[0].finish_reason {
+                                            if finish_reason == "STOP"
+                                                || finish_reason == "MAX_TOKENS"
+                                            {
+                                                return Ok(StreamChunk {
+                                                    delta: String::new(),
+                                                    is_finish: true,
+                                                    finish_reason: Some(finish_reason.clone()),
+                                                });
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
+                    Ok(StreamChunk {
+                        delta: String::new(),
+                        is_finish: false,
+                        finish_reason: None,
+                    })
                 }
-                Ok(StreamChunk {
-                    delta: String::new(),
-                    is_finish: false,
-                    finish_reason: None,
-                })
-            }
-            Err(e) => Err(anyhow::anyhow!("流式响应错误: {}", e)),
-        });
+                Err(e) => Err(anyhow::anyhow!("流式响应错误: {}", e)),
+            });
 
         Ok(Box::new(Box::pin(stream)))
     }
@@ -407,9 +424,7 @@ impl LLMService for GoogleProvider {
             .and_then(|candidates| candidates.first())
             .and_then(|c| c.finish_reason.clone());
 
-        let usage_metadata = response
-            .usage_metadata
-            .as_ref();
+        let usage_metadata = response.usage_metadata.as_ref();
 
         Ok(ChatCompletionResponse {
             content,
@@ -450,12 +465,8 @@ struct GeminiContent {
 #[serde(untagged)]
 enum GeminiPart {
     Text { text: String },
-    InlineData {
-        inline_data: InlineData,
-    },
-    FileData {
-        file_data: FileData,
-    },
+    InlineData { inline_data: InlineData },
+    FileData { file_data: FileData },
 }
 
 /// 内联数据（用于图片等）
@@ -578,12 +589,10 @@ mod tests {
         let provider = GoogleProvider::new(
             SecretString::new("test-key".to_string().into()),
             "https://generativelanguage.googleapis.com".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
-        let messages = vec![
-            Message::system("You are helpful"),
-            Message::user("Hello"),
-        ];
+        let messages = vec![Message::system("You are helpful"), Message::user("Hello")];
         let params = ModelParams::new("gemini-2.5-flash-lite");
 
         let request = provider.build_request(messages, params);
@@ -599,7 +608,8 @@ mod tests {
         let provider = GoogleProvider::new(
             SecretString::new("test-key".to_string().into()),
             "https://generativelanguage.googleapis.com".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let url = provider.get_endpoint_url("gemini-2.5-flash-lite", false);
         assert!(url.contains("generativelanguage.googleapis.com"));
@@ -614,7 +624,8 @@ mod tests {
             "us-central1".to_string(),
             None,
             None,
-        ).unwrap();
+        )
+        .unwrap();
 
         let url = provider.get_endpoint_url("gemini-2.5-flash-lite", false);
         assert!(url.contains("us-central1-aiplatform.googleapis.com"));

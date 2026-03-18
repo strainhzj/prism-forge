@@ -8,10 +8,10 @@ use futures::{Stream, StreamExt};
 use reqwest::Client;
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::llm::interface::{
-    LLMService, Message, MessageRole, ModelParams, ChatCompletionResponse,
-    StreamChunk,
+    ChatCompletionResponse, LLMService, Message, MessageRole, ModelParams, StreamChunk,
 };
 
 /// Anthropic API 版本
@@ -40,6 +40,8 @@ impl AnthropicProvider {
     /// - `base_url`: API 基础 URL
     pub fn new(api_key: SecretString, base_url: String) -> Result<Self> {
         let client = Client::builder()
+            .timeout(Duration::from_secs(120))  // 总超时 2 分钟
+            .connect_timeout(Duration::from_secs(10))  // 连接超时 10 秒
             .build()
             .context("创建 HTTP 客户端失败")?;
 
@@ -54,6 +56,8 @@ impl AnthropicProvider {
     /// 使用 API Key 引用创建提供商
     pub fn with_ref(api_key: SecretString, base_url: String, api_key_ref: String) -> Result<Self> {
         let client = Client::builder()
+            .timeout(Duration::from_secs(120))  // 总超时 2 分钟
+            .connect_timeout(Duration::from_secs(10))  // 连接超时 10 秒
             .build()
             .context("创建 HTTP 客户端失败")?;
 
@@ -187,48 +191,50 @@ impl AnthropicProvider {
             ));
         }
 
-        let stream = response.bytes_stream().map(|chunk_result| match chunk_result {
-            Ok(chunk) => {
-                let text = String::from_utf8_lossy(&chunk);
-                // 解析 SSE 格式
-                for line in text.lines() {
-                    if line.starts_with("data:") {
-                        let json_str = line[5..].trim();
-                        if json_str == "[DONE]" {
-                            return Ok(StreamChunk {
-                                delta: String::new(),
-                                is_finish: true,
-                                finish_reason: Some("stop".to_string()),
-                            });
-                        }
-
-                        if let Ok(event) = serde_json::from_str::<StreamEvent>(json_str) {
-                            if event.type_ == "content_block_delta" {
-                                if let Some(delta) = event.delta {
-                                    return Ok(StreamChunk {
-                                        delta: delta.text.unwrap_or_default(),
-                                        is_finish: false,
-                                        finish_reason: None,
-                                    });
-                                }
-                            } else if event.type_ == "message_stop" {
+        let stream = response
+            .bytes_stream()
+            .map(|chunk_result| match chunk_result {
+                Ok(chunk) => {
+                    let text = String::from_utf8_lossy(&chunk);
+                    // 解析 SSE 格式
+                    for line in text.lines() {
+                        if line.starts_with("data:") {
+                            let json_str = line[5..].trim();
+                            if json_str == "[DONE]" {
                                 return Ok(StreamChunk {
                                     delta: String::new(),
                                     is_finish: true,
                                     finish_reason: Some("stop".to_string()),
                                 });
                             }
+
+                            if let Ok(event) = serde_json::from_str::<StreamEvent>(json_str) {
+                                if event.type_ == "content_block_delta" {
+                                    if let Some(delta) = event.delta {
+                                        return Ok(StreamChunk {
+                                            delta: delta.text.unwrap_or_default(),
+                                            is_finish: false,
+                                            finish_reason: None,
+                                        });
+                                    }
+                                } else if event.type_ == "message_stop" {
+                                    return Ok(StreamChunk {
+                                        delta: String::new(),
+                                        is_finish: true,
+                                        finish_reason: Some("stop".to_string()),
+                                    });
+                                }
+                            }
                         }
                     }
+                    Ok(StreamChunk {
+                        delta: String::new(),
+                        is_finish: false,
+                        finish_reason: None,
+                    })
                 }
-                Ok(StreamChunk {
-                    delta: String::new(),
-                    is_finish: false,
-                    finish_reason: None,
-                })
-            }
-            Err(e) => Err(anyhow::anyhow!("流式响应错误: {}", e)),
-        });
+                Err(e) => Err(anyhow::anyhow!("流式响应错误: {}", e)),
+            });
 
         Ok(Box::new(Box::pin(stream)))
     }
@@ -260,7 +266,10 @@ impl LLMService for AnthropicProvider {
             finish_reason: Some(response.stop_reason),
             prompt_tokens: response.usage.as_ref().map(|u| u.input_tokens),
             completion_tokens: response.usage.as_ref().map(|u| u.output_tokens),
-            total_tokens: response.usage.as_ref().map(|u| u.input_tokens + u.output_tokens),
+            total_tokens: response
+                .usage
+                .as_ref()
+                .map(|u| u.input_tokens + u.output_tokens),
         })
     }
 
@@ -378,7 +387,10 @@ mod tests {
         let system_msg = Message::system("You are helpful");
         let anthropic_msg = AnthropicProvider::convert_message(system_msg);
         // 系统消息被转换为带前缀的用户消息
-        assert!(anthropic_msg.content[0].clone().unwrap_text().starts_with("[System]"));
+        assert!(anthropic_msg.content[0]
+            .clone()
+            .unwrap_text()
+            .starts_with("[System]"));
     }
 
     #[test]
@@ -386,12 +398,10 @@ mod tests {
         let provider = AnthropicProvider::new(
             SecretString::new("test-key".to_string().into()),
             "https://api.anthropic.com".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
-        let messages = vec![
-            Message::system("You are helpful"),
-            Message::user("Hello"),
-        ];
+        let messages = vec![Message::system("You are helpful"), Message::user("Hello")];
         let params = ModelParams::new("claude-3-5-sonnet-20241022");
 
         let request = provider.build_request(messages, params);

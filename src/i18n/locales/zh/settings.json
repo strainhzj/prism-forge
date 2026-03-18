@@ -13,7 +13,12 @@
     "edit": "编辑",
     "delete": "删除",
     "setActive": "设为活跃",
-    "testConnection": "测试连接"
+    "testConnection": "测试连接",
+    "saving": "保存中...",
+    "active": "活跃",
+    "keyConfigured": "已配置密钥",
+    "noKeyConfigured": "未配置密钥",
+    "model": "模型"
   },
   "emptyState": {
     "title": "暂无 API 提供商",
@@ -94,13 +99,6 @@
     "aliasesMustBeArray": "别名必须是数组格式",
     "aliasesElementsMustBeString": "别名数组中的每个元素必须是字符串",
     "aliasesJsonExample": "JSON 格式无效，例如: [\"alias1\", \"alias2\"]"
-  },
-  "buttons": {
-    "saving": "保存中...",
-    "active": "活跃",
-    "keyConfigured": "已配置密钥",
-    "noKeyConfigured": "未配置密钥",
-    "model": "模型"
   },
   "stats": {
     "total": "总计",

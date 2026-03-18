@@ -3,8 +3,8 @@
 //! 使用 LLMClientManager 调用当前活跃的 LLM 提供商来分析和优化提示词
 
 pub mod compressor;
-pub mod prompt_generator;
 pub mod config;
+pub mod prompt_generator;
 
 pub use config::{ConfigManager, OptimizerConfig};
 
@@ -13,10 +13,10 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 
-use crate::llm::LLMClientManager;
-use crate::llm::interface::{Message, ModelParams};
 use crate::database::ApiProviderType;
 use crate::filter_config::FilterConfigManager;
+use crate::llm::interface::{Message, ModelParams};
+use crate::llm::LLMClientManager;
 
 // ==================== 数据结构 ====================
 
@@ -27,7 +27,7 @@ pub struct ParsedEvent {
     pub role: String,
     pub content: String,
     #[serde(rename = "fullContent")]
-    pub full_content: String,  // 完整内容用于详情弹窗
+    pub full_content: String, // 完整内容用于详情弹窗
     pub event_type: String,
 }
 
@@ -138,21 +138,21 @@ impl PromptOptimizer {
         }
 
         // 2. 格式化上下文（取最后 20 条）
-        let start_idx = if events.len() > 20 { events.len() - 20 } else { 0 };
+        let start_idx = if events.len() > 20 {
+            events.len() - 20
+        } else {
+            0
+        };
         let recent_events = &events[start_idx..];
 
-        let context_str = recent_events.iter().map(|e| {
-            format!("[{}] {}:\n{}", e.time, e.role.to_uppercase(), e.content)
-        }).collect::<Vec<String>>().join("\n--------------------\n");
+        let context_str = recent_events
+            .iter()
+            .map(|e| format!("[{}] {}:\n{}", e.time, e.role.to_uppercase(), e.content))
+            .collect::<Vec<String>>()
+            .join("\n--------------------\n");
 
         // 3. 构建系统提示词（从数据库加载）
-        let system_prompt = Self::load_system_prompt(&request.language)
-            .unwrap_or_else(|e| {
-                #[cfg(debug_assertions)]
-                eprintln!("⚠️  加载系统提示词失败: {}，使用 fallback 提示词", e);
-
-                Self::get_fallback_prompt(&request.language)
-            });
+        let system_prompt = Self::load_system_prompt(&request.language)?;
 
         let full_text = format!(
             "{}\n\n== 会话日志 ==\n{}\n\n== 用户当前目标 ==\n{}",
@@ -160,13 +160,16 @@ impl PromptOptimizer {
         );
 
         // 4. 获取活跃提供商配置
-        let provider = llm_manager.get_active_provider_config()
+        let provider = llm_manager
+            .get_active_provider_config()
             .context("无法获取活跃提供商配置")?;
         let model = provider.effective_model();
 
         #[cfg(debug_assertions)]
-        eprintln!("[PromptOptimizer] Using provider: {:?}, model: {}",
-                  provider.provider_type, model);
+        eprintln!(
+            "[PromptOptimizer] Using provider: {:?}, model: {}",
+            provider.provider_type, model
+        );
 
         // 5. 创建提供商特定的参数
         let params = create_optimizer_params_with_config(
@@ -175,7 +178,8 @@ impl PromptOptimizer {
             provider.temperature,
             provider.max_tokens,
             provider.config_json.as_ref(),
-        ).context("创建优化器参数失败")?;
+        )
+        .context("创建优化器参数失败")?;
 
         // 打印参数详情
         #[cfg(debug_assertions)]
@@ -187,12 +191,11 @@ impl PromptOptimizer {
         }
 
         // 6. 调用 LLM
-        let client = llm_manager.get_active_client()
+        let client = llm_manager
+            .get_active_client()
             .context("无法获取 LLM 客户端")?;
 
-        let messages = vec![
-            Message::user(full_text)
-        ];
+        let messages = vec![Message::user(full_text)];
 
         let response = client.chat_completion(messages, params).await?;
 
@@ -205,26 +208,37 @@ impl PromptOptimizer {
     /// 解析会话文件（公共方法，可供 Tauri 命令调用）
     pub fn parse_session_file(file_path: &str) -> Result<Vec<ParsedEvent>> {
         // 加载过滤配置
-        let filter_manager = FilterConfigManager::with_default_path()
-            .context("加载过滤配置失败")?;
+        let filter_manager =
+            FilterConfigManager::with_default_path().context("加载过滤配置失败")?;
 
         #[cfg(debug_assertions)]
-        eprintln!("[parse_session_file] 过滤配置已加载，规则数量: {}",
-                  filter_manager.get_config().rules.len());
+        eprintln!(
+            "[parse_session_file] 过滤配置已加载，规则数量: {}",
+            filter_manager.get_config().rules.len()
+        );
 
-        let file = File::open(file_path)
-            .context(format!("无法打开会话文件: {}", file_path))?;
+        let file = File::open(file_path).context(format!("无法打开会话文件: {}", file_path))?;
         let reader = BufReader::new(file);
         let mut events = Vec::new();
         let mut filtered_count = 0;
 
         for line in reader.lines() {
             let line_content = line.context("读取行失败")?;
-            if line_content.trim().is_empty() { continue; }
+            if line_content.trim().is_empty() {
+                continue;
+            }
 
-            let json: serde_json::Value = serde_json::from_str(&line_content)
-                .unwrap_or(serde_json::Value::Null);
-            if json.is_null() { continue; }
+            let json: serde_json::Value = match serde_json::from_str(&line_content) {
+                Ok(v) => v,
+                Err(e) => {
+                    #[cfg(debug_assertions)]
+                    eprintln!(
+                        "[parse_session_file] 解析 JSON 行失败，已跳过: {}",
+                        e
+                    );
+                    continue;
+                }
+            };
 
             let timestamp = json["timestamp"].as_str().unwrap_or("").to_string();
 
@@ -267,7 +281,7 @@ impl PromptOptimizer {
                         time: timestamp.clone(),
                         role,
                         content: final_text.clone(),
-                        full_content: final_text,  // 普通消息的完整内容和截断内容相同
+                        full_content: final_text, // 普通消息的完整内容和截断内容相同
                         event_type: "message".to_string(),
                     });
                 }
@@ -280,29 +294,47 @@ impl PromptOptimizer {
 
                 if let Some(filenames) = tool_res.get("filenames").and_then(|v| v.as_array()) {
                     // 截断版本：只显示前3个文件
-                    let preview: Vec<String> = filenames.iter()
+                    let preview: Vec<String> = filenames
+                        .iter()
                         .take(3)
                         .map(|v| v.as_str().unwrap_or("").to_string())
                         .collect();
-                    res_str = format!("[工具结果] 找到 {} 个文件: {:?}...", filenames.len(), preview);
+                    res_str = format!(
+                        "[工具结果] 找到 {} 个文件: {:?}...",
+                        filenames.len(),
+                        preview
+                    );
                     // 完整版本：显示所有文件
-                    let all_files: Vec<String> = filenames.iter()
+                    let all_files: Vec<String> = filenames
+                        .iter()
                         .map(|v| v.as_str().unwrap_or("").to_string())
                         .collect();
-                    full_res_str = format!("[工具结果] 找到 {} 个文件:\n{}", filenames.len(),
-                        all_files.join("\n"));
+                    full_res_str = format!(
+                        "[工具结果] 找到 {} 个文件:\n{}",
+                        filenames.len(),
+                        all_files.join("\n")
+                    );
                 } else if let Some(file_info) = tool_res.get("file") {
                     let path = file_info["filePath"].as_str().unwrap_or("unknown");
                     let content = file_info["content"].as_str().unwrap_or("");
                     // 截断版本：只显示前300字符
                     let snippet: String = content.chars().take(300).collect();
-                    res_str = format!("[工具结果] 已读取文件 {}。\n文件片段: {}...", path, snippet.replace('\n', " "));
+                    res_str = format!(
+                        "[工具结果] 已读取文件 {}。\n文件片段: {}...",
+                        path,
+                        snippet.replace('\n', " ")
+                    );
                     // 完整版本：显示完整内容
-                    full_res_str = format!("[工具结果] 已读取文件: {}\n完整内容:\n{}", path, content);
+                    full_res_str =
+                        format!("[工具结果] 已读取文件: {}\n完整内容:\n{}", path, content);
                 } else if let Some(result) = tool_res.get("result") {
                     let raw = result.as_str().unwrap_or("");
                     // 截断版本
-                    let limit = if raw.to_lowercase().contains("error") { 800 } else { 300 };
+                    let limit = if raw.to_lowercase().contains("error") {
+                        800
+                    } else {
+                        300
+                    };
                     let snippet: String = raw.chars().take(limit).collect();
                     res_str = format!("[工具结果] 输出: {}...", snippet);
                     // 完整版本
@@ -317,7 +349,9 @@ impl PromptOptimizer {
 
                 if !res_str.is_empty() {
                     // 检查是否需要过滤（同时检查截断和完整内容）
-                    if filter_manager.should_filter(&res_str) || filter_manager.should_filter(&full_res_str) {
+                    if filter_manager.should_filter(&res_str)
+                        || filter_manager.should_filter(&full_res_str)
+                    {
                         filtered_count += 1;
                         continue;
                     }
@@ -326,7 +360,7 @@ impl PromptOptimizer {
                         time: timestamp,
                         role: "system".to_string(),
                         content: res_str,
-                        full_content: full_res_str,  // 保存完整内容
+                        full_content: full_res_str, // 保存完整内容
                         event_type: "tool_result".to_string(),
                     });
                 }
@@ -411,7 +445,8 @@ impl PromptOptimizer {
             .map_err(|e| anyhow::anyhow!("创建版本仓库失败: {}", e))?;
 
         // 查询指定语言的活跃版本
-        let templates = repo.list_templates()
+        let templates = repo
+            .list_templates()
             .map_err(|e| anyhow::anyhow!("查询模板失败: {}", e))?;
 
         for template in templates {
@@ -421,7 +456,10 @@ impl PromptOptimizer {
                     Some(id) if id > 0 => id,
                     _ => {
                         #[cfg(debug_assertions)]
-                        eprintln!("[PromptOptimizer] 警告: 模板 '{}' ID 无效或为 0，跳过", template.name);
+                        eprintln!(
+                            "[PromptOptimizer] 警告: 模板 '{}' ID 无效或为 0，跳过",
+                            template.name
+                        );
                         continue;
                     }
                 };
@@ -431,7 +469,10 @@ impl PromptOptimizer {
                     Ok(v) => v,
                     Err(e) => {
                         #[cfg(debug_assertions)]
-                        eprintln!("[PromptOptimizer] 警告: 查询模板 {} 版本失败: {}，跳过", template_id, e);
+                        eprintln!(
+                            "[PromptOptimizer] 警告: 查询模板 {} 版本失败: {}，跳过",
+                            template_id, e
+                        );
                         continue;
                     }
                 };
@@ -445,16 +486,23 @@ impl PromptOptimizer {
                     // 防御性：使用 JSON 解析而非字符串包含判断
                     if let Some(metadata) = &version.metadata {
                         // 尝试解析 metadata JSON
-                        if let Ok(metadata_json) = serde_json::from_str::<serde_json::Value>(metadata) {
-                            if let Some(lang_value) = metadata_json.get("language").and_then(|v| v.as_str()) {
+                        if let Ok(metadata_json) =
+                            serde_json::from_str::<serde_json::Value>(metadata)
+                        {
+                            if let Some(lang_value) =
+                                metadata_json.get("language").and_then(|v| v.as_str())
+                            {
                                 if lang_value == language {
                                     return Ok(version.content);
                                 }
                             }
                         } else {
                             #[cfg(debug_assertions)]
-                            eprintln!("[PromptOptimizer] 警告: 版本 {} metadata JSON 解析失败: {}",
-                                     version.id.unwrap_or(0), metadata);
+                            eprintln!(
+                                "[PromptOptimizer] 警告: 版本 {} metadata JSON 解析失败: {}",
+                                version.id.unwrap_or(0),
+                                metadata
+                            );
                         }
                     }
                 }
@@ -463,7 +511,10 @@ impl PromptOptimizer {
 
         // Fallback 到硬编码提示词
         #[cfg(debug_assertions)]
-        eprintln!("⚠️  未找到默认提示词 session_analysis_{}，使用 fallback 提示词", language);
+        eprintln!(
+            "⚠️  未找到默认提示词 session_analysis_{}，使用 fallback 提示词",
+            language
+        );
 
         Ok(Self::get_fallback_prompt(language))
     }
@@ -529,7 +580,10 @@ pub fn find_latest_session_file_in_project(project_path: &str) -> Option<PathBuf
     let project = Path::new(project_path);
 
     #[cfg(debug_assertions)]
-    eprintln!("[find_latest_session_file_in_project] 项目路径: {:?}", project);
+    eprintln!(
+        "[find_latest_session_file_in_project] 项目路径: {:?}",
+        project
+    );
 
     // 使用 path_resolver 模块解析会话目录并获取文件列表
     // list_session_files 已经按修改时间倒序排序，第一个就是最新的
@@ -538,7 +592,10 @@ pub fn find_latest_session_file_in_project(project_path: &str) -> Option<PathBuf
             if !files.is_empty() {
                 let latest = files.remove(0); // 取第一个（最新的）
                 #[cfg(debug_assertions)]
-                eprintln!("[find_latest_session_file_in_project] 找到最新文件: {:?}", latest.full_path);
+                eprintln!(
+                    "[find_latest_session_file_in_project] 找到最新文件: {:?}",
+                    latest.full_path
+                );
                 Some(latest.full_path)
             } else {
                 #[cfg(debug_assertions)]

@@ -3,9 +3,9 @@
 //! 负责将会话内容转换为向量并存储到数据库
 
 use anyhow::Result;
-use tokio::sync::RwLock;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 
 use crate::database::{
     models::{Session, SessionEmbedding, Settings},
@@ -106,9 +106,9 @@ impl EmbeddingSyncManager {
 
         // 检查 API Key
         let api_key = self.api_key.read().await;
-        let api_key = api_key.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("API Key 未配置，无法进行向量同步")
-        })?;
+        let api_key = api_key
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("API Key 未配置，无法进行向量同步"))?;
         let api_key = api_key.clone();
         drop(api_key);
 
@@ -126,10 +126,7 @@ impl EmbeddingSyncManager {
         eprintln!("[EmbeddingSync] 开始向量化 {} 个会话", sessions.len());
 
         // 批量生成向量
-        let summaries: Vec<String> = sessions
-            .iter()
-            .map(|s| self.extract_summary(s))
-            .collect();
+        let summaries: Vec<String> = sessions.iter().map(|s| self.extract_summary(s)).collect();
 
         let embeddings = self.generate_embeddings(&summaries).await?;
 

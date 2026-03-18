@@ -6,7 +6,7 @@
  * 支持展开/折叠显示完整内容
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { User, Bot, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -39,6 +39,10 @@ export interface TimelineMessageListProps {
    * 自定义类名
    */
   className?: string;
+  /**
+   * 分析意图回调（可选）
+   */
+  onAnalyzeIntent?: (message: MessageNode) => void;
 }
 
 /**
@@ -155,10 +159,13 @@ interface TimelineMessageItemProps {
   isExpanded: boolean;
   onToggleExpand: () => void;
   displayMode: 'raw' | 'extracted';
+  isFirstUserMessage: boolean; // 是否为第一条 user 消息（开场白）
+  onAnalyzeIntent?: (message: MessageNode) => void; // 分析意图回调
 }
 
-function TimelineMessageItem({ message, isExpanded, onToggleExpand, displayMode }: TimelineMessageItemProps) {
+function TimelineMessageItem({ message, isExpanded, onToggleExpand, displayMode, isFirstUserMessage, onAnalyzeIntent }: TimelineMessageItemProps) {
   const { t } = useTranslation('sessions');
+  const { t: tIntent } = useTranslation('intentAnalysis');
   const isUser = message.role?.toLowerCase() === 'user';
 
   // 从原始内容中提取并格式化文本（最终展示给用户的文本）
@@ -260,6 +267,21 @@ function TimelineMessageItem({ message, isExpanded, onToggleExpand, displayMode 
             )}
           </button>
         )}
+
+        {/* 分析意图按钮 - 仅在非第一条 user 消息显示 */}
+        {!isFirstUserMessage && isUser && onAnalyzeIntent && (
+          <button
+            onClick={() => onAnalyzeIntent(message)}
+            className="ml-2 px-2 py-1 text-xs rounded transition-colors hover:bg-[var(--color-accent-blue)] hover:text-white"
+            style={{
+              color: 'var(--color-accent-blue)',
+              border: '1px solid var(--color-accent-blue)'
+            }}
+            title={tIntent('actions.analyzeIntent')}
+          >
+            {tIntent('actions.analyzeIntent')}
+          </button>
+        )}
       </div>
 
       {/* 内容摘要/完整内容 */}
@@ -308,11 +330,18 @@ export function TimelineMessageList({
   messages,
   contentDisplayMode = 'raw',
   className,
+  onAnalyzeIntent,
 }: TimelineMessageListProps) {
   const { t } = useTranslation('sessions');
 
   // 🔴 调试：组件渲染时立即输出
   console.log('🎨 [TimelineMessageList] 组件渲染！！！', { messageCount: messages.length, contentDisplayMode });
+
+  // 找出第一条 user 消息的 ID（用于判断是否为开场白）
+  const firstUserMessageId = useMemo(() => {
+    const firstUserMsg = messages.find(m => m.role?.toLowerCase() === 'user');
+    return firstUserMsg?.id || null;
+  }, [messages]);
 
   // 管理每个消息的展开状态
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
@@ -355,6 +384,8 @@ export function TimelineMessageList({
           isExpanded={expandedMessages.has(message.id)}
           onToggleExpand={() => toggleExpand(message.id)}
           displayMode={contentDisplayMode}
+          isFirstUserMessage={message.id === firstUserMessageId}
+          onAnalyzeIntent={onAnalyzeIntent}
         />
       ))}
     </div>

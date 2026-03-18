@@ -4,35 +4,36 @@ use std::path::PathBuf;
 
 use ts_rs::TS;
 
+use prism_forge::database::models::{
+    ChangeType, ComponentDiff, LineChangeType, LineDiff, MetadataDiff, ParameterDiff, Prompt,
+    PromptChange, PromptComponent, PromptComponentType, PromptGenerationHistory, PromptParameter,
+    PromptParameterType, PromptTemplate, PromptVersion, PromptVersionDiff, RollbackRecord,
+    TokenStats,
+};
+use prism_forge::database::repositories_tech_stack::ProjectTechStack;
+use prism_forge::database::decision_keywords::DecisionKeyword;
+use prism_forge::database::intent_analysis_repository::IntentAnalysisHistory;
+use prism_forge::database::decision_analysis_repository::DecisionAnalysisHistory as DecisionAnalysisHistoryType;
+use prism_forge::intent_analyzer::decision_analyzer::{Alternative, DecisionAnalysis, DecisionType};
+use prism_forge::intent_analyzer::decision_detector::{Alternative as DetectorAlternative, DecisionPoint};
+use prism_forge::intent_analyzer::opening_intent::OpeningIntent;
+use prism_forge::intent_analyzer::qa_detector::{DecisionQAPair, QAPairContext};
 use prism_forge::optimizer::config::{
-    AdvancedConfig,
-    CompressionConfig,
-    ComponentsConfig,
-    ComponentContent,
-    LanguageComponent,
-    LanguageComponentWithMeta,
-    LLMParamsConfig,
-    OptimizerConfig,
-    PromptComponentData,
+    AdvancedConfig, ComponentContent, ComponentsConfig, CompressionConfig, LLMParamsConfig,
+    LanguageComponent, LanguageComponentWithMeta, OptimizerConfig, PromptComponentData,
     SessionContextConfig,
 };
 use prism_forge::optimizer::prompt_generator::{
-    EnhancedPrompt,
-    EnhancedPromptRequest,
-    ReferencedSession,
-    SessionMessage,
-};
-use prism_forge::database::models::{
-    Prompt, PromptGenerationHistory, TokenStats,
-    PromptTemplate, PromptVersion, PromptComponent, PromptComponentType,
-    PromptParameter, PromptParameterType, PromptChange, ChangeType,
-    PromptVersionDiff, ComponentDiff, LineDiff, LineChangeType,
-    ParameterDiff, MetadataDiff, RollbackRecord,
+    EnhancedPrompt, EnhancedPromptRequest, ReferencedSession, SessionMessage,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
-    let output_dir = manifest_dir.join("..").join("src").join("types").join("generated");
+    let output_dir = manifest_dir
+        .join("..")
+        .join("src")
+        .join("types")
+        .join("generated");
     fs::create_dir_all(&output_dir)?;
 
     // Optimizer config types
@@ -74,6 +75,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     EnhancedPromptRequest::export_to(output_dir.join("EnhancedPromptRequest.ts"))?;
     ReferencedSession::export_to(output_dir.join("ReferencedSession.ts"))?;
     SessionMessage::export_to(output_dir.join("SessionMessage.ts"))?;
+
+    // Intent analyzer types
+    QAPairContext::export_to(output_dir.join("QAPairContext.ts"))?;
+    DecisionQAPair::export_to(output_dir.join("DecisionQAPair.ts"))?;
+    OpeningIntent::export_to(output_dir.join("OpeningIntent.ts"))?;
+    ProjectTechStack::export_to(output_dir.join("ProjectTechStack.ts"))?;
+    DecisionType::export_to(output_dir.join("DecisionType.ts"))?;
+    Alternative::export_to(output_dir.join("Alternative.ts"))?;
+    DecisionAnalysis::export_to(output_dir.join("DecisionAnalysis.ts"))?;
+
+    // Decision detector types
+    DecisionKeyword::export_to(output_dir.join("DecisionKeyword.ts"))?;
+    DecisionPoint::export_to(output_dir.join("DecisionPoint.ts"))?;
+    DetectorAlternative::export_to(output_dir.join("DetectorAlternative.ts"))?;
+
+    // Intent analysis history types
+    IntentAnalysisHistory::export_to(output_dir.join("IntentAnalysisHistory.ts"))?;
+    DecisionAnalysisHistoryType::export_to(output_dir.join("DecisionAnalysisHistory.ts"))?;
 
     Ok(())
 }

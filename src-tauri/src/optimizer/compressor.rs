@@ -2,9 +2,9 @@
 //!
 //! 去除冗余信息，保留关键决策点，减少 Token 使用量
 
+use crate::tokenizer::TokenCounter;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use crate::tokenizer::TokenCounter;
 
 /// 压缩结果
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,7 +73,8 @@ impl ContextCompressor {
         let raw_messages = self.parse_messages(messages_json)?;
 
         // 2. 计算 Token 数量
-        let original_text = raw_messages.iter()
+        let original_text = raw_messages
+            .iter()
             .map(|m| format!("{}: {}\n", m.role, m.content))
             .collect::<String>();
         let original_tokens = self.token_counter.count_tokens(&original_text)?;
@@ -82,7 +83,8 @@ impl ContextCompressor {
         let compressed_messages = self.compress_messages(&raw_messages)?;
 
         // 4. 计算压缩后的 Token 数量
-        let compressed_text = compressed_messages.iter()
+        let compressed_text = compressed_messages
+            .iter()
             .map(|m| format!("{}: {}\n", m.role, m.content))
             .collect::<String>();
         let compressed_tokens = self.token_counter.count_tokens(&compressed_text)?;
@@ -104,8 +106,8 @@ impl ContextCompressor {
 
     /// 解析消息 JSON
     fn parse_messages(&self, messages_json: &str) -> Result<Vec<RawMessage>> {
-        let json_value: serde_json::Value = serde_json::from_str(messages_json)
-            .context("解析消息 JSON 失败")?;
+        let json_value: serde_json::Value =
+            serde_json::from_str(messages_json).context("解析消息 JSON 失败")?;
 
         let mut messages = Vec::new();
 
@@ -124,7 +126,8 @@ impl ContextCompressor {
     /// 解析单条消息
     fn parse_single_message(&self, json: &serde_json::Value) -> Option<RawMessage> {
         // 提取 role
-        let role = json.get("role")
+        let role = json
+            .get("role")
             .and_then(|v| v.as_str())
             .unwrap_or("user")
             .to_string();
@@ -132,7 +135,9 @@ impl ContextCompressor {
         // 提取 content
         let content = if let Some(content_arr) = json.get("content").and_then(|v| v.as_array()) {
             // 新格式：content 是数组
-            self.extract_content_from_array(content_arr).ok().unwrap_or_default()
+            self.extract_content_from_array(content_arr)
+                .ok()
+                .unwrap_or_default()
         } else {
             // 旧格式：content 是字符串
             json.get("content")
@@ -237,12 +242,13 @@ impl ContextCompressor {
                 }
                 "tool_output" => {
                     // 压缩工具输出：只保留是否有错误
-                    let compressed_content = if msg.content.contains("Error") || msg.content.contains("error") {
-                        format!("[工具执行失败]")
-                    } else {
-                        // 成功的工具输出通常可以省略
-                        continue;
-                    };
+                    let compressed_content =
+                        if msg.content.contains("Error") || msg.content.contains("error") {
+                            format!("[工具执行失败]")
+                        } else {
+                            // 成功的工具输出通常可以省略
+                            continue;
+                        };
 
                     if !compressed_content.is_empty() {
                         compressed.push(CompressedMessage {
@@ -348,15 +354,13 @@ impl ContextCompressor {
     /// 判断是否为决策点
     fn is_decision_point(&self, line: &str) -> bool {
         let decision_keywords = [
-            "决定", "选择", "采用", "方案", "策略",
-            "decide", "choose", "adopt", "approach", "strategy",
-            "问题:", "错误:", "警告:", "注意:",
-            "fix:", "修复:", "solved:", "解决:"
+            "决定", "选择", "采用", "方案", "策略", "decide", "choose", "adopt", "approach",
+            "strategy", "问题:", "错误:", "警告:", "注意:", "fix:", "修复:", "solved:", "解决:",
         ];
 
-        decision_keywords.iter().any(|&keyword| {
-            line.to_lowercase().contains(&keyword.to_lowercase())
-        })
+        decision_keywords
+            .iter()
+            .any(|&keyword| line.to_lowercase().contains(&keyword.to_lowercase()))
     }
 
     /// 压缩工具输出

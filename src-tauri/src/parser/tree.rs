@@ -3,13 +3,13 @@
 //! 负责将 JSONL 解析的消息列表重构为嵌套的树结构。
 //! 使用迭代算法构建消息树，避免深层递归导致的栈溢出。
 
-use std::collections::{HashMap, HashSet};
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use serde::{Serialize, Deserialize};
+use std::collections::{HashMap, HashSet};
 
-use super::jsonl::JsonlEntry;
 use super::extractor::MetadataExtractor;
+use super::jsonl::JsonlEntry;
 
 /// 消息元数据
 ///
@@ -120,14 +120,16 @@ pub struct MessageNode {
 
 impl MessageNode {
     /// 创建新的消息节点
-    pub fn new(
-        id: String,
-        parent_id: Option<String>,
-        message_data: Value,
-    ) -> Self {
+    pub fn new(id: String, parent_id: Option<String>, message_data: Value) -> Self {
         // 提取并缓存 role 和 type 字段
-        let role = message_data.get("role").and_then(|v| v.as_str()).map(|s| s.to_string());
-        let msg_type = message_data.get("type").and_then(|v| v.as_str()).map(|s| s.to_string());
+        let role = message_data
+            .get("role")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        let msg_type = message_data
+            .get("type")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
 
         // 提取消息内容
         let (content, full_content) = Self::extract_message_content(&message_data, role.as_deref());
@@ -150,7 +152,10 @@ impl MessageNode {
     /// 提取消息内容（截断版本和完整版本）
     ///
     /// 参照 optimizer 模块的 parse_session_file 逻辑处理
-    fn extract_message_content(message_data: &Value, role: Option<&str>) -> (Option<String>, Option<String>) {
+    fn extract_message_content(
+        message_data: &Value,
+        role: Option<&str>,
+    ) -> (Option<String>, Option<String>) {
         let _role = role.unwrap_or("unknown");
 
         // 处理 content 字段（可能是字符串或数组）
@@ -186,14 +191,20 @@ impl MessageNode {
                     }
                 }
 
-                let full_content = if !full_text.trim().is_empty() { Some(full_text.trim().to_string()) } else { None };
+                let full_content = if !full_text.trim().is_empty() {
+                    Some(full_text.trim().to_string())
+                } else {
+                    None
+                };
                 let content = if !display_text.trim().is_empty() {
                     Some(if display_text.len() > 500 {
                         format!("{}...", display_text.trim())
                     } else {
                         display_text.trim().to_string()
                     })
-                } else { None };
+                } else {
+                    None
+                };
 
                 return (content, full_content);
             } else if let Some(content_str) = content.as_str() {
@@ -241,7 +252,10 @@ impl MessageNode {
         if let Some(ref msg_type) = self.msg_type {
             return Some(msg_type.clone());
         }
-        self.message_data.get("type")?.as_str().map(|s| s.to_string())
+        self.message_data
+            .get("type")?
+            .as_str()
+            .map(|s| s.to_string())
     }
 
     /// 获取消息角色
@@ -250,7 +264,10 @@ impl MessageNode {
         if let Some(ref role) = self.role {
             return Some(role.clone());
         }
-        self.message_data.get("role")?.as_str().map(|s| s.to_string())
+        self.message_data
+            .get("role")?
+            .as_str()
+            .map(|s| s.to_string())
     }
 
     /// 检查是否为工具调用消息
@@ -375,22 +392,22 @@ impl MessageTreeBuilder {
         // 第一遍扫描：创建所有节点
         for entry in entries {
             // 提取消息 ID（uuid 字段）
-            let id = entry.data.get("uuid")
+            let id = entry
+                .data
+                .get("uuid")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| anyhow::anyhow!("消息缺少 uuid 字段"))?
                 .to_string();
 
             // 提取父消息 ID（parentUuid 字段，可能不存在）
-            let parent_id = entry.data.get("parentUuid")
+            let parent_id = entry
+                .data
+                .get("parentUuid")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
             // 创建消息节点
-            let node = MessageNode::new(
-                id.clone(),
-                parent_id.clone(),
-                entry.data.clone(),
-            );
+            let node = MessageNode::new(id.clone(), parent_id.clone(), entry.data.clone());
 
             // 添加到节点映射
             builder.node_map.insert(id.clone(), node);
@@ -424,8 +441,7 @@ impl MessageTreeBuilder {
         tree.thread_count = builder.count_threads(&tree);
 
         // 提取元数据（工具调用、错误、代码变更、摘要）
-        MetadataExtractor::extract_tree_metadata(&mut tree)
-            .context("提取消息元数据失败")?;
+        MetadataExtractor::extract_tree_metadata(&mut tree).context("提取消息元数据失败")?;
 
         Ok(tree)
     }
@@ -442,7 +458,8 @@ impl MessageTreeBuilder {
         let mut child_map: HashMap<String, Vec<String>> = HashMap::new();
         for (node_id, node) in &self.node_map {
             if let Some(ref parent_id) = node.parent_id {
-                child_map.entry(parent_id.clone())
+                child_map
+                    .entry(parent_id.clone())
                     .or_insert_with(Vec::new)
                     .push(node_id.clone());
             }
@@ -487,7 +504,8 @@ impl MessageTreeBuilder {
         }
 
         // 返回根节点
-        built_nodes.remove(&root.id)
+        built_nodes
+            .remove(&root.id)
             .ok_or_else(|| anyhow::anyhow!("根节点未找到"))
     }
 

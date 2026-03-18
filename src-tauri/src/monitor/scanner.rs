@@ -2,11 +2,11 @@
 //!
 //! 负责扫描 ~/.claude/projects/ 目录，查找并提取 Claude Code 会话元数据
 
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, Duration};
 use anyhow::Result;
-use glob::glob;
 use dirs::home_dir;
+use glob::glob;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 /// 会话元数据结构
 #[derive(Debug, Clone)]
@@ -47,7 +47,8 @@ pub fn get_claude_projects_dir() -> Result<PathBuf> {
 /// 返回会话元数据
 pub fn extract_session_metadata(path: &Path) -> Result<SessionMetadata> {
     // 1. 从文件名提取 session_id (UUID 格式)
-    let file_name = path.file_stem()
+    let file_name = path
+        .file_stem()
         .and_then(|s| s.to_str())
         .ok_or_else(|| anyhow::anyhow!("无效的文件名: {:?}", path))?;
 
@@ -88,8 +89,7 @@ pub fn extract_session_metadata(path: &Path) -> Result<SessionMetadata> {
 
     // 3. 读取文件元数据
     let metadata = std::fs::metadata(path)?;
-    let created = metadata.created()
-        .or_else(|_| metadata.modified())?;
+    let created = metadata.created().or_else(|_| metadata.modified())?;
     let modified = metadata.modified()?;
 
     // 转换为 RFC3339 格式
@@ -146,7 +146,8 @@ pub fn scan_directory(directory: &Path) -> Result<Vec<SessionMetadata>> {
 
     // 使用 glob 查找所有 JSONL 文件
     let pattern = directory.join("**").join("*.jsonl");
-    let pattern_str = pattern.to_str()
+    let pattern_str = pattern
+        .to_str()
         .ok_or_else(|| anyhow::anyhow!("无效的路径模式"))?;
 
     let mut sessions = Vec::new();
@@ -174,7 +175,8 @@ pub fn scan_directory(directory: &Path) -> Result<Vec<SessionMetadata>> {
 /// 从指定基础目录提取会话元数据
 fn extract_session_metadata_from_dir(path: &Path, base_dir: &Path) -> Result<SessionMetadata> {
     // 1. 从文件名提取 session_id (UUID 格式)
-    let file_name = path.file_stem()
+    let file_name = path
+        .file_stem()
         .and_then(|s| s.to_str())
         .ok_or_else(|| anyhow::anyhow!("无效的文件名: {:?}", path))?;
 
@@ -193,7 +195,9 @@ fn extract_session_metadata_from_dir(path: &Path, base_dir: &Path) -> Result<Ses
 
     let project_path = if path_str.starts_with(&base_str) {
         // 提取项目相对路径
-        let relative = path_str[base_str.len()..].trim_start_matches('\\').trim_start_matches('/');
+        let relative = path_str[base_str.len()..]
+            .trim_start_matches('\\')
+            .trim_start_matches('/');
         // 获取项目根目录（包含会话文件的目录）
         if let Some(parent) = Path::new(relative).parent() {
             parent.to_string_lossy().to_string()
@@ -209,7 +213,8 @@ fn extract_session_metadata_from_dir(path: &Path, base_dir: &Path) -> Result<Ses
 
     // 提取项目名称（路径的最后一段）
     let project_name = if project_path.is_empty() {
-        base_dir.file_name()
+        base_dir
+            .file_name()
             .and_then(|s| s.to_str())
             .unwrap_or("Unknown")
             .to_string()
@@ -223,8 +228,7 @@ fn extract_session_metadata_from_dir(path: &Path, base_dir: &Path) -> Result<Ses
 
     // 3. 读取文件元数据
     let metadata = std::fs::metadata(path)?;
-    let created = metadata.created()
-        .or_else(|_| metadata.modified())?;
+    let created = metadata.created().or_else(|_| metadata.modified())?;
     let modified = metadata.modified()?;
 
     // 转换为 RFC3339 格式
@@ -252,9 +256,9 @@ fn extract_session_metadata_from_dir(path: &Path, base_dir: &Path) -> Result<Ses
 /// 检查是否为有效的 UUID 格式
 fn is_valid_uuid(s: &str) -> bool {
     // 简单的 UUID 格式验证 (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-    let uuid_pattern = regex::Regex::new(
-        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-    ).unwrap();
+    let uuid_pattern =
+        regex::Regex::new(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+            .unwrap();
 
     uuid_pattern.is_match(s)
 }
@@ -266,12 +270,10 @@ fn system_time_to_rfc3339(time: SystemTime) -> Result<String> {
     let nsecs = duration.subsec_nanos();
 
     // 使用 chrono 格式化
-    use chrono::{DateTime, Utc, NaiveDateTime};
-    let naive = NaiveDateTime::from_timestamp_opt(secs as i64, nsecs);
-    match naive {
-        Some(dt) => Ok(DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc).to_rfc3339()),
-        None => Err(anyhow::anyhow!("无效的时间戳")),
-    }
+    use chrono::{DateTime, Utc};
+    let dt = DateTime::from_timestamp(secs as i64, nsecs)
+        .ok_or_else(|| anyhow::anyhow!("无效的时间戳"))?;
+    Ok(dt.to_rfc3339())
 }
 
 /// 计算 JSONL 文件的行数（消息数量）
@@ -329,17 +331,17 @@ fn is_session_active(path: &Path) -> bool {
 /// 检查文件是否被锁定（仅 Windows）
 #[cfg(target_os = "windows")]
 fn is_file_locked(path: &Path) -> bool {
-    use std::os::windows::fs::OpenOptionsExt;
     use std::fs::OpenOptions;
+    use std::os::windows::fs::OpenOptionsExt;
 
     // 尝试以独占模式打开文件
     match OpenOptions::new()
         .read(true)
-        .share_mode(0)  // 独占模式
+        .share_mode(0) // 独占模式
         .open(path)
     {
-        Ok(_) => false,  // 成功打开 = 未锁定
-        Err(_) => true   // 失败 = 被锁定
+        Ok(_) => false, // 成功打开 = 未锁定
+        Err(_) => true, // 失败 = 被锁定
     }
 }
 

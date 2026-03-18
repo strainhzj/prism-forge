@@ -154,10 +154,7 @@ impl ApiKeyRotator {
     ///
     /// # 返回
     /// 返回 (选中的密钥, 更新后的配置 JSON)
-    pub fn select_next_key(
-        keys_str: &str,
-        config_json: Option<&str>,
-    ) -> Result<(String, String)> {
+    pub fn select_next_key(keys_str: &str, config_json: Option<&str>) -> Result<(String, String)> {
         // 解析密钥列表
         let keys = Self::parse_keys(keys_str)?;
 
@@ -194,14 +191,16 @@ impl ApiKeyRotator {
     /// - `index`: 密钥索引
     pub fn get_key_at_index(keys_str: &str, index: usize) -> Result<String> {
         let keys = Self::parse_keys(keys_str)?;
-        keys.get(index)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("密钥索引 {} 超出范围（共 {} 个密钥）", index, keys.len()))
+        keys.get(index).cloned().ok_or_else(|| {
+            anyhow::anyhow!("密钥索引 {} 超出范围（共 {} 个密钥）", index, keys.len())
+        })
     }
 
     /// 获取密钥数量
     pub fn get_key_count(keys_str: &str) -> usize {
-        Self::parse_keys(keys_str).map(|keys| keys.len()).unwrap_or(0)
+        Self::parse_keys(keys_str)
+            .map(|keys| keys.len())
+            .unwrap_or(0)
     }
 
     /// 验证密钥列表格式
