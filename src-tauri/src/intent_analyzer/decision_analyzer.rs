@@ -362,7 +362,8 @@ mod tests {
         // 验证决策类型序列化
         let tech_choice = DecisionType::TechnologyChoice;
         let json = serde_json::to_string(&tech_choice).unwrap();
-        assert!(json.contains("TechnologyChoice"));
+        // 由于使用了 #[serde(rename_all = "camelCase")]，应该是 "technologyChoice"
+        assert!(json.contains("technologyChoice"));
     }
 
     #[test]
@@ -380,12 +381,13 @@ mod tests {
     #[test]
     fn test_decision_analysis_deserialization() {
         // 验证决策分析结果反序列化
+        // 注意：由于使用了 #[serde(rename_all = "camelCase")]，JSON字段名应该是 camelCase
         let json_str = r#"{
-            "decision_made": "选择使用 Rust 开发",
-            "decision_type": "TechnologyChoice",
-            "tech_stack": ["Rust", "Tauri"],
+            "decisionMade": "选择使用 Rust 开发",
+            "decisionType": "technologyChoice",
+            "techStack": ["Rust", "Tauri"],
             "rationale": ["性能要求高"],
-            "inferred_reasons": ["用户熟悉 Rust"],
+            "inferredReasons": ["用户熟悉 Rust"],
             "alternatives": [{"name": "Electron", "reason": "性能较差"}],
             "confidence": 0.9
         }"#;

@@ -242,7 +242,7 @@ mod tests {
     fn test_save_and_get_analysis() {
         // 创建内存数据库
         let mut conn = Connection::open_in_memory().unwrap();
-        migrations::migrate_v21_impl(&mut conn).unwrap();
+        migrations::migrate_v21(&mut conn).unwrap();
 
         let repo = IntentAnalysisRepository::with_conn(Arc::new(Mutex::new(conn)));
 
@@ -257,12 +257,10 @@ mod tests {
         let qa_pairs = detector.detect_decision_qa_pairs(messages);
 
         let opening_intent = OpeningIntent {
-            original_text: "开场白内容".to_string(),
-            core_intent: "测试意图".to_string(),
-            key_entities: vec![],
-            context_clues: vec![],
-            confidence_score: 0.85,
-            reasoning: Some("测试推理".to_string()),
+            intent_type: "test_intent".to_string(),
+            confidence: 0.85,
+            description: Some("测试意图".to_string()),
+            key_info: vec!["开场白内容".to_string()],
         };
 
         // 保存分析
@@ -282,24 +280,22 @@ mod tests {
         assert_eq!(history.qa_pairs.len(), 1);
         assert_eq!(history.qa_pairs[0].assistant_answer, "回答1");
         assert_eq!(history.qa_pairs[0].user_decision, "用户决策1");
-        assert_eq!(history.opening_intent.core_intent, "测试意图");
+        assert_eq!(history.opening_intent.description.unwrap(), "测试意图");
     }
 
     #[test]
     fn test_save_replaces_existing() {
         // 创建内存数据库
         let mut conn = Connection::open_in_memory().unwrap();
-        migrations::migrate_v21_impl(&mut conn).unwrap();
+        migrations::migrate_v21(&mut conn).unwrap();
 
         let repo = IntentAnalysisRepository::with_conn(Arc::new(Mutex::new(conn)));
 
         let opening_intent = OpeningIntent {
-            original_text: "原始内容".to_string(),
-            core_intent: "原始意图".to_string(),
-            key_entities: vec![],
-            context_clues: vec![],
-            confidence_score: 0.5,
-            reasoning: Some("原始推理".to_string()),
+            intent_type: "original_intent".to_string(),
+            confidence: 0.5,
+            description: Some("原始意图".to_string()),
+            key_info: vec!["原始内容".to_string()],
         };
 
         // 第一次保存
@@ -310,12 +306,10 @@ mod tests {
 
         // 第二次保存（应该覆盖）
         let updated_intent = OpeningIntent {
-            original_text: "更新内容".to_string(),
-            core_intent: "更新意图".to_string(),
-            key_entities: vec![],
-            context_clues: vec![],
-            confidence_score: 0.9,
-            reasoning: Some("更新推理".to_string()),
+            intent_type: "updated_intent".to_string(),
+            confidence: 0.9,
+            description: Some("更新意图".to_string()),
+            key_info: vec!["更新内容".to_string()],
         };
 
         let id2 = repo
@@ -325,25 +319,23 @@ mod tests {
 
         // 验证只有一条记录且是更新后的内容
         let history = repo.get_analysis_by_session("test.jsonl").unwrap().unwrap();
-        assert_eq!(history.opening_intent.core_intent, "更新意图");
-        assert_eq!(history.opening_intent.confidence_score, 0.9);
+        assert_eq!(history.opening_intent.description.unwrap(), "更新意图");
+        assert_eq!(history.opening_intent.confidence, 0.9);
     }
 
     #[test]
     fn test_delete_analysis() {
         // 创建内存数据库
         let mut conn = Connection::open_in_memory().unwrap();
-        migrations::migrate_v21_impl(&mut conn).unwrap();
+        migrations::migrate_v21(&mut conn).unwrap();
 
         let repo = IntentAnalysisRepository::with_conn(Arc::new(Mutex::new(conn)));
 
         let opening_intent = OpeningIntent {
-            original_text: "测试内容".to_string(),
-            core_intent: "测试意图".to_string(),
-            key_entities: vec![],
-            context_clues: vec![],
-            confidence_score: 0.8,
-            reasoning: None,
+            intent_type: "test".to_string(),
+            confidence: 0.8,
+            description: Some("测试意图".to_string()),
+            key_info: vec!["测试内容".to_string()],
         };
 
         // 保存
@@ -363,17 +355,15 @@ mod tests {
     fn test_get_all_histories() {
         // 创建内存数据库
         let mut conn = Connection::open_in_memory().unwrap();
-        migrations::migrate_v21_impl(&mut conn).unwrap();
+        migrations::migrate_v21(&mut conn).unwrap();
 
         let repo = IntentAnalysisRepository::with_conn(Arc::new(Mutex::new(conn)));
 
         let opening_intent = OpeningIntent {
-            original_text: "测试内容".to_string(),
-            core_intent: "测试意图".to_string(),
-            key_entities: vec![],
-            context_clues: vec![],
-            confidence_score: 0.8,
-            reasoning: None,
+            intent_type: "test".to_string(),
+            confidence: 0.8,
+            description: Some("测试意图".to_string()),
+            key_info: vec!["测试内容".to_string()],
         };
 
         // 保存多条记录

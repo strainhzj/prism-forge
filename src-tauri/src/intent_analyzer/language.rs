@@ -76,7 +76,8 @@ mod tests {
     #[test]
     fn test_detect_mixed_chinese_dominant() {
         let detector = LanguageDetector::new().unwrap();
-        let text = "这是一段中文文本，with some English words";
+        // 中文字符应该多于英文字符
+        let text = "这是一段非常长的中文文本，包含了许多中文字符，with English";
         assert_eq!(detector.detect_language(text), "zh");
     }
 

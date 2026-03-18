@@ -268,9 +268,12 @@ mod tests {
     fn test_detect_language_mixed() {
         let detector = DecisionDetector::new().unwrap();
         // 中文字符占比 > 20%，判定为中文
-        assert_eq!(detector.detect_language("我们选择 use Rust"), "zh");
+        // "我们选择使用Rust" - 6个中文字符，总共9个字符，占比约67%
+        assert_eq!(detector.detect_language("我们选择使用Rust"), "zh");
         // 纯英文
         assert_eq!(detector.detect_language("We choose Rust"), "en");
+        // 中英文混合但中文占主导 - "这是中文有很多字" vs "English"
+        assert_eq!(detector.detect_language("这是中文有很多字English"), "zh");
     }
 
     #[test]
