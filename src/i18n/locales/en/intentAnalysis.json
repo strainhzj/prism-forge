@@ -3,6 +3,7 @@
     "analyzeIntent": "Analyze Intent",
     "retry": "Retry",
     "reanalyze": "Reanalyze",
+    "refreshDecision": "Refresh This Decision",
     "close": "Close",
     "cancel": "Cancel",
     "copy": "Copy",

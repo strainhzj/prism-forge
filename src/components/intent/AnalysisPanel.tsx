@@ -469,6 +469,7 @@ export function AnalysisPanel({
               {/* 右侧：决策点列表 */}
               <div className="overflow-y-auto pl-4">
                 <DecisionList
+                  sessionFilePath={sessionFilePath}
                   selectedQaPair={selectedQaPair}
                   language={language}
                 />

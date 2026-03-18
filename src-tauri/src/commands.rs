@@ -12,6 +12,7 @@ use tauri::State;
 use crate::database::vector_repository::VectorRepository;
 use crate::database::{ApiProvider, ApiProviderRepository, ApiProviderType};
 use crate::database::{DecisionKeyword, DecisionKeywordRepository};
+use crate::database::DecisionAnalysisRepository;
 use crate::embedding::{EmbeddingSyncManager, OpenAIEmbeddings};
 use crate::intent_analyzer::{DecisionDetector, DecisionPoint as DetectedDecisionPoint};
 use crate::llm::interface::TestConnectionResult;
@@ -3694,8 +3695,10 @@ pub async fn cmd_clear_intent_analysis_history(
 ///
 /// # 参数
 ///
+/// - `session_file_path`: 会话文件路径（用于历史记录查询）
 /// - `qa_pair`: 问答对（助手回答 + 用户后续决策）
 /// - `language`: 语言标识（"zh" 或 "en"）
+/// - `force_reanalyze`: 是否强制重新分析（默认 false）
 ///
 /// # 返回
 ///
@@ -3703,20 +3706,63 @@ pub async fn cmd_clear_intent_analysis_history(
 #[tauri::command]
 pub async fn cmd_analyze_decision(
     llm_manager: State<'_, LLMClientManager>,
+    session_file_path: String,
     qa_pair: DecisionQAPair,
     language: String,
+    force_reanalyze: Option<bool>,
 ) -> Result<DecisionAnalysis, CommandError> {
-    // 创建分析器并分析
+    let force_reanalyze = force_reanalyze.unwrap_or(false);
+    let qa_index = qa_pair.qa_index as i64;
+
+    // 1. 尝试从历史记录加载（如果未强制重新分析）
+    if !force_reanalyze {
+        if let Ok(repo) = DecisionAnalysisRepository::from_default_db() {
+            if let Ok(Some(history)) = repo.get_analysis(&session_file_path, qa_index) {
+                #[cfg(debug_assertions)]
+                {
+                    eprintln!(
+                        "[cmd_analyze_decision] 从历史记录加载决策分析: session={}, qa_index={}",
+                        session_file_path, qa_index
+                    );
+                }
+
+                return Ok(history.decision_analysis);
+            }
+        }
+    }
+
+    // 2. 执行 LLM 分析
     let analyzer = DecisionAnalyzer::new().map_err(|e| CommandError {
         message: format!("创建分析器失败: {}", e),
     })?;
 
-    analyzer
+    let result = analyzer
         .analyze(&qa_pair, &language, &llm_manager)
         .await
         .map_err(|e| CommandError {
             message: format!("分析失败: {}", e),
-        })
+        })?;
+
+    // 3. 保存到历史记录
+    if let Ok(repo) = DecisionAnalysisRepository::from_default_db() {
+        if let Err(e) = repo.save_analysis(&session_file_path, qa_index, &result) {
+            #[cfg(debug_assertions)]
+            {
+                eprintln!("[cmd_analyze_decision] 保存决策分析历史失败: {}", e);
+            }
+            // 保存失败不影响结果返回
+        } else {
+            #[cfg(debug_assertions)]
+            {
+                eprintln!(
+                    "[cmd_analyze_decision] 已保存决策分析历史: session={}, qa_index={}",
+                    session_file_path, qa_index
+                );
+            }
+        }
+    }
+
+    Ok(result)
 }
 
 // ==================== 决策检测命令 ====================

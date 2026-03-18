@@ -28,7 +28,7 @@ pub fn get_db_path() -> Result<PathBuf> {
 /// 数据库版本号
 ///
 /// 每次修改表结构时递增此版本号
-const CURRENT_DB_VERSION: i32 = 21;
+const CURRENT_DB_VERSION: i32 = 22;
 
 /// 初始化数据库
 ///
@@ -90,6 +90,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
             19 => migrate_v19(conn)?,
             20 => migrate_v20(conn)?,
             21 => migrate_v21(conn)?,
+            22 => migrate_v22(conn)?,
             _ => anyhow::bail!("未知的数据库版本: {}", version),
         }
 
@@ -1660,6 +1661,53 @@ fn migrate_v21_impl(conn: &mut Connection) -> Result<()> {
     )?;
 
     log::info!("✅ 已创建 intent_analysis_history 表");
+
+    Ok(())
+}
+
+/// - 创建 decision_analysis_history 表（保存每个问答对的决策分析历史）
+/// - 支持按会话文件路径 + QA 索引作为唯一键
+/// - 永久保存直到用户点击"重新分析"清除
+#[cfg(test)]
+pub fn migrate_v22(conn: &mut Connection) -> Result<()> {
+    migrate_v22_impl(conn)
+}
+
+#[cfg(not(test))]
+fn migrate_v22(conn: &mut Connection) -> Result<()> {
+    migrate_v22_impl(conn)
+}
+
+fn migrate_v22_impl(conn: &mut Connection) -> Result<()> {
+    // 1. 创建决策分析历史表
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS decision_analysis_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_file_path TEXT NOT NULL,
+            qa_index INTEGER NOT NULL,
+            decision_analysis_json TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(session_file_path, qa_index)
+        )",
+        [],
+    )?;
+
+    // 2. 创建索引：按会话文件路径和 QA 索引快速查找
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_analysis_history_session_qa
+         ON decision_analysis_history(session_file_path, qa_index);",
+        [],
+    )?;
+
+    // 3. 创建索引：按更新时间排序
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_decision_analysis_history_updated_at
+         ON decision_analysis_history(updated_at DESC);",
+        [],
+    )?;
+
+    log::info!("✅ 已创建 decision_analysis_history 表");
 
     Ok(())
 }

@@ -3,6 +3,7 @@
     "analyzeIntent": "分析意图",
     "retry": "重试",
     "reanalyze": "重新分析",
+    "refreshDecision": "刷新此决策",
     "close": "关闭",
     "cancel": "取消",
     "copy": "复制",

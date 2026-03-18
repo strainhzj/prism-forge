@@ -8,8 +8,9 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { invoke } from '@tauri-apps/api/core';
-import { GitBranch, Scale, Lightbulb, AlertCircle, Loader2 } from 'lucide-react';
+import { GitBranch, Scale, Lightbulb, AlertCircle, Loader2, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 import type { DecisionQAPair } from '@/types/generated';
 import type { DecisionAnalysis, DecisionType } from '@/types/generated';
@@ -27,6 +28,10 @@ function debugLog(action: string, ...args: unknown[]) {
 
 export interface DecisionListProps {
   /**
+   * 会话文件路径（用于历史记录查询）
+   */
+  sessionFilePath: string;
+  /**
    * 当前选中的问答对
    */
   selectedQaPair: DecisionQAPair | null;
@@ -40,6 +45,7 @@ export interface DecisionListProps {
  * DecisionList - 决策点列表组件
  */
 export const DecisionList = memo(function DecisionList({
+  sessionFilePath,
   selectedQaPair,
   language = 'zh',
 }: DecisionListProps) {
@@ -52,8 +58,9 @@ export const DecisionList = memo(function DecisionList({
 
   /**
    * 分析问答对决策
+   * @param forceReanalyze 是否强制重新分析（默认 false）
    */
-  const analyzeDecision = useCallback(async () => {
+  const analyzeDecision = useCallback(async (forceReanalyze = false) => {
     if (!selectedQaPair) {
       setDecision(null);
       setError(null);
@@ -68,6 +75,7 @@ export const DecisionList = memo(function DecisionList({
         qaIndex: selectedQaPair.qaIndex,
         assistantAnswerUuid: selectedQaPair.assistantAnswerUuid,
         userDecisionUuid: selectedQaPair.userDecisionUuid,
+        forceReanalyze,
       });
 
       if (DEBUG) {
@@ -76,8 +84,10 @@ export const DecisionList = memo(function DecisionList({
 
       // ✅ Rust 端已添加 #[serde(rename_all = "camelCase")]，直接传递 camelCase 对象
       const result = await invoke<DecisionAnalysis>('cmd_analyze_decision', {
+        sessionFilePath,
         qaPair: selectedQaPair,
         language,
+        forceReanalyze,
       });
 
       setDecision(result);
@@ -107,14 +117,14 @@ export const DecisionList = memo(function DecisionList({
     } finally {
       setLoading(false);
     }
-  }, [selectedQaPair, language, t]);
+  }, [selectedQaPair, language, t, sessionFilePath]);
 
   /**
    * 问答对变化时重新分析
    */
   useEffect(() => {
-    analyzeDecision();
-  }, [analyzeDecision]);
+    analyzeDecision(false);
+  }, [analyzeDecision]);  // ✅ 问答对变化时自动触发
 
   /**
    * 获取决策类型显示文本
@@ -186,10 +196,23 @@ export const DecisionList = memo(function DecisionList({
 
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--color-text-primary)' }}>
-        <GitBranch className="w-4 h-4" style={{ color: 'var(--color-accent-warm)' }} />
-        {t('decisions.title')} #{selectedQaPair.qaIndex + 1}
-      </h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--color-text-primary)' }}>
+          <GitBranch className="w-4 h-4" style={{ color: 'var(--color-accent-warm)' }} />
+          {t('decisions.title')} #{selectedQaPair.qaIndex + 1}
+        </h3>
+        {/* 刷新此决策按钮 */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => analyzeDecision(true)}
+          className="h-7 px-2"
+          title={t('actions.refreshDecision')}
+          disabled={loading}
+        >
+          <RotateCcw className="w-4 h-4" />
+        </Button>
+      </div>
 
       {/* 决策内容 */}
       <div className="p-3 rounded-lg border" style={{ backgroundColor: 'var(--color-bg-primary)', borderColor: 'var(--color-border-light)' }}>
